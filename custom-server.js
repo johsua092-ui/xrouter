@@ -414,9 +414,15 @@ http.createServer = (...args) => {
 };
 
 if (require.main === module) {
-  const standalone = path.join(__dirname, "server.js");
-  if (fs.existsSync(standalone)) {
-    require(standalone);
+  // If .next/standalone/server.js exists, prefer it directly so Next.js standalone output works properly
+  const standaloneDirect = path.join(__dirname, "server.js");
+  const standaloneDist = path.join(__dirname, ".next", "standalone", "server.js");
+  if (fs.existsSync(standaloneDirect)) {
+    require(standaloneDirect);
+  } else if (fs.existsSync(standaloneDist)) {
+    // Set cwd to standalone dir so Next standalone server finds its static & data
+    process.chdir(path.join(__dirname, ".next", "standalone"));
+    require(standaloneDist);
   } else {
     // Repo checkout has no standalone build next to us. `next start` builds its HTTP
     // server in-process, so the wrapper above still sanitizes every request.
