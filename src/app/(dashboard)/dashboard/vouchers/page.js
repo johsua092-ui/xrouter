@@ -190,19 +190,19 @@ export default function VouchersPage() {
     : "https://xrouter.consoleapi.qzz.io/claim";
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 space-y-6">
+    <div className="flex min-w-0 flex-col gap-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-3">
         <div>
-          <div className="flex items-center gap-2.5">
-            <span className="flex size-7 items-center justify-center rounded-[4px] bg-brand-500/10 text-brand-500 border border-brand-500/20">
-              <span className="material-symbols-outlined text-[18px]">card_giftcard</span>
+          <div className="flex items-center gap-2">
+            <span className="flex size-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary border border-primary/20">
+              <span className="material-symbols-outlined text-[16px]">card_giftcard</span>
             </span>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-text-main">
+            <h1 className="text-sm font-semibold tracking-tight text-text-main">
               Vouchers & Marketplace
             </h1>
           </div>
-          <p className="mt-1 text-xs sm:text-sm text-text-muted">
+          <p className="mt-0.5 text-xs text-text-muted">
             Manage developer vouchers, public community faucets, and scoped credential passes.
           </p>
         </div>
@@ -212,19 +212,20 @@ export default function VouchersPage() {
             href="/claim"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text-main hover:border-brand-500/50 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-[4px] border border-border bg-surface-2 px-2.5 py-1 text-xs font-medium text-text-muted hover:text-text-main hover:border-primary/50 transition-colors"
           >
             <span className="material-symbols-outlined text-[14px]">open_in_new</span>
             Open Access Portal
           </a>
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="sm"
             onClick={() => setShowModal(true)}
-            className="inline-flex items-center gap-1.5 rounded-[5px] bg-brand-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-brand-600 transition-colors cursor-pointer"
+            icon="add"
           >
-            <span className="material-symbols-outlined text-[15px]">add</span>
             Create Voucher
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -452,7 +453,7 @@ export default function VouchersPage() {
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         title="Create Access Voucher / Faucet"
-        size="xl"
+        size="md"
       >
         <form onSubmit={handleCreate} className="space-y-4 text-xs">
           {/* Community Faucet Toggle */}

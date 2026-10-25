@@ -357,29 +357,9 @@ http.createServer = (...args) => {
   const server = origCreate(...rest, wrapped);
   // High-concurrency socket stabilization: prevent 502 races behind Nginx/Cloudflare
   server.keepAliveTimeout = 65000;
-function detectPrimaryIp() {
-  try {
-    const os = require("node:os");
-    const nets = os.networkInterfaces();
-    for (const name of Object.keys(nets)) {
-      for (const net of nets[name]) {
-        if (net.family === "IPv4" && !net.internal) {
-          return net.address;
-        }
-      }
-    }
-  } catch {}
-  return null;
-}
-
   server.headersTimeout = 66000;
   server.maxRequestsPerSocket = 0;
   server.once("listening", () => {
-    const primaryIp = detectPrimaryIp();
-    const port = process.env.PORT || "20128";
-    if (primaryIp) {
-      console.log(`- Network:       http://${primaryIp}:${port}`);
-    }
     startBackgroundTokenRefreshFromCustomServer();
     startAutoBackupFromCustomServer();
     startDatabaseMaintenanceFromCustomServer();

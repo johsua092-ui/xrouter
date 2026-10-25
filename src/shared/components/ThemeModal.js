@@ -41,8 +41,10 @@ const MODES = [
 export default function ThemeModal({ isOpen, onClose }) {
   const theme = useThemeStore((state) => state.theme);
   const accent = useThemeStore((state) => state.accent || "orange");
+  const customColor = useThemeStore((state) => state.customColor || "#E56A4A");
   const setTheme = useThemeStore((state) => state.setTheme);
   const setAccent = useThemeStore((state) => state.setAccent);
+  const setCustomColor = useThemeStore((state) => state.setCustomColor);
   const modalRef = useRef(null);
 
   useEffect(() => {
@@ -148,6 +150,70 @@ export default function ThemeModal({ isOpen, onClose }) {
                 </button>
               );
             })}
+          </div>
+
+          {/* Custom Accent Palette */}
+          <div className="mt-3 pt-3 border-t border-border-subtle flex flex-col gap-2">
+            <div className="text-xs font-semibold text-text-muted px-1 uppercase tracking-wider">Custom Palette</div>
+            <div
+              className={cn(
+                "flex items-center justify-between p-2 rounded-[6px] border transition-all",
+                accent === "custom"
+                  ? "border-primary bg-primary/10 shadow-sm"
+                  : "border-border-subtle hover:bg-surface-2"
+              )}
+            >
+              <div className="flex items-center gap-2.5">
+                <label className="relative flex items-center justify-center cursor-pointer">
+                  <span
+                    className="h-6 w-6 rounded-full border border-white/20 shadow-sm inline-block shrink-0"
+                    style={{ backgroundColor: customColor }}
+                  />
+                  <input
+                    type="color"
+                    value={customColor}
+                    onChange={(e) => setCustomColor(e.target.value)}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    aria-label="Custom color picker"
+                  />
+                </label>
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium text-text-main">
+                    Custom Color
+                  </span>
+                  <span className="text-[10px] font-mono text-text-muted uppercase">
+                    {customColor}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  maxLength={7}
+                  value={customColor}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (/^#[0-9A-Fa-f]{0,6}$/.test(val) || /^[0-9A-Fa-f]{0,6}$/.test(val)) {
+                      setCustomColor(val.startsWith("#") ? val : `#${val}`);
+                    }
+                  }}
+                  className="w-20 px-2 py-1 rounded-[4px] border border-border bg-surface text-xs font-mono text-center text-text-main uppercase focus:border-primary focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAccent("custom")}
+                  className={cn(
+                    "px-2.5 py-1 rounded-[4px] text-xs font-medium transition-colors cursor-pointer",
+                    accent === "custom"
+                      ? "bg-primary text-white"
+                      : "bg-surface-2 text-text-muted hover:text-text-main hover:bg-surface-3"
+                  )}
+                >
+                  {accent === "custom" ? "Active" : "Apply"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

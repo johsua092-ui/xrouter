@@ -8,7 +8,7 @@ const OFFICIAL_URL = "https://raw.githubusercontent.com/decolua/9router/refs/hea
 
 function readLocalChangelog(filename) {
   try {
-    const text = fs.readFileSync(path.join(process.cwd(), filename), "utf8");
+    const text = fs.readFileSync(/*turbopackIgnore: true*/ path.join(process.cwd(), filename), "utf8");
     return text.trim() ? text : null;
   } catch {
     return null;

@@ -4,9 +4,6 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { THEME_CONFIG } from "@/shared/constants/config";
 
-// Both modes are fully solid — frosted/translucent panels are gone in X Router.
-// "ember" = warm charcoal panels with a faint brand-orange tint (default),
-// "dark" = neutral solid dark panels.
 export const THEME_IDS = ["ember", "dark", "light"];
 
 export const ACCENT_PALETTES = [
@@ -18,33 +15,72 @@ export const ACCENT_PALETTES = [
   { id: "cyan", label: "Cyber Cyan", primary: "#0891B2", hover: "#0E7490", filter: "hue-rotate(175deg) saturate(1.4)" },
 ];
 
+export function darkenColor(hex, percent = 15) {
+  let num = parseInt(String(hex).replace("#", ""), 16);
+  if (isNaN(num)) return hex;
+  let r = Math.max(0, (num >> 16) - Math.round(255 * (percent / 100)));
+  let g = Math.max(0, ((num >> 8) & 0x00FF) - Math.round(255 * (percent / 100)));
+  let b = Math.max(0, (num & 0x0000FF) - Math.round(255 * (percent / 100)));
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
+export function hexToHueRotate(hex) {
+  const rgb = parseInt(String(hex).replace("#", ""), 16);
+  if (isNaN(rgb)) return "none";
+  const r = (rgb >> 16) / 255;
+  const g = ((rgb >> 8) & 255) / 255;
+  const b = (rgb & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0;
+  if (max !== min) {
+    const d = max - min;
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h = Math.round(h * 60);
+  }
+  const delta = (h - 12 + 360) % 360;
+  return `hue-rotate(${delta}deg) saturate(1.3)`;
+}
+
 const useThemeStore = create(
   persist(
     (set, get) => ({
       theme: "ember",
       accent: "orange",
+      customColor: "#E56A4A",
 
       setTheme: (theme) => {
         const id = THEME_IDS.includes(theme) ? theme : "ember";
         set({ theme: id });
-        applyTheme(id, get().accent || "orange");
+        applyTheme(id, get().accent || "orange", get().customColor || "#E56A4A");
       },
 
       setAccent: (accent) => {
-        const valid = ACCENT_PALETTES.some((p) => p.id === accent) ? accent : "orange";
+        const isPreset = ACCENT_PALETTES.some((p) => p.id === accent);
+        const valid = isPreset || accent === "custom" ? accent : "orange";
         set({ accent: valid });
-        applyTheme(get().theme || "ember", valid);
+        applyTheme(get().theme || "ember", valid, get().customColor || "#E56A4A");
+      },
+
+      setCustomColor: (color) => {
+        if (!color || typeof color !== "string") return;
+        const normalized = color.startsWith("#") ? color : `#${color}`;
+        set({ accent: "custom", customColor: normalized });
+        applyTheme(get().theme || "ember", "custom", normalized);
       },
 
       toggleTheme: () => {
         const current = get().theme;
         const next = current === "light" ? "ember" : current === "ember" ? "dark" : "light";
         set({ theme: next });
-        applyTheme(next, get().accent || "orange");
+        applyTheme(next, get().accent || "orange", get().customColor || "#E56A4A");
       },
 
       initTheme: () => {
-        applyTheme(get().theme || "ember", get().accent || "orange");
+        applyTheme(get().theme || "ember", get().accent || "orange", get().customColor || "#E56A4A");
       },
     }),
     {
@@ -54,7 +90,7 @@ const useThemeStore = create(
 );
 
 // Apply theme & accent palette to document
-function applyTheme(theme, accent = "orange") {
+function applyTheme(theme, accent = "orange", customColor = "#E56A4A") {
   if (typeof window === "undefined") return;
 
   const root = document.documentElement;
@@ -65,6 +101,17 @@ function applyTheme(theme, accent = "orange") {
   } else {
     root.classList.add("dark");
     root.classList.toggle("ember", theme === "ember");
+  }
+
+  if (accent === "custom" && customColor) {
+    const hover = darkenColor(customColor, 15);
+    const filter = hexToHueRotate(customColor);
+    root.style.setProperty("--color-brand-500", customColor);
+    root.style.setProperty("--color-brand-600", hover);
+    root.style.setProperty("--color-primary", customColor);
+    root.style.setProperty("--color-primary-hover", hover);
+    root.style.setProperty("--logo-filter", filter);
+    return;
   }
 
   const palette = ACCENT_PALETTES.find((p) => p.id === accent) || ACCENT_PALETTES[0];
