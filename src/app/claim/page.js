@@ -647,7 +647,7 @@ export default function ClaimPage() {
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(#18181b_1px,transparent_1px)] [background-size:16px_16px] opacity-40" />
 
       {/* Top Console Bar */}
-      <header className="relative z-10 flex h-13 w-full items-center justify-between border-b border-[#222] bg-[#09090b]/90 px-4 sm:px-8 backdrop-blur-md">
+      <header className="relative z-10 flex h-13 w-full items-center justify-between border-b border-border bg-surface px-4 sm:px-8">
         <div className="flex items-center gap-3">
           <div className="flex size-7 items-center justify-center rounded-[4px] bg-[#141416] border border-[#2a2a2e] text-[#E56A4A]">
             <svg viewBox="0 0 24 24" fill="currentColor" className="size-4">

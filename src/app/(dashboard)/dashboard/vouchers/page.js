@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { cn } from "@/shared/utils/cn";
-import Badge from "@/shared/components/Badge";
+import { Badge, Button, Modal } from "@/shared/components";
 
 function formatTokenLimit(n) {
   const v = Number(n);
@@ -265,20 +265,21 @@ export default function VouchersPage() {
         </div>
       ) : activeTab === "vouchers" ? (
         vouchers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-[8px] border border-dashed border-border p-12 text-center bg-surface-1">
+          <div className="flex flex-col items-center justify-center rounded-[6px] border border-dashed border-border p-12 text-center bg-surface">
             <span className="material-symbols-outlined text-4xl text-text-muted/60 mb-2">loyalty</span>
             <h3 className="text-sm font-semibold text-text-main">No Vouchers Configured</h3>
             <p className="mt-1 text-xs text-text-muted max-w-sm">
               Create a voucher pass or activate a 1-click community faucet to distribute authorized access keys.
             </p>
-            <button
+            <Button
               type="button"
+              variant="primary"
               onClick={() => setShowModal(true)}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-[5px] bg-brand-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-brand-600 transition-colors"
+              className="mt-4"
+              icon="add"
             >
-              <span className="material-symbols-outlined text-[15px]">add</span>
               Create Voucher
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -290,7 +291,7 @@ export default function VouchersPage() {
                 <div
                   key={v.id}
                   className={cn(
-                    "group relative flex flex-col justify-between rounded-[8px] border bg-surface-1 p-4 transition-all duration-200 hover:border-brand-500/40 hover:shadow-xs",
+                    "group relative flex flex-col justify-between rounded-[6px] border bg-surface p-4 transition-all duration-200 hover:border-brand-500/40 shadow-[var(--shadow-elev)]",
                     v.isActive && !isExhausted ? "border-border" : "border-border/50 opacity-80"
                   )}
                 >
@@ -447,226 +448,213 @@ export default function VouchersPage() {
       )}
 
       {/* Create Voucher Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-xl rounded-[8px] border border-border bg-surface-1 p-5 shadow-2xl space-y-4 max-h-[calc(min(100dvh,100svh)-2rem)] overflow-y-auto overscroll-contain custom-scrollbar">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-brand-500 text-[18px]">add_circle</span>
-                <h3 className="text-sm font-bold text-text-main">Create Access Voucher / Faucet</h3>
-              </div>
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title="Create Access Voucher / Faucet"
+        size="xl"
+      >
+        <form onSubmit={handleCreate} className="space-y-4 text-xs">
+          {/* Community Faucet Toggle */}
+          <div className="rounded-[6px] border border-border bg-surface-2 p-3 flex items-center justify-between">
+            <div>
+              <span className="font-semibold text-white block">Mark as Public 1-Click Faucet</span>
+              <span className="text-[11px] text-text-muted block">
+                Available on portal for instant key generation without entering code.
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              checked={form.isBansos}
+              onChange={(e) => setForm({ ...form, isBansos: e.target.checked })}
+              className="size-4 accent-brand-500 rounded cursor-pointer"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-mono text-text-muted mb-1">
+                VOUCHER CODE
+              </label>
+              <input
+                type="text"
+                required
+                maxLength={19}
+                placeholder="e.g. XR-COMMUNITY-100K"
+                value={form.code}
+                onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "-") })}
+                className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 font-mono text-xs text-text-main focus:border-brand-500 focus:outline-none"
+              />
+              <p className="mt-1 text-[10px] text-text-muted">
+                Max 19 characters (A-Z, 0-9, and hyphens).
+              </p>
+            </div>
+            <div>
+              <label className="block text-[11px] font-mono text-text-muted mb-1">
+                CAMPAIGN NAME
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Developer Onboarding"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 text-xs text-text-main focus:border-brand-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-mono text-text-muted mb-1">
+              DESCRIPTION (OPTIONAL)
+            </label>
+            <input
+              type="text"
+              placeholder="Notes about cohort or distribution target..."
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 text-xs text-text-main focus:border-brand-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] font-mono text-text-muted mb-1">
+                TOKEN QUOTA
+              </label>
+              <input
+                type="number"
+                required
+                placeholder="100000"
+                value={form.tokenLimit}
+                onChange={(e) => setForm({ ...form, tokenLimit: e.target.value })}
+                className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 font-mono text-xs text-text-main focus:border-brand-500 focus:outline-none"
+              />
+              <span className="text-[10px] text-text-muted mt-0.5 block">0 = Unlimited</span>
+            </div>
+            <div>
+              <label className="block text-[11px] font-mono text-text-muted mb-1">
+                MAX CLAIMS
+              </label>
+              <input
+                type="number"
+                required
+                placeholder="1"
+                value={form.maxUses}
+                onChange={(e) => setForm({ ...form, maxUses: e.target.value })}
+                className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 font-mono text-xs text-text-main focus:border-brand-500 focus:outline-none"
+              />
+              <span className="text-[10px] text-text-muted mt-0.5 block">Total claim limit</span>
+            </div>
+            <div>
+              <label className="block text-[11px] font-mono text-text-muted mb-1">
+                VALIDITY (DAYS)
+              </label>
+              <input
+                type="number"
+                required
+                placeholder="30"
+                value={form.expiresInDays}
+                onChange={(e) => setForm({ ...form, expiresInDays: e.target.value })}
+                className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 font-mono text-xs text-text-main focus:border-brand-500 focus:outline-none"
+              />
+              <span className="text-[10px] text-text-muted mt-0.5 block">0 = Never expires</span>
+            </div>
+          </div>
+
+          {/* MODEL SELECTOR (AUTO DETECT - TINGGAL PILIH) */}
+          <div className="space-y-2 border-t border-border pt-3">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-mono font-semibold text-text-main uppercase tracking-wider">
+                ALLOWED MODELS ({selectedModels.includes("*") ? "All Models (*)" : `${selectedModels.length} Selected`})
+              </label>
               <button
                 type="button"
-                onClick={() => setShowModal(false)}
-                className="text-text-muted hover:text-text-main text-xs p-1 cursor-pointer"
+                onClick={() => toggleModelSelection("*")}
+                className={cn(
+                  "px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-colors cursor-pointer",
+                  selectedModels.includes("*")
+                    ? "bg-brand-500 text-white"
+                    : "bg-surface-2 text-text-muted hover:text-white"
+                )}
               >
-                <span className="material-symbols-outlined text-[16px]">close</span>
+                Allow All Models (*)
               </button>
             </div>
 
-            <form onSubmit={handleCreate} className="space-y-4 text-xs">
-              {/* Community Faucet Toggle */}
-              <div className="rounded-[6px] border border-border bg-surface-2 p-3 flex items-center justify-between">
-                <div>
-                  <span className="font-semibold text-white block">Mark as Public 1-Click Faucet</span>
-                  <span className="text-[11px] text-text-muted block">
-                    Available on portal for instant key generation without entering code.
-                  </span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={form.isBansos}
-                  onChange={(e) => setForm({ ...form, isBansos: e.target.checked })}
-                  className="size-4 accent-brand-500 rounded cursor-pointer"
-                />
-              </div>
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[15px] text-text-muted">
+                search
+              </span>
+              <input
+                type="text"
+                placeholder="Filter models (e.g. claude, gpt, qwen, deepseek)..."
+                value={modelSearch}
+                onChange={(e) => setModelSearch(e.target.value)}
+                className="w-full rounded-[5px] border border-border bg-surface-2 pl-8 pr-3 py-1.5 text-xs text-text-main focus:border-brand-500 focus:outline-none"
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-mono text-text-muted mb-1">
-                    VOUCHER CODE
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={19}
-                    placeholder="e.g. XR-COMMUNITY-100K"
-                    value={form.code}
-                    onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "-") })}
-                    className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 font-mono text-xs text-text-main focus:border-brand-500 focus:outline-none"
-                  />
-                  <p className="mt-1 text-[10px] text-text-muted">
-                    Max 19 characters (A-Z, 0-9, and hyphens).
-                  </p>
+            <div className="max-h-40 overflow-y-auto rounded-[5px] border border-border bg-surface-2/60 p-2 custom-scrollbar">
+              {loadingModels ? (
+                <div className="text-center py-4 text-text-muted text-xs font-mono">Scanning installed models...</div>
+              ) : catalogModels.length === 0 ? (
+                <div className="text-center py-4 space-y-1">
+                  <p className="text-xs font-mono text-text-muted">No installed provider connections found in X Router.</p>
+                  <p className="text-[11px] text-[#777]">Connect an upstream provider in the Providers page to populate models here, or select Allow All Models (*).</p>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-mono text-text-muted mb-1">
-                    CAMPAIGN NAME
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Developer Onboarding"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 text-xs text-text-main focus:border-brand-500 focus:outline-none"
-                  />
-                </div>
-              </div>
+              ) : filteredModels.length === 0 ? (
+                <div className="text-center py-4 text-text-muted text-xs font-mono">No matching installed models found.</div>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {filteredModels.map((m) => {
+                    const isSelected = selectedModels.includes(m.id) || selectedModels.includes("*");
+                    const isExplicitSelected = selectedModels.includes(m.id);
 
-              <div>
-                <label className="block text-[11px] font-mono text-text-muted mb-1">
-                  DESCRIPTION (OPTIONAL)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Notes about cohort or distribution target..."
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 text-xs text-text-main focus:border-brand-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] font-mono text-text-muted mb-1">
-                    TOKEN QUOTA
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="100000"
-                    value={form.tokenLimit}
-                    onChange={(e) => setForm({ ...form, tokenLimit: e.target.value })}
-                    className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 font-mono text-xs text-text-main focus:border-brand-500 focus:outline-none"
-                  />
-                  <span className="text-[10px] text-text-muted mt-0.5 block">0 = Unlimited</span>
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => toggleModelSelection(m.id)}
+                        className={cn(
+                          "inline-flex items-center gap-1 px-2 py-1 rounded-[4px] text-[10.5px] font-mono border transition-all cursor-pointer",
+                          isExplicitSelected
+                            ? "bg-brand-500 text-white border-brand-500 shadow-xs"
+                            : isSelected
+                            ? "bg-surface text-text-main border-brand-500/40 opacity-80"
+                            : "bg-surface text-text-muted border-border hover:border-text-muted hover:text-white"
+                        )}
+                      >
+                        <span>{m.id}</span>
+                        {isExplicitSelected && (
+                          <span className="material-symbols-outlined text-[11px]">check</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-                <div>
-                  <label className="block text-[11px] font-mono text-text-muted mb-1">
-                    MAX CLAIMS
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="1"
-                    value={form.maxUses}
-                    onChange={(e) => setForm({ ...form, maxUses: e.target.value })}
-                    className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 font-mono text-xs text-text-main focus:border-brand-500 focus:outline-none"
-                  />
-                  <span className="text-[10px] text-text-muted mt-0.5 block">Total claim limit</span>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-mono text-text-muted mb-1">
-                    VALIDITY (DAYS)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="30"
-                    value={form.expiresInDays}
-                    onChange={(e) => setForm({ ...form, expiresInDays: e.target.value })}
-                    className="w-full rounded-[5px] border border-border bg-surface-2 px-3 py-1.5 font-mono text-xs text-text-main focus:border-brand-500 focus:outline-none"
-                  />
-                  <span className="text-[10px] text-text-muted mt-0.5 block">0 = Never expires</span>
-                </div>
-              </div>
-
-              {/* MODEL SELECTOR (AUTO DETECT - TINGGAL PILIH) */}
-              <div className="space-y-2 border-t border-border pt-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-mono font-semibold text-text-main uppercase tracking-wider">
-                    ALLOWED MODELS ({selectedModels.includes("*") ? "All Models (*)" : `${selectedModels.length} Selected`})
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => toggleModelSelection("*")}
-                    className={cn(
-                      "px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-colors cursor-pointer",
-                      selectedModels.includes("*")
-                        ? "bg-brand-500 text-white"
-                        : "bg-surface-2 text-text-muted hover:text-white"
-                    )}
-                  >
-                    Allow All Models (*)
-                  </button>
-                </div>
-
-                <div className="relative">
-                  <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[15px] text-text-muted">
-                    search
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="Filter models (e.g. claude, gpt, qwen, deepseek)..."
-                    value={modelSearch}
-                    onChange={(e) => setModelSearch(e.target.value)}
-                    className="w-full rounded-[5px] border border-border bg-surface-2 pl-8 pr-3 py-1.5 text-xs text-text-main focus:border-brand-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="max-h-40 overflow-y-auto rounded-[5px] border border-border bg-surface-2/60 p-2 custom-scrollbar">
-                  {loadingModels ? (
-                    <div className="text-center py-4 text-text-muted text-xs font-mono">Scanning installed models...</div>
-                  ) : catalogModels.length === 0 ? (
-                    <div className="text-center py-4 space-y-1">
-                      <p className="text-xs font-mono text-text-muted">No installed provider connections found in X Router.</p>
-                      <p className="text-[11px] text-[#777]">Connect an upstream provider in the Providers page to populate models here, or select Allow All Models (*).</p>
-                    </div>
-                  ) : filteredModels.length === 0 ? (
-                    <div className="text-center py-4 text-text-muted text-xs font-mono">No matching installed models found.</div>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      {filteredModels.map((m) => {
-                        const isSelected = selectedModels.includes(m.id) || selectedModels.includes("*");
-                        const isExplicitSelected = selectedModels.includes(m.id);
-
-                        return (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => toggleModelSelection(m.id)}
-                            className={cn(
-                              "inline-flex items-center gap-1 px-2 py-1 rounded-[4px] text-[10.5px] font-mono border transition-all cursor-pointer",
-                              isExplicitSelected
-                                ? "bg-brand-500 text-white border-brand-500 shadow-xs"
-                                : isSelected
-                                ? "bg-surface-1 text-text-main border-brand-500/40 opacity-80"
-                                : "bg-surface-1 text-text-muted border-border hover:border-text-muted hover:text-white"
-                            )}
-                          >
-                            <span>{m.id}</span>
-                            {isExplicitSelected && (
-                              <span className="material-symbols-outlined text-[11px]">check</span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="rounded-[5px] border border-border px-3 py-1.5 text-xs text-text-muted hover:text-text-main cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="rounded-[5px] bg-brand-500 px-4 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-brand-600 disabled:opacity-50 cursor-pointer"
-                >
-                  {submitting ? "Saving..." : "Save Voucher"}
-                </button>
-              </div>
-            </form>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={submitting}
+            >
+              {submitting ? "Saving..." : "Save Voucher"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

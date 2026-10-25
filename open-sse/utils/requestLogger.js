@@ -39,9 +39,9 @@ async function createLogSession(sourceFormat, targetFormat, model) {
   if (!fs || !LOGS_DIR) return null;
   
   try {
-    if (!fs.existsSync(LOGS_DIR)) {
+    try {
       fs.mkdirSync(LOGS_DIR, { recursive: true });
-    }
+    } catch {}
     
     const timestamp = formatTimestamp();
     const safeModel = (model || "unknown").replace(/[/:]/g, "-");
@@ -235,9 +235,9 @@ export function logError(provider, { error, url, model, requestBody }) {
   if (!fs || !LOGS_DIR) return;
   
   try {
-    if (!fs.existsSync(LOGS_DIR)) {
+    try {
       fs.mkdirSync(LOGS_DIR, { recursive: true });
-    }
+    } catch {}
     
     const date = new Date().toISOString().split("T")[0];
     const logPath = path.join(LOGS_DIR, `${provider}-${date}.log`);
