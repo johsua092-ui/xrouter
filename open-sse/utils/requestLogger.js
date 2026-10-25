@@ -40,7 +40,7 @@ async function createLogSession(sourceFormat, targetFormat, model) {
   
   try {
     try {
-      fs.mkdirSync(LOGS_DIR, { recursive: true });
+      fs.mkdirSync(/*turbopackIgnore: true*/ LOGS_DIR, { recursive: true });
     } catch {}
     
     const timestamp = formatTimestamp();
@@ -236,7 +236,7 @@ export function logError(provider, { error, url, model, requestBody }) {
   
   try {
     try {
-      fs.mkdirSync(LOGS_DIR, { recursive: true });
+      fs.mkdirSync(/*turbopackIgnore: true*/ LOGS_DIR, { recursive: true });
     } catch {}
     
     const date = new Date().toISOString().split("T")[0];

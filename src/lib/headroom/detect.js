@@ -78,11 +78,11 @@ function pythonCandidates() {
   if (bin) {
     const dir = path.dirname(bin);
     const names = IS_WIN ? ["python.exe", "python3.exe"] : ["python3", "python3.13", "python"];
-    for (const n of names) list.push(path.join(dir, n));
+    for (const n of names) list.push(path.join(/*turbopackIgnore: true*/ dir, n));
   }
   for (const dir of EXTRA_BINS) {
     if (!dir) continue;
-    for (const n of PYTHON_CANDIDATES) list.push(path.join(dir, IS_WIN ? `${n}.exe` : n));
+    for (const n of PYTHON_CANDIDATES) list.push(path.join(/*turbopackIgnore: true*/ dir, IS_WIN ? `${n}.exe` : n));
   }
   list.push(...PYTHON_CANDIDATES);
   return list;
@@ -170,7 +170,7 @@ export function getInstalledHeadroomExtras(python) {
   const py = python || findPython310();
   if (!py) return { installed: false, version: null, extras: { code: false, ml: false } };
   try {
-    const out = execFileSync(py, ["-m", "pip", "list", "--format=json", "--disable-pip-version-check"], {
+    const out = execFileSync(/*turbopackIgnore: true*/ py, ["-m", "pip", "list", "--format=json", "--disable-pip-version-check"], {
       stdio: ["ignore", "pipe", "ignore"],
       windowsHide: true,
       timeout: HEADROOM_PIP_TIMEOUT_MS,

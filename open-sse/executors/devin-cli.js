@@ -57,7 +57,7 @@ function resolveDevinBin() {
     ];
   for (const candidate of candidates) {
     try {
-      if (fs.statSync(candidate, { throwIfNoEntry: false })) return candidate;
+      if (fs.statSync(/*turbopackIgnore: true*/ candidate, { throwIfNoEntry: false })) return candidate;
     } catch {}
   }
 

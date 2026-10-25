@@ -20,7 +20,7 @@ const LINUX_CERT_PATHS = [
 
 function getLinuxCertConfig() {
   for (const config of LINUX_CERT_PATHS) {
-    if (fs.existsSync(config.dir)) {
+    if (fs.existsSync(/*turbopackIgnore: true*/ config.dir)) {
       return config;
     }
   }
@@ -84,7 +84,7 @@ function checkCertInstalledWindows(certPath) {
  * Install SSL certificate to system trust store
  */
 async function installCert(sudoPassword, certPath) {
-  if (!fs.existsSync(certPath)) {
+  if (!fs.existsSync(/*turbopackIgnore: true*/ certPath)) {
     throw new Error(`Certificate file not found: ${certPath}`);
   }
 

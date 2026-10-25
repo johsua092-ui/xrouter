@@ -71,7 +71,7 @@ export async function GET() {
       });
     }
 
-    const raw = await readFile(authPath, "utf-8");
+    const raw = await readFile(/*turbopackIgnore: true*/ authPath, "utf-8");
     let auth;
     try {
       auth = JSON.parse(raw);

@@ -100,7 +100,7 @@ export async function GET() {
     ];
     for (const profilePath of kiroProfilePaths) {
       try {
-        const profileContent = await readFile(profilePath, "utf-8");
+        const profileContent = await readFile(/*turbopackIgnore: true*/ profilePath, "utf-8");
         const profileData = JSON.parse(profileContent);
         if (profileData.arn) {
           // Normalize region to us-east-1 for the runtime gateway

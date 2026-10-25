@@ -58,7 +58,7 @@ export const dirExists = async (dir) => {
 export const isProfileHome = async (dir) => {
   for (const file of IDENTITY_FILES) {
     try {
-      await fs.stat(path.join(dir, file));
+      await fs.stat(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, file));
       return true;
     } catch {
       // keep looking

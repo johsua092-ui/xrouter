@@ -574,10 +574,10 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
   // Step 2: Spawn server (Root CA already installed in Step 1.5)
   // Verify server.js exists — recopy if runtime file was deleted (antivirus/cleanup)
   let effectiveServerPath = SERVER_PATH;
-  if (!effectiveServerPath || !fs.existsSync(effectiveServerPath)) {
+  if (!effectiveServerPath || !fs.existsSync(/*turbopackIgnore: true*/ effectiveServerPath)) {
     log(`[MITM] server.js missing at ${effectiveServerPath} → recopying`);
     effectiveServerPath = ensureRuntimeServer(resolveBundledServerPath());
-    if (!effectiveServerPath || !fs.existsSync(effectiveServerPath)) {
+    if (!effectiveServerPath || !fs.existsSync(/*turbopackIgnore: true*/ effectiveServerPath)) {
       throw new Error(`MITM server.js not found at ${effectiveServerPath}. Reinstall xrouter.`);
     }
   }

@@ -28,7 +28,7 @@ export function makeBackupDir(label) {
 export function backupFile(srcPath, destDir, destName = null) {
   if (!fs.existsSync(srcPath)) return null;
   const name = destName || path.basename(srcPath);
-  const dest = path.join(destDir, name);
+  const dest = path.join(/*turbopackIgnore: true*/ destDir, name);
   fs.copyFileSync(srcPath, dest);
   return dest;
 }
@@ -37,7 +37,7 @@ export function backupFile(srcPath, destDir, destName = null) {
 // table EXCEPT the excluded ones into it. Avoids duplicating the huge
 // observability log, so the backup stays small regardless of DB size.
 export function backupDbLite(adapter, destDir, destName = "data.sqlite") {
-  const dest = path.join(destDir, destName);
+  const dest = path.join(/*turbopackIgnore: true*/ destDir, destName);
   try { fs.rmSync(dest, { force: true }); } catch {}
   const escaped = dest.replace(/'/g, "''");
 
