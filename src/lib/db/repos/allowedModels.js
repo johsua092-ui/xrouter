@@ -12,20 +12,39 @@
  */
 export function parseAllowedModels(allowedModels) {
   const raw = String(allowedModels ?? "").trim();
-  if (!raw || raw === "*") return null;
+  if (!raw || raw === "*" || raw.toLowerCase() === "all") return null;
   const patterns = raw.split(",").map((model) => model.trim().toLowerCase()).filter(Boolean);
+  if (patterns.includes("*") || patterns.includes("all")) return null;
   return patterns.length ? patterns : null;
 }
 
 /** Exact, `prefix*` and `*suffix` patterns, matched case-insensitively. */
 export function matchesAllowedModels(patterns, requestedModel) {
   if (!patterns) return true;
+  if (patterns.includes("*") || patterns.includes("all")) return true;
   const req = String(requestedModel || "").trim().toLowerCase();
   if (!req) return false;
+
+  const reqParts = req.split("/");
+  const reqBare = reqParts.length > 1 ? reqParts.slice(1).join("/") : req;
+
   return patterns.some((allowed) => {
-    if (allowed === "*" || allowed === req) return true;
-    if (allowed.endsWith("*")) return req.startsWith(allowed.slice(0, -1));
-    if (allowed.startsWith("*")) return req.endsWith(allowed.slice(1));
+    if (allowed === "*" || allowed === "all" || allowed === req || allowed === reqBare) return true;
+
+    // If allowed pattern is an exact "provider/model" and requested is bare "model"
+    if (allowed.includes("/") && !allowed.includes("*")) {
+      const allowedBare = allowed.split("/").slice(1).join("/");
+      if (allowedBare === req || allowedBare === reqBare) return true;
+    }
+
+    if (allowed.endsWith("*")) {
+      const pfx = allowed.slice(0, -1);
+      if (req.startsWith(pfx) || reqBare.startsWith(pfx)) return true;
+    }
+    if (allowed.startsWith("*")) {
+      const sfx = allowed.slice(1);
+      if (req.endsWith(sfx) || reqBare.endsWith(sfx)) return true;
+    }
     return false;
   });
 }
@@ -36,11 +55,11 @@ export function matchesAllowedModels(patterns, requestedModel) {
  * allowed, which lets the caller skip the WHERE clause entirely.
  */
 export function buildAllowedModelsSql(patterns, column = "model") {
-  if (!patterns) return null;
+  if (!patterns || patterns.includes("*") || patterns.includes("all")) return null;
   const clauses = [];
   const params = [];
   for (const allowed of patterns) {
-    if (allowed === "*") return null;
+    if (allowed === "*" || allowed === "all") return null;
     if (allowed.endsWith("*")) {
       clauses.push(`${column} LIKE ?`);
       params.push(`${allowed.slice(0, -1)}%`);

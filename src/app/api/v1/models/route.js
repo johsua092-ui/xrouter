@@ -789,8 +789,11 @@ export async function GET(request) {
     if (apiKey) {
       try {
         const keyRecord = await getApiKeyByKey(apiKey);
-        if (keyRecord && keyRecord.allowedModels && keyRecord.allowedModels !== "*") {
-          data = filterModelsByAllowedModels(data, keyRecord.allowedModels);
+        if (keyRecord && keyRecord.allowedModels) {
+          const raw = String(keyRecord.allowedModels).trim().toLowerCase();
+          if (raw !== "*" && raw !== "all") {
+            data = filterModelsByAllowedModels(data, keyRecord.allowedModels);
+          }
         }
       } catch (e) {
         // preserve on error

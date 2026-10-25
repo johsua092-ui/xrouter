@@ -17,13 +17,19 @@ export function modelMatchCandidates(entry) {
     const s = String(v || "").trim();
     if (s && !out.includes(s)) out.push(s);
   };
+  push(entry.id);
   push(entry.routedModel);
   push(entry.fullModel);
   push(entry.model);
   push(entry.name);
+  if (entry.id && entry.id.includes("/")) {
+    push(entry.id.split("/").slice(1).join("/"));
+    push(`${entry.id.split("/")[0]}/*`);
+  }
   // A `provider/*` pattern admits every model served under that provider, the
   // same way the key-creation clamp reads it.
   if (entry.provider) push(`${entry.provider}/*`);
+  if (entry.owned_by) push(`${entry.owned_by}/*`);
   return out;
 }
 
