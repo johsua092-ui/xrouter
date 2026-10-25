@@ -39,6 +39,7 @@ export default {
     { id: "glm-5.3-flash-free", name: "GLM 5.3 Flash Free" },
     { id: "longcat-2.5-preview-free", name: "Longcat 2.5 Preview Free" },
     { id: "deepseek-v4.1-flash-free", name: "DeepSeek v4.1 Flash Free" },
+    { id: "iceman-contributor-free", name: "Iceman Contributor Free", targetFormat: "openai-responses" },
     // Upstream OpenCode has officially deprecated/retired muse-spark-1.* free contributor models
     // { id: "muse-spark-1.2-contributor-free", name: "Muse Spark 1.2 Contributor Free", targetFormat: "openai-responses" },
     // { id: "muse-spark-1.3-contributor-free", name: "Muse Spark 1.3 Contributor Free", targetFormat: "openai-responses" },
