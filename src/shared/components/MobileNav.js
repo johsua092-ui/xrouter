@@ -39,15 +39,15 @@ function Row({ href, icon, label, active, onClick, badge = null }) {
       onClick={onClick}
       className={cn(
         "flex items-center gap-3 rounded-[8px] px-3 py-2.5 transition-colors",
-        active ? "bg-brand-500/12 text-text-main" : "text-text-muted hover:bg-surface-2 hover:text-text-main"
+        active ? "bg-primary/15 text-primary font-medium" : "text-text-main/80 hover:bg-surface-2 hover:text-text-main"
       )}
     >
-      <span className={cn("material-symbols-outlined shrink-0 text-[19px] leading-none", active && "text-primary")}>
+      <span className={cn("material-symbols-outlined shrink-0 text-[19px] leading-none transition-colors", active ? "text-primary" : "text-text-main/70")}>
         {icon}
       </span>
-      <span className={cn("flex-1 truncate text-[13.5px] leading-none", active && "font-semibold")}>{label}</span>
+      <span className={cn("flex-1 truncate text-[13.5px] leading-none", active && "font-semibold text-primary")}>{label}</span>
       {badge}
-      {active && <span className="h-4 w-[2px] rounded-full bg-primary" aria-hidden="true" />}
+      {active && <span className="h-4 w-[2.5px] rounded-full bg-primary" aria-hidden="true" />}
     </Link>
   );
 }
@@ -93,9 +93,9 @@ export default function MobileNav() {
       {/* Mobile Top Bar — docked at top of viewport so it never scrolls away or disappears */}
       <header className="sticky top-0 z-40 flex h-12 w-full items-center justify-between border-b border-border bg-surface px-4 lg:hidden shrink-0 shadow-xs">
         <Link href="/dashboard/endpoint" className="flex items-center gap-2.5">
-          <div className="size-7 rounded-[6px] border border-brand-500/40 bg-surface-2 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+          <div className="size-7 rounded-[6px] border border-primary/40 bg-surface-2 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/favicon.svg" alt="X Router" className="size-5 object-contain" />
+            <img src="/favicon.svg" alt="X Router" className="size-5 object-contain [filter:var(--logo-filter,none)]" />
           </div>
           <div className="flex flex-col">
             <span className="text-[12.5px] font-bold tracking-wider uppercase text-text-main leading-tight">
@@ -131,9 +131,9 @@ export default function MobileNav() {
           />
           <div className="slide-in-right absolute right-0 top-0 flex h-full w-[min(86vw,330px)] flex-col border-l border-border bg-surface">
             <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border-subtle px-3">
-              <span className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-[6px] ring-1 ring-brand-500/30">
+              <span className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-[6px] ring-1 ring-primary/40 bg-surface-2 p-0.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/favicon.svg" alt="X Router" className="size-7 object-contain" />
+                <img src="/favicon.svg" alt="X Router" className="size-full object-contain [filter:var(--logo-filter,none)]" />
               </span>
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-[13px] font-semibold leading-tight text-text-main">
@@ -230,11 +230,11 @@ export default function MobileNav() {
                     setOpen(false);
                     setThemeModalOpen(true);
                   }}
-                  className="flex items-center gap-2.5 w-full rounded-[6px] px-2.5 py-2 text-[13px] text-text-muted hover:bg-surface-2 hover:text-text-main transition-colors text-left"
+                  className="flex items-center gap-3 w-full rounded-[8px] px-3 py-2.5 text-text-main/80 hover:bg-surface-2 hover:text-text-main transition-colors text-left"
                 >
-                  <span className="material-symbols-outlined text-[18px] text-primary">palette</span>
-                  <span className="truncate font-medium">Theme & Palette</span>
-                  <span className="ml-auto text-[9.5px] font-semibold uppercase tracking-wider bg-brand-500/15 text-primary px-1.5 py-0.5 rounded-[4px]">Light / Colors</span>
+                  <span className="material-symbols-outlined text-[19px] text-primary shrink-0 leading-none">palette</span>
+                  <span className="flex-1 truncate text-[13.5px] leading-none font-medium">Theme & Palette</span>
+                  <span className="text-[9.5px] font-semibold uppercase tracking-wider bg-primary/15 text-primary px-1.5 py-0.5 rounded-[4px]">Light / Colors</span>
                 </button>
               </Section>
             </div>

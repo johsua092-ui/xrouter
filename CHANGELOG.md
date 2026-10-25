@@ -9,6 +9,9 @@
   - Bumped version string to `v0.0.2` in `internal/config/config.go` and `package.json`.
 
 ## Features & Improvements
+- **Theme Accent Responsive Logo & Active States**:
+  - Dynamically tint X Router logo/favicon using CSS `--logo-filter` matching chosen palette (Emerald Green, Electric Blue, Violet, Rose, Cyan, or Ember).
+  - Synchronized navigation icons and text color across LeftRail and MobileNav drawer to cleanly adapt to Light Mode and selected accent palettes.
 - **Embedded OpenCode Protocol Engine (Zero-Install / In-Memory)**:
   - Fully embedded the OpenCode client protocol, session minting, and canonical tool fingerprinting directly into X Router's native executor.
   - Zero external CLI installation required, zero idle RAM footprint, and keeps the Golang binary under 3.8 MB while remaining 100% cross-platform on Linux and Windows.

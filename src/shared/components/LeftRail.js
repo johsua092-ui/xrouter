@@ -21,19 +21,19 @@ function RailRow({ href, icon, label, active, open, onClick, badge = null }) {
       <span
         className={cn(
           "material-symbols-outlined shrink-0 text-[18px] leading-none transition-colors",
-          active ? "text-primary font-semibold" : "text-text-subtle"
+          active ? "text-primary font-semibold" : "text-text-main/70"
         )}
       >
         {icon}
       </span>
       {open && (
-        <span className={cn("flex-1 truncate whitespace-nowrap text-[12.5px] leading-none", active ? "font-semibold text-text-main" : "text-text-muted")}>
+        <span className={cn("flex-1 truncate whitespace-nowrap text-[12.5px] leading-none", active ? "font-semibold text-primary" : "text-text-main/80")}>
           {label}
         </span>
       )}
       {open && badge}
       {active && (
-        <span className="absolute left-0 top-1/2 h-4 w-[2.5px] -translate-y-1/2 rounded-r bg-brand-500 shadow-[0_0_8px_rgba(229,106,74,0.6)]" aria-hidden="true" />
+        <span className="absolute left-0 top-1/2 h-4 w-[2.5px] -translate-y-1/2 rounded-r bg-primary shadow-[0_0_8px_rgba(var(--color-primary-rgb,229,106,74),0.6)]" aria-hidden="true" />
       )}
     </>
   );
@@ -41,7 +41,7 @@ function RailRow({ href, icon, label, active, open, onClick, badge = null }) {
   const cls = cn(
     "relative flex h-8.5 w-full items-center gap-2.5 rounded-[5px] transition-colors duration-150 cursor-pointer",
     open ? "px-2.5" : "justify-center px-0",
-    active ? "bg-surface-2 text-text-main font-medium border border-border-subtle" : "text-text-muted hover:bg-surface-2 hover:text-text-main"
+    active ? "bg-primary/15 text-primary font-medium border border-border-subtle" : "text-text-main/80 hover:bg-surface-2 hover:text-text-main"
   );
 
   if (href) {
@@ -78,20 +78,20 @@ function GroupRow({ icon, label, active, open, expanded, onClick }) {
       className={cn(
         "relative flex h-8.5 w-full items-center gap-2.5 rounded-[5px] transition-colors duration-150 cursor-pointer",
         open ? "px-2.5" : "justify-center px-0",
-        active || expanded ? "bg-surface-2 text-text-main border border-border-subtle" : "text-text-muted hover:bg-surface-2 hover:text-text-main"
+        active || expanded ? "bg-primary/15 text-primary border border-border-subtle font-medium" : "text-text-main/80 hover:bg-surface-2 hover:text-text-main"
       )}
     >
       <span
         className={cn(
           "material-symbols-outlined shrink-0 text-[18px] leading-none transition-colors",
-          active || expanded ? "text-primary" : "text-text-subtle"
+          active || expanded ? "text-primary" : "text-text-main/70"
         )}
       >
         {icon}
       </span>
       {open && (
         <>
-          <span className={cn("flex-1 truncate whitespace-nowrap text-left text-[12.5px] leading-none", active && "font-semibold")}>
+          <span className={cn("flex-1 truncate whitespace-nowrap text-left text-[12.5px] leading-none", (active || expanded) && "font-semibold text-primary")}>
             {label}
           </span>
           <span
@@ -103,7 +103,7 @@ function GroupRow({ icon, label, active, open, expanded, onClick }) {
         </>
       )}
       {active && (
-        <span className="absolute left-0 top-1/2 h-4 w-[2.5px] -translate-y-1/2 rounded-r bg-brand-500 shadow-[0_0_8px_rgba(229,106,74,0.6)]" aria-hidden="true" />
+        <span className="absolute left-0 top-1/2 h-4 w-[2.5px] -translate-y-1/2 rounded-r bg-primary shadow-[0_0_8px_rgba(var(--color-primary-rgb,229,106,74),0.6)]" aria-hidden="true" />
       )}
     </button>
   );
@@ -136,13 +136,13 @@ export function FlyoutLink({ href, icon, label, active, onClick, badge = null })
       title={label}
       className={cn(
         "flex items-center gap-2 rounded-[4px] px-2.5 py-[6px] transition-colors",
-        active ? "bg-brand-500/12 text-primary font-medium" : "text-text-muted hover:bg-surface-2 hover:text-text-main"
+        active ? "bg-primary/15 text-primary font-medium" : "text-text-main/80 hover:bg-surface-2 hover:text-text-main"
       )}
     >
-      <span className={cn("material-symbols-outlined shrink-0 text-[15px] leading-none", active && "text-primary")}>
+      <span className={cn("material-symbols-outlined shrink-0 text-[15px] leading-none transition-colors", active ? "text-primary" : "text-text-main/70")}>
         {icon}
       </span>
-      <span className={cn("flex-1 truncate text-[12px] leading-none", active && "font-semibold")}>{label}</span>
+      <span className={cn("flex-1 truncate text-[12px] leading-none", active && "font-semibold text-primary")}>{label}</span>
       {badge}
     </Link>
   );
@@ -267,8 +267,8 @@ export default function LeftRail() {
               className="flex items-center gap-2 overflow-hidden transition-opacity hover:opacity-90 min-w-0 flex-1"
               title="X Router Dashboard"
             >
-              <div className="size-7 rounded-[5px] border border-brand-500/40 bg-surface flex items-center justify-center shrink-0 shadow-xs overflow-hidden p-0.5">
-                <img src="/favicon.svg" alt="X Router" className="size-full object-contain" />
+              <div className="size-7 rounded-[5px] border border-primary/40 bg-surface flex items-center justify-center shrink-0 shadow-xs overflow-hidden p-0.5">
+                <img src="/favicon.svg" alt="X Router" className="size-full object-contain [filter:var(--logo-filter,none)]" />
               </div>
               <div className="min-w-0 flex flex-col flex-1">
                 <span className="text-[11.5px] font-bold tracking-wider uppercase text-text-main truncate">
@@ -390,11 +390,11 @@ export default function LeftRail() {
                           className={cn(
                             "flex items-center gap-2 rounded-[4px] px-2 py-1 text-[12px] transition-colors",
                             isActive(item.href)
-                              ? "bg-brand-500/12 text-primary font-medium"
-                              : "text-text-muted hover:bg-surface-2 hover:text-text-main"
+                              ? "bg-primary/15 text-primary font-medium"
+                              : "text-text-main/70 hover:bg-surface-2 hover:text-text-main"
                           )}
                         >
-                          <span className="material-symbols-outlined shrink-0 text-[15px] leading-none">
+                          <span className={cn("material-symbols-outlined shrink-0 text-[15px] leading-none", isActive(item.href) ? "text-primary" : "text-text-main/60")}>
                             {item.icon}
                           </span>
                           <span className="truncate">{item.label}</span>
@@ -449,12 +449,12 @@ export default function LeftRail() {
                             title={item.label}
                             className={cn(
                               "flex items-center gap-2 rounded-[4px] px-2 py-1 text-[12px] transition-colors",
-                              isActive(item.href)
-                                ? "bg-brand-500/12 text-primary font-medium"
-                                : "text-text-muted hover:bg-surface-2 hover:text-text-main"
+                              pathname.startsWith(item.href)
+                                ? "bg-primary/15 text-primary font-medium"
+                                : "text-text-main/70 hover:bg-surface-2 hover:text-text-main"
                             )}
                           >
-                            <span className="material-symbols-outlined shrink-0 text-[15px] leading-none">
+                            <span className={cn("material-symbols-outlined shrink-0 text-[15px] leading-none", pathname.startsWith(item.href) ? "text-primary" : "text-text-main/60")}>
                               {item.icon}
                             </span>
                             <span className="truncate">{item.label}</span>
@@ -484,11 +484,11 @@ export default function LeftRail() {
                         className={cn(
                           "flex items-center gap-2 rounded-[4px] px-2 py-1 text-[12px] transition-colors",
                           isActive(item.href)
-                            ? "bg-brand-500/12 text-primary font-medium"
-                            : "text-text-muted hover:bg-surface-2 hover:text-text-main"
+                            ? "bg-primary/15 text-primary font-medium"
+                            : "text-text-main/70 hover:bg-surface-2 hover:text-text-main"
                         )}
                       >
-                        <span className="material-symbols-outlined shrink-0 text-[15px] leading-none">
+                        <span className={cn("material-symbols-outlined shrink-0 text-[15px] leading-none", isActive(item.href) ? "text-primary" : "text-text-main/60")}>
                           {item.icon}
                         </span>
                         <span className="truncate">{item.label}</span>
@@ -516,11 +516,11 @@ export default function LeftRail() {
                         className={cn(
                           "flex items-center gap-2 rounded-[4px] px-2 py-1 text-[12px] transition-colors",
                           isActive(item.href)
-                            ? "bg-brand-500/12 text-primary font-medium"
-                            : "text-text-muted hover:bg-surface-2 hover:text-text-main"
+                            ? "bg-primary/15 text-primary font-medium"
+                            : "text-text-main/70 hover:bg-surface-2 hover:text-text-main"
                         )}
                       >
-                        <span className="material-symbols-outlined shrink-0 text-[15px] leading-none">
+                        <span className={cn("material-symbols-outlined shrink-0 text-[15px] leading-none", isActive(item.href) ? "text-primary" : "text-text-main/60")}>
                           {item.icon}
                         </span>
                         <span className="truncate">{item.label}</span>

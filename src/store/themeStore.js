@@ -10,12 +10,12 @@ import { THEME_CONFIG } from "@/shared/constants/config";
 export const THEME_IDS = ["ember", "dark", "light"];
 
 export const ACCENT_PALETTES = [
-  { id: "orange", label: "Ember Orange", primary: "#E56A4A", hover: "#c04a2c" },
-  { id: "blue", label: "Electric Blue", primary: "#2563EB", hover: "#1D4ED8" },
-  { id: "emerald", label: "Emerald Green", primary: "#059669", hover: "#047857" },
-  { id: "purple", label: "Violet Purple", primary: "#7C3AED", hover: "#6D28D9" },
-  { id: "rose", label: "Ruby Rose", primary: "#E11D48", hover: "#BE123C" },
-  { id: "cyan", label: "Cyber Cyan", primary: "#0891B2", hover: "#0E7490" },
+  { id: "orange", label: "Ember Orange", primary: "#E56A4A", hover: "#c04a2c", filter: "none" },
+  { id: "blue", label: "Electric Blue", primary: "#2563EB", hover: "#1D4ED8", filter: "hue-rotate(205deg) saturate(1.4)" },
+  { id: "emerald", label: "Emerald Green", primary: "#059669", hover: "#047857", filter: "hue-rotate(130deg) saturate(1.2)" },
+  { id: "purple", label: "Violet Purple", primary: "#7C3AED", hover: "#6D28D9", filter: "hue-rotate(245deg) saturate(1.3)" },
+  { id: "rose", label: "Ruby Rose", primary: "#E11D48", hover: "#BE123C", filter: "hue-rotate(335deg) saturate(1.3)" },
+  { id: "cyan", label: "Cyber Cyan", primary: "#0891B2", hover: "#0E7490", filter: "hue-rotate(175deg) saturate(1.4)" },
 ];
 
 const useThemeStore = create(
@@ -72,6 +72,7 @@ function applyTheme(theme, accent = "orange") {
   root.style.setProperty("--color-brand-600", palette.hover);
   root.style.setProperty("--color-primary", palette.primary);
   root.style.setProperty("--color-primary-hover", palette.hover);
+  root.style.setProperty("--logo-filter", palette.filter || "none");
 }
 
 export default useThemeStore;
