@@ -642,26 +642,26 @@ export default function ClaimPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#e0e0e0] flex flex-col justify-between selection:bg-[#E56A4A]/25 selection:text-white font-sans antialiased">
+    <div className="min-h-screen bg-bg text-text-main flex flex-col justify-between selection:bg-primary/25 selection:text-white font-sans antialiased">
       {/* Hairline grid background */}
-      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(#18181b_1px,transparent_1px)] [background-size:16px_16px] opacity-40" />
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(var(--color-border)_1px,transparent_1px)] [background-size:16px_16px] opacity-40" />
 
       {/* Top Console Bar */}
       <header className="relative z-10 flex h-13 w-full items-center justify-between border-b border-border bg-surface px-4 sm:px-8">
         <div className="flex items-center gap-3">
-          <div className="flex size-7 items-center justify-center rounded-[4px] bg-[#141416] border border-[#2a2a2e] text-[#E56A4A]">
+          <div className="flex size-7 items-center justify-center rounded-[4px] bg-primary/10 border border-primary/20 text-primary">
             <svg viewBox="0 0 24 24" fill="currentColor" className="size-4">
               <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z" />
             </svg>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-bold tracking-wider text-white">X ROUTER</span>
-            <span className="text-[#333]">/</span>
-            <span className="font-mono text-[11px] text-[#888] uppercase tracking-wider">Developer Access Portal</span>
+            <span className="font-mono text-xs font-bold tracking-wider text-text-main">X ROUTER</span>
+            <span className="text-border">/</span>
+            <span className="font-mono text-[11px] text-text-muted uppercase tracking-wider">Developer Access Portal</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] font-mono text-[#777]">
+        <div className="flex items-center gap-2 text-[11px] font-mono text-text-muted">
           <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
           <span>GATEWAY ONLINE</span>
         </div>
@@ -672,57 +672,57 @@ export default function ClaimPage() {
         <div className="w-full max-w-xl">
           {!result ? (
             /* Intended Claim Container */
-            <div className="rounded-[8px] border border-[#242426] bg-[#0c0c0e] p-6 sm:p-7 shadow-2xl space-y-5">
+            <div className="rounded-[6px] border border-border bg-surface p-6 sm:p-7 shadow-[var(--shadow-elev)] space-y-5">
               
-              <div className="border-b border-[#1c1c1f] pb-4">
+              <div className="border-b border-border pb-4">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="material-symbols-outlined text-[#E56A4A] text-[18px]">key</span>
-                  <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
+                  <span className="material-symbols-outlined text-primary text-[18px]">key</span>
+                  <h1 className="text-base sm:text-lg font-bold tracking-tight text-text-main">
                     API Key Provisioning
                   </h1>
                 </div>
-                <p className="text-xs text-[#888]">
+                <p className="text-xs text-text-muted">
                   Generate an authenticated X Router API key to connect models directly into Cursor, Cline, or custom SDKs.
                 </p>
               </div>
 
               {/* VOUCHER & FAUCET DETAILS (IF ACTIVE) */}
               {faucetInfo && (
-                <div className="rounded-[6px] border border-[#2a2a2e] bg-[#121215] p-3.5 space-y-2.5">
+                <div className="rounded-[6px] border border-border bg-surface-2 p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="rounded-[3px] bg-[#1f1f24] px-2 py-0.5 font-mono text-[10px] font-bold text-[#ddd] border border-[#333]">
+                    <span className="rounded-[3px] bg-surface px-2 py-0.5 font-mono text-[10px] font-bold text-text-main border border-border">
                       {faucetInfo.isCustomCode ? `VOUCHER: ${faucetInfo.code}` : "PUBLIC FAUCET (BANSOS)"}
                     </span>
-                    <span className="font-mono text-[11px] text-emerald-400">
+                    <span className="font-mono text-[11px] text-emerald-500 font-semibold">
                       {faucetInfo.remainingClaims} slots remaining
                     </span>
                   </div>
 
                   <div>
-                    <h2 className="text-xs font-semibold text-white">{faucetInfo.name}</h2>
+                    <h2 className="text-xs font-semibold text-text-main">{faucetInfo.name}</h2>
                     {faucetInfo.description && (
-                      <p className="text-[11px] text-[#777] mt-0.5">
+                      <p className="text-[11px] text-text-muted mt-0.5">
                         {faucetInfo.description}
                       </p>
                     )}
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 font-mono text-[11px] py-0.5">
-                    <div className="rounded-[4px] bg-[#09090b] p-2 border border-[#1f1f22]">
-                      <span className="text-[#666] block text-[9.5px]">ALLOCATION</span>
-                      <span className="font-semibold text-white">
+                    <div className="rounded-[4px] bg-surface p-2 border border-border">
+                      <span className="text-text-muted block text-[9.5px]">ALLOCATION</span>
+                      <span className="font-semibold text-text-main">
                         {faucetInfo.tokenLimit != null ? formatTokenLimit(faucetInfo.tokenLimit) : "—"}
                       </span>
                     </div>
-                    <div className="rounded-[4px] bg-[#09090b] p-2 border border-[#1f1f22]">
-                      <span className="text-[#666] block text-[9.5px]">MODELS</span>
-                      <span className="font-semibold text-white truncate block">
+                    <div className="rounded-[4px] bg-surface p-2 border border-border">
+                      <span className="text-text-muted block text-[9.5px]">MODELS</span>
+                      <span className="font-semibold text-text-main truncate block">
                         {faucetInfo.allowedModels ? (faucetInfo.allowedModels === "*" ? "All (*)" : faucetInfo.allowedModels) : "—"}
                       </span>
                     </div>
-                    <div className="rounded-[4px] bg-[#09090b] p-2 border border-[#1f1f22]">
-                      <span className="text-[#666] block text-[9.5px]">LIFESPAN</span>
-                      <span className="font-semibold text-white">{faucetInfo.expiresInDays != null ? `${faucetInfo.expiresInDays} Days` : "—"}</span>
+                    <div className="rounded-[4px] bg-surface p-2 border border-border">
+                      <span className="text-text-muted block text-[9.5px]">LIFESPAN</span>
+                      <span className="font-semibold text-text-main">{faucetInfo.expiresInDays != null ? `${faucetInfo.expiresInDays} Days` : "—"}</span>
                     </div>
                   </div>
                 </div>
@@ -743,7 +743,7 @@ export default function ClaimPage() {
                 />
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-mono text-[#888] uppercase block">
+                  <label className="text-[10px] font-mono text-text-muted uppercase block">
                     VOUCHER PASS CODE
                   </label>
                   <input
@@ -755,7 +755,7 @@ export default function ClaimPage() {
                       setCode(val);
                       if (val.trim()) loadSecurityChallenge(val.trim(), true);
                     }}
-                    className="w-full rounded-[5px] border border-[#2c2c30] bg-[#141416] px-3.5 py-2.5 font-mono text-xs tracking-wider text-white uppercase placeholder:text-[#555] focus:border-[#E56A4A] focus:outline-none"
+                    className="w-full rounded-[5px] border border-border bg-surface-2 px-3.5 py-2.5 font-mono text-xs tracking-wider text-text-main uppercase placeholder:text-text-muted focus:border-primary focus:outline-none"
                   />
                 </div>
 
@@ -772,26 +772,26 @@ export default function ClaimPage() {
                 {/* MATH CAPTCHA (LANGSUNG TAMPIL DARI AWAL) */}
                 {captchaImage ? (
                   <div className="space-y-1 pt-1">
-                    <label className="text-[10px] font-mono text-[#888] uppercase block">
+                    <label className="text-[10px] font-mono text-text-muted uppercase block">
                       SECURITY VERIFICATION
                     </label>
                     <div className="flex items-center gap-2">
                       <img
                         src={captchaImage}
                         alt="captcha"
-                        className="h-[44px] rounded-[5px] border border-[#2c2c30] bg-[#141416]"
+                        className="h-[44px] rounded-[5px] border border-border bg-surface-2"
                       />
                       <input
                         type="text"
                         placeholder="Hitung jawaban..."
                         value={captchaInput}
                         onChange={(e) => setCaptchaInput(e.target.value)}
-                        className="flex-1 rounded-[5px] border border-[#2c2c30] bg-[#141416] px-3.5 py-2.5 font-mono text-xs text-white placeholder:text-[#555] focus:border-[#E56A4A] focus:outline-none"
+                        className="flex-1 rounded-[5px] border border-border bg-surface-2 px-3.5 py-2.5 font-mono text-xs text-text-main placeholder:text-text-muted focus:border-primary focus:outline-none"
                       />
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-2 text-xs text-[#666] font-mono">
+                  <div className="text-center py-2 text-xs text-text-muted font-mono">
                     Memuat verifikasi captcha...
                   </div>
                 )}
@@ -799,7 +799,7 @@ export default function ClaimPage() {
                 <button
                   type="submit"
                   disabled={loading || (!code.trim() && !faucetInfo) || (captchaImage && !captchaInput.trim())}
-                  className="w-full rounded-[5px] bg-[#E56A4A] py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-[#d45838] active:scale-[0.99] disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
+                  className="w-full rounded-[5px] bg-primary py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-primary/90 active:scale-[0.99] disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
                 >
                   {loading ? (
                     <span className="font-mono">Memverifikasi & Menerbitkan Key...</span>
@@ -813,7 +813,7 @@ export default function ClaimPage() {
               </form>
 
               {error && (
-                <div className="rounded-[5px] border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-400 flex items-start gap-2">
+                <div className="rounded-[5px] border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-500 flex items-start gap-2">
                   <span className="material-symbols-outlined text-[15px] shrink-0 mt-0.5">error</span>
                   <span>{error}</span>
                 </div>
@@ -827,7 +827,7 @@ export default function ClaimPage() {
                     setError("");
                     loadSecurityChallenge(code, true);
                   }}
-                  className="text-[11px] font-mono text-[#666] hover:text-[#E56A4A] transition-colors cursor-pointer"
+                  className="text-[11px] font-mono text-text-muted hover:text-primary transition-colors cursor-pointer"
                 >
                   [Reset Cookie & Sesi]
                 </button>
@@ -835,31 +835,31 @@ export default function ClaimPage() {
             </div>
           ) : (
             /* Result Panel */
-            <div className="rounded-[8px] border border-[#242426] bg-[#0c0c0e] p-6 sm:p-7 shadow-2xl space-y-5">
-              <div className="border-b border-[#1c1c1f] pb-3 flex items-center justify-between">
+            <div className="rounded-[6px] border border-border bg-surface p-6 sm:p-7 shadow-[var(--shadow-elev)] space-y-5">
+              <div className="border-b border-border pb-3 flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-bold text-white">Credential Provisioned</h2>
-                  <p className="text-xs text-[#888] mt-0.5">Copy this API key now. It is permanently active for your allocated quota.</p>
+                  <h2 className="text-base font-bold text-text-main">Credential Provisioned</h2>
+                  <p className="text-xs text-text-muted mt-0.5">Copy this API key now. It is permanently active for your allocated quota.</p>
                 </div>
-                <span className="rounded-[3px] bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-mono text-emerald-400 font-bold">
+                <span className="rounded-[3px] bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-mono text-emerald-500 font-bold">
                   ACTIVE
                 </span>
               </div>
 
               {/* API Key Display */}
               <div className="space-y-1.5">
-                <span className="text-[10px] font-mono text-[#777] uppercase">API KEY</span>
-                <div className="flex items-center gap-2 rounded-[5px] border border-[#2c2c30] bg-[#141416] p-2">
+                <span className="text-[10px] font-mono text-text-muted uppercase">API KEY</span>
+                <div className="flex items-center gap-2 rounded-[5px] border border-border bg-surface-2 p-2">
                   <input
                     type="text"
                     readOnly
                     value={result.apiKey}
-                    className="flex-1 bg-transparent font-mono text-xs text-white select-all focus:outline-none"
+                    className="flex-1 bg-transparent font-mono text-xs text-text-main select-all focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => copyToClipboard(result.apiKey, "key")}
-                    className="rounded-[4px] bg-[#E56A4A] px-3 py-1 text-xs font-semibold text-white hover:bg-[#d45838] transition-colors cursor-pointer"
+                    className="rounded-[4px] bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-primary/90 transition-colors cursor-pointer"
                   >
                     {copiedKey ? "Copied" : "Copy Key"}
                   </button>
@@ -868,21 +868,21 @@ export default function ClaimPage() {
 
               {/* Metadata strip */}
               <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
-                <div className="rounded-[4px] bg-[#121215] p-2 border border-[#1f1f22]">
-                  <span className="text-[#666] block text-[9.5px]">TOKEN LIMIT</span>
-                  <span className="font-semibold text-white">
+                <div className="rounded-[4px] bg-surface-2 p-2 border border-border">
+                  <span className="text-text-muted block text-[9.5px]">TOKEN LIMIT</span>
+                  <span className="font-semibold text-text-main">
                     {formatTokenLimit(result.tokenLimit)}
                   </span>
                 </div>
-                <div className="rounded-[4px] bg-[#121215] p-2 border border-[#1f1f22]">
-                  <span className="text-[#666] block text-[9.5px]">MODELS</span>
-                  <span className="font-semibold text-white truncate block" title={result.allowedModels}>
+                <div className="rounded-[4px] bg-surface-2 p-2 border border-border">
+                  <span className="text-text-muted block text-[9.5px]">MODELS</span>
+                  <span className="font-semibold text-text-main truncate block" title={result.allowedModels}>
                     {result.allowedModels === "*" ? "All Models (*)" : result.allowedModels}
                   </span>
                 </div>
-                <div className="rounded-[4px] bg-[#121215] p-2 border border-[#1f1f22]">
-                  <span className="text-[#666] block text-[9.5px]">EXPIRES</span>
-                  <span className="font-semibold text-white">
+                <div className="rounded-[4px] bg-surface-2 p-2 border border-border">
+                  <span className="text-text-muted block text-[9.5px]">EXPIRES</span>
+                  <span className="font-semibold text-text-main">
                     {result.expiresAt ? new Date(result.expiresAt).toLocaleDateString() : "Never"}
                   </span>
                 </div>
@@ -890,13 +890,13 @@ export default function ClaimPage() {
 
               {/* Base URL */}
               <div className="space-y-1.5">
-                <span className="text-[10px] font-mono text-[#777] uppercase">BASE URL (OPENAI COMPATIBLE)</span>
-                <div className="flex items-center gap-2 rounded-[5px] border border-[#222] bg-[#141416] p-2 text-xs font-mono">
-                  <span className="flex-1 text-[#bbb] truncate">{result.baseUrl}</span>
+                <span className="text-[10px] font-mono text-text-muted uppercase">BASE URL (OPENAI COMPATIBLE)</span>
+                <div className="flex items-center gap-2 rounded-[5px] border border-border bg-surface-2 p-2 text-xs font-mono">
+                  <span className="flex-1 text-text-main truncate">{result.baseUrl}</span>
                   <button
                     type="button"
                     onClick={() => copyToClipboard(result.baseUrl, "baseUrl")}
-                    className="text-[#777] hover:text-white transition-colors cursor-pointer"
+                    className="text-text-muted hover:text-text-main transition-colors cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-[15px]">
                       {copiedSnippet === "baseUrl" ? "check" : "content_copy"}
@@ -906,9 +906,9 @@ export default function ClaimPage() {
               </div>
 
               {/* Quickstart Tabs */}
-              <div className="space-y-2 border-t border-[#1c1c1f] pt-3">
+              <div className="space-y-2 border-t border-border pt-3">
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-[10px] uppercase text-[#666] font-bold">CLIENT QUICKSTART</span>
+                  <span className="text-[10px] uppercase text-text-muted font-bold">CLIENT QUICKSTART</span>
                   <div className="flex items-center gap-1">
                     {["curl", "python", "cursor", "cline"].map((tab) => (
                       <button
@@ -917,8 +917,8 @@ export default function ClaimPage() {
                         onClick={() => setActiveSnippetTab(tab)}
                         className={`px-2 py-0.5 rounded-[3px] uppercase text-[10px] transition-colors cursor-pointer ${
                           activeSnippetTab === tab
-                            ? "bg-[#E56A4A] text-white font-bold"
-                            : "text-[#666] hover:text-white"
+                            ? "bg-primary text-white font-bold"
+                            : "text-text-muted hover:text-text-main"
                         }`}
                       >
                         {tab}
@@ -928,17 +928,17 @@ export default function ClaimPage() {
                 </div>
 
                 {activeSnippetTab === "curl" && (() => {
-                  const curlCode = result.configs?.curl || `curl ${result.baseUrl || "http://127.0.0.1:8080/v1"}/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${result.apiKey}" \\\n  -d '{"model": "${result.allowedModels === "*" ? "gpt-4o" : (result.allowedModels || "").split(",")[0].trim() || "gpt-4o"}", "messages": [{"role": "user", "content": "Hello!"}]}'`;
+                  const curlCode = result.configs?.curl || `curl ${result.baseUrl || "http://127.0.0.1:8080/v1"}/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ***" \\\n  -d '{"model": "${result.allowedModels === "*" ? "gpt-4o" : (result.allowedModels || "").split(",")[0].trim() || "gpt-4o"}", "messages": [{"role": "user", "content": "Hello!"}]}'`;
                   return (
-                    <div className="relative rounded-[5px] border border-[#222] bg-[#08080a] p-3 text-[11px] font-mono">
+                    <div className="relative rounded-[5px] border border-border bg-surface-2 p-3 text-[11px] font-mono">
                       <button
                         type="button"
                         onClick={() => copyToClipboard(curlCode, "curl")}
-                        className="absolute right-2 top-2 rounded-[3px] bg-[#1c1c20] px-2 py-0.5 text-[10px] text-[#aaa] hover:text-white cursor-pointer"
+                        className="absolute right-2 top-2 rounded-[3px] bg-surface-3 px-2 py-0.5 text-[10px] text-text-muted hover:text-text-main cursor-pointer"
                       >
                         {copiedSnippet === "curl" ? "Copied" : "Copy"}
                       </button>
-                      <pre className="overflow-x-auto text-[#bbb] pr-12">{curlCode}</pre>
+                      <pre className="overflow-x-auto text-text-main pr-12">{curlCode}</pre>
                     </div>
                   );
                 })()}
@@ -946,47 +946,47 @@ export default function ClaimPage() {
                 {activeSnippetTab === "python" && (() => {
                   const pythonCode = result.configs?.python || `from openai import OpenAI\n\nclient = OpenAI(\n    base_url="${result.baseUrl || "http://127.0.0.1:8080/v1"}",\n    api_key="${result.apiKey}"\n)\n\nresponse = client.chat.completions.create(\n    model="${result.allowedModels === "*" ? "gpt-4o" : (result.allowedModels || "").split(",")[0].trim() || "gpt-4o"}",\n    messages=[{"role": "user", "content": "Hello X Router!"}]\n)\nprint(response.choices[0].message.content)`;
                   return (
-                    <div className="relative rounded-[5px] border border-[#222] bg-[#08080a] p-3 text-[11px] font-mono">
+                    <div className="relative rounded-[5px] border border-border bg-surface-2 p-3 text-[11px] font-mono">
                       <button
                         type="button"
                         onClick={() => copyToClipboard(pythonCode, "python")}
-                        className="absolute right-2 top-2 rounded-[3px] bg-[#1c1c20] px-2 py-0.5 text-[10px] text-[#aaa] hover:text-white cursor-pointer"
+                        className="absolute right-2 top-2 rounded-[3px] bg-surface-3 px-2 py-0.5 text-[10px] text-text-muted hover:text-text-main cursor-pointer"
                       >
                         {copiedSnippet === "python" ? "Copied" : "Copy"}
                       </button>
-                      <pre className="overflow-x-auto text-[#bbb] pr-12">{pythonCode}</pre>
+                      <pre className="overflow-x-auto text-text-main pr-12">{pythonCode}</pre>
                     </div>
                   );
                 })()}
 
                 {activeSnippetTab === "cursor" && (
-                  <div className="rounded-[5px] border border-[#222] bg-[#08080a] p-3 space-y-2 text-xs font-mono">
-                    <div className="flex justify-between bg-[#141416] p-2 rounded">
-                      <span className="text-[#666]">Base URL:</span>
-                      <span className="text-white select-all">{result.baseUrl}</span>
+                  <div className="rounded-[5px] border border-border bg-surface-2 p-3 space-y-2 text-xs font-mono">
+                    <div className="flex justify-between bg-surface p-2 rounded border border-border">
+                      <span className="text-text-muted">Base URL:</span>
+                      <span className="text-text-main select-all">{result.baseUrl}</span>
                     </div>
-                    <div className="flex justify-between bg-[#141416] p-2 rounded">
-                      <span className="text-[#666]">API Key:</span>
-                      <span className="text-white select-all">{result.apiKey}</span>
+                    <div className="flex justify-between bg-surface p-2 rounded border border-border">
+                      <span className="text-text-muted">API Key:</span>
+                      <span className="text-text-main select-all">{result.apiKey}</span>
                     </div>
                   </div>
                 )}
 
                 {activeSnippetTab === "cline" && (
-                  <div className="rounded-[5px] border border-[#222] bg-[#08080a] p-3 space-y-2 text-xs font-mono">
-                    <div className="flex justify-between bg-[#141416] p-2 rounded">
-                      <span className="text-[#666]">Base URL:</span>
-                      <span className="text-white select-all">{result.baseUrl}</span>
+                  <div className="rounded-[5px] border border-border bg-surface-2 p-3 space-y-2 text-xs font-mono">
+                    <div className="flex justify-between bg-surface p-2 rounded border border-border">
+                      <span className="text-text-muted">Base URL:</span>
+                      <span className="text-text-main select-all">{result.baseUrl}</span>
                     </div>
-                    <div className="flex justify-between bg-[#141416] p-2 rounded">
-                      <span className="text-[#666]">API Key:</span>
-                      <span className="text-white select-all">{result.apiKey}</span>
+                    <div className="flex justify-between bg-surface p-2 rounded border border-border">
+                      <span className="text-text-muted">API Key:</span>
+                      <span className="text-text-main select-all">{result.apiKey}</span>
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="pt-2 text-center border-t border-[#1c1c1f]">
+              <div className="pt-2 text-center border-t border-border">
                 <button
                   type="button"
                   onClick={() => {
@@ -996,7 +996,7 @@ export default function ClaimPage() {
                     setCaptchaInput("");
                     loadSecurityChallenge("", true);
                   }}
-                  className="text-xs font-mono text-[#E56A4A] hover:underline transition-colors cursor-pointer font-semibold"
+                  className="text-xs font-mono text-primary hover:underline transition-colors cursor-pointer font-semibold"
                 >
                   Klaim Voucher Lain / Reset Kuki
                 </button>
@@ -1007,7 +1007,7 @@ export default function ClaimPage() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-[#222] bg-[#09090b]/90 py-3 px-4 text-center text-[11px] text-[#555] font-mono">
+      <footer className="relative z-10 border-t border-border bg-surface py-3 px-4 text-center text-[11px] text-text-muted font-mono">
         (c) 2026 X Router Infrastructure - High-Performance AI Gateway
       </footer>
     </div>
