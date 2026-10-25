@@ -750,56 +750,9 @@ export async function GET(request) {
       }
     }
 
-    const { getProviderConnections, getCombos, getApiKeyByKey } = await import("@/lib/localDb");
-    const { getCapabilitiesForModel } = await import("open-sse/providers/capabilities.js");
-    const { filterModelsByAllowedModels } = await import("@/lib/usage/availableModels.js");
-    const [conns, combos] = await Promise.all([
-      getProviderConnections().catch(() => []),
-      getCombos().catch(() => []),
-    ]);
-
-    let data = [];
-    const seen = new Set();
-
-    for (const combo of combos) {
-      if (combo?.name && !seen.has(combo.name)) {
-        seen.add(combo.name);
-        data.push({ id: combo.name, object: "model", owned_by: "combo" });
-      }
-    }
-
-    for (const conn of conns.filter((c) => c.isActive !== false)) {
-      const alias = conn.providerSpecificData?.prefix || conn.provider;
-      const list = PROVIDER_MODELS[conn.provider] || PROVIDER_MODELS[alias] || [];
-      for (const m of list) {
-        const id = `${alias}/${m.id}`;
-        if (!seen.has(id)) {
-          seen.add(id);
-          data.push({
-            id,
-            object: "model",
-            owned_by: alias,
-            capabilities: getCapabilitiesForModel(conn.provider, m.id),
-          });
-        }
-      }
-    }
-
-    // Filter by key's allowedModels so user ONLY sees their authorized models
-    if (apiKey) {
-      try {
-        const keyRecord = await getApiKeyByKey(apiKey);
-        if (keyRecord && keyRecord.allowedModels) {
-          const raw = String(keyRecord.allowedModels).trim().toLowerCase();
-          if (raw !== "*" && raw !== "all") {
-            data = filterModelsByAllowedModels(data, keyRecord.allowedModels);
-          }
-        }
-      } catch (e) {
-        // preserve on error
-      }
-    }
-
+    // Detect cross-instance recursive /models fetch (another instance fetching our /models)
+    const skipDynamicFetch = request?.headers?.get(INTERNAL_MODELS_FETCH_HEADER) === "1";
+    const data = await buildModelsList([LLM_KIND], { skipDynamicFetch, request });
     return Response.json({ object: "list", data }, {
       headers: {
         "Access-Control-Allow-Origin": "*",
@@ -807,10 +760,10 @@ export async function GET(request) {
       },
     });
   } catch (error) {
-    return Response.json({ object: "list", data: [] });
+    console.log("Error fetching models:", error);
+    return Response.json(
+      { error: { message: error?.message || "Internal server error", type: "server_error" } },
+      { status: 500 }
+    );
   }
-}
-
-async function _legacyGet(request) {
-  return null;
 }
