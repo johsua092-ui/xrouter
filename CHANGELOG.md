@@ -1,3 +1,25 @@
+# v0.0.3 (2026-10-25)
+
+## Core & Stability Fixes
+- **Reverse Proxy Redirect & Mixed-Content Fix**:
+  - Fixed mobile browser "This page couldn't load" crash caused by loopback reverse-proxy hostname resolution overriding public domain with internal `127.0.0.1:8080`.
+  - Preserved `X-Forwarded-Host` and `X-Forwarded-Proto` for all dashboard and auth redirects to prevent protocol downgrade and port leakage.
+  - Added App-wide `ErrorBoundary` in `src/app/error.js` with auto-reload recovery for stale client chunk caches when phone resumes from idle.
+  - Enforced `Cache-Control: no-store, no-cache, must-revalidate` on dashboard and login routes so Cloudflare edge never caches dynamic session pages.
+- **Model Allowlist Logic ('all' vs specific model)**:
+  - Aligned discovery (`/v1/models`) and chat gates (`/v1/chat/completions`): `allowedModels = 'all'` unlocks the entire catalog unrestricted, while specific model names restrict visibility and execution exclusively to that model.
+- **Deep Thinking & GLM 5.3 Streaming Normalization**:
+  - Captured `delta.thought` and `delta.reasoning` chunks and mapped them to `delta.reasoning_content` to eliminate false "EMPTY STREAM" drops on thinking models.
+- **Theme & Branding Visual Polish**:
+  - Added official **Light Mode** and 6 custom accent color palettes (Ember Orange, Electric Blue, Emerald Green, Violet Purple, Ruby Rose, Cyber Cyan).
+  - Replaced static black-backed favicon image with adaptive `LogoMark` component supporting dual SVG marks and dynamic palette accenting.
+- **Ptero AI Integration**:
+  - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
+- **Master Jailbreak Kernel (4-in-1 Vault)**:
+  - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Version Bump**:
+  - Bumped version across Go Core (`internal/config`), NPM package (`cli/`), and web app to `v0.0.3`.
+
 # v0.0.2 (2026-10-24)
 
 ## Core & Architecture
