@@ -239,13 +239,22 @@ export function createSSEStream(options = {}) {
                 }
               }
 
+              // Normalize thought / reasoning fields into reasoning_content for OpenAI clients
+              if (parsed?.choices?.[0]?.delta) {
+                const d = parsed.choices[0].delta;
+                if (!d.reasoning_content && (d.thought || d.reasoning)) {
+                  d.reasoning_content = d.thought || d.reasoning;
+                  fieldsInjected = true;
+                }
+              }
+
               if (!hasValuableContent(parsed, FORMATS.OPENAI)) {
                 continue;
               }
 
               const delta = parsed.choices?.[0]?.delta;
               const content = delta?.content;
-              const reasoning = delta?.reasoning_content;
+              const reasoning = delta?.reasoning_content || delta?.thought || delta?.reasoning;
               if (content && typeof content === "string") {
                 totalContentLength += content.length;
                 accumulatedContent += content;
