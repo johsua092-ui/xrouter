@@ -967,10 +967,10 @@ function ProviderCard({
         <div className="flex items-start justify-between gap-3 min-w-0">
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className="size-11 sm:size-12 shrink-0 rounded-[6px] border border-white/10 bg-[#1a1a20] flex items-center justify-center p-1.5 transition-all duration-200 group-hover:scale-105 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+              className="size-11 sm:size-12 shrink-0 rounded-[6px] border border-border dark:border-white/10 bg-surface-2 dark:bg-[#1a1a20] flex items-center justify-center p-1.5 transition-all duration-200 group-hover:scale-105 shadow-xs"
               style={{
-                borderColor: provider.color ? `${provider.color}55` : "rgba(255,255,255,0.12)",
-                boxShadow: provider.color ? `0 0 14px ${provider.color}30` : "0 0 10px rgba(255,255,255,0.05)",
+                borderColor: provider.color ? `${provider.color}55` : undefined,
+                boxShadow: provider.color ? `0 0 14px ${provider.color}25` : undefined,
               }}
             >
               <ProviderIcon

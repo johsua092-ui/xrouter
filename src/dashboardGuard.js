@@ -57,6 +57,21 @@ const ALWAYS_PROTECTED = [
   "/api/oauth/zed/auto-import",
 ];
 
+function redirectWithProto(targetPath, request) {
+  const url = new URL(targetPath, request.url);
+  const proto = request.headers.get("x-forwarded-proto");
+  if (proto) {
+    url.protocol = proto.endsWith(":") ? proto : `${proto}:`;
+  }
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  if (host) {
+    const [h, p] = host.split(":");
+    url.hostname = h;
+    url.port = p || "";
+  }
+  return NextResponse.redirect(url);
+}
+
 // Require auth, but allow through if requireLogin is disabled
 const PROTECTED_API_PATHS = [
   "/api/settings",
@@ -351,7 +366,7 @@ export async function proxy(request) {
     // when login is turned off, and lands on the first page it is allowed to open.
     if (apiKeySession && !canOpenPage(pathname, apiKeySession.permissions)) {
       const landing = firstAllowedPage(apiKeySession.permissions);
-      return NextResponse.redirect(new URL(landing || "/login", request.url));
+      return redirectWithProto(landing || "/login", request);
     }
 
     let requireLogin = true;
@@ -369,7 +384,7 @@ export async function proxy(request) {
           const tunnelHost = settings.tunnelUrl ? new URL(settings.tunnelUrl).hostname.toLowerCase() : "";
           const tailscaleHost = settings.tailscaleUrl ? new URL(settings.tailscaleUrl).hostname.toLowerCase() : "";
           if ((tunnelHost && host === tunnelHost) || (tailscaleHost && host === tailscaleHost)) {
-            return NextResponse.redirect(new URL("/login", request.url));
+            return redirectWithProto("/login", request);
           }
         }
       }
@@ -386,16 +401,16 @@ export async function proxy(request) {
       if (await verifyDashboardAuthToken(token)) {
         return NextResponse.next();
       } else {
-        return NextResponse.redirect(new URL("/login", request.url));
+        return redirectWithProto("/login", request);
       }
     }
 
-    return NextResponse.redirect(new URL("/login", request.url));
+    return redirectWithProto("/login", request);
   }
 
   // Redirect / to /dashboard if logged in, or /dashboard if it's the root
   if (pathname === "/") {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return redirectWithProto("/dashboard", request);
   }
 
   return NextResponse.next();

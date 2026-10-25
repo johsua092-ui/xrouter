@@ -227,9 +227,11 @@ function toGuardRequest(req) {
       }
     }
   }
+  const proto = (req.headers && (req.headers["x-forwarded-proto"] || req.headers["x-forwarded-protocol"])) || "http";
+  const host = (req.headers && (req.headers["x-forwarded-host"] || req.headers["host"])) || "localhost";
   return {
     method: req.method || "GET",
-    url: "http://" + ((req.headers && req.headers.host) || "localhost") + url,
+    url: `${proto}://${host}${url}`,
     nextUrl: { pathname, searchParams: new URLSearchParams(search) },
     headers: standardHeaders,
     cookies: {

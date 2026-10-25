@@ -49,6 +49,12 @@ export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = pr
   if (existsSync(mimoSrc)) {
     cpSync(mimoSrc, mimoDest, { force: true });
   }
+
+  const guardSrc = resolve(projectRoot, "src", "dashboardGuard.js");
+  const guardDest = resolve(standaloneDir, "src", "dashboardGuard.js");
+  if (existsSync(guardSrc)) {
+    cpSync(guardSrc, guardDest, { force: true });
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(dirname(fileURLToPath(import.meta.url)), "copy-standalone-assets.mjs")) {
