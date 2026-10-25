@@ -59,15 +59,24 @@ const ALWAYS_PROTECTED = [
 
 function redirectWithProto(targetPath, request) {
   const url = new URL(targetPath, request.url);
-  const proto = request.headers.get("x-forwarded-proto");
-  if (proto) {
-    url.protocol = proto.endsWith(":") ? proto : `${proto}:`;
-  }
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  let isHttps = request.url.startsWith("https://");
+  const proto = request.headers.get("x-9r-forwarded-proto") || request.headers.get("x-forwarded-proto") || request.headers.get("x-forwarded-protocol");
+  if (proto && proto.toLowerCase().includes("https")) isHttps = true;
+  const cfVisitor = request.headers.get("cf-visitor");
+  if (cfVisitor && cfVisitor.includes("https")) isHttps = true;
+
+  url.protocol = isHttps ? "https:" : "http:";
+
+  const host = request.headers.get("x-9r-forwarded-host") || request.headers.get("x-forwarded-host") || request.headers.get("host");
   if (host) {
     const [h, p] = host.split(":");
     url.hostname = h;
-    url.port = p || "";
+    // Don't leak internal node ports (8080, 20128) onto public domains
+    if (p && !["8080", "20128", "80", "443"].includes(p)) {
+      url.port = p;
+    } else {
+      url.port = "";
+    }
   }
   return NextResponse.redirect(url);
 }

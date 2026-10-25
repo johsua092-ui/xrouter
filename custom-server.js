@@ -227,8 +227,8 @@ function toGuardRequest(req) {
       }
     }
   }
-  const proto = (req.headers && (req.headers["x-forwarded-proto"] || req.headers["x-forwarded-protocol"])) || "http";
-  const host = (req.headers && (req.headers["x-forwarded-host"] || req.headers["host"])) || "localhost";
+  const proto = (req.headers && (req.headers["x-9r-forwarded-proto"] || req.headers["x-forwarded-proto"] || req.headers["x-forwarded-protocol"])) || "http";
+  const host = (req.headers && (req.headers["x-9r-forwarded-host"] || req.headers["x-forwarded-host"] || req.headers["host"])) || "localhost";
   return {
     method: req.method || "GET",
     url: `${proto}://${host}${url}`,
@@ -303,12 +303,26 @@ http.createServer = (...args) => {
     const realClientIp = (isLoopbackProxy && cfIp) ? String(cfIp).trim() : (isLoopbackProxy ? (xRealIp || (xff ? String(xff).split(",")[0].trim() : "")) : socketIp);
     const ip = realClientIp || socketIp;
 
+    const trustedFwdHost = isLoopbackProxy ? req.headers["x-forwarded-host"] : null;
+    const trustedFwdProto = isLoopbackProxy ? (req.headers["x-forwarded-proto"] || req.headers["x-forwarded-protocol"]) : null;
+
     delete req.headers["x-9r-real-ip"];
     delete req.headers["x-forwarded-for"];
-    delete req.headers["x-forwarded-host"]; // L5: origin/host must never come from client headers
+    delete req.headers["x-forwarded-host"]; // L5: origin/host must never come from untrusted client headers
     delete req.headers["forwarded"];
     delete req.headers["x-9r-via-proxy"];
     delete req.headers["x-9r-peer-token"];
+
+    if (trustedFwdHost) {
+      const isHostLoopback = !req.headers["host"] || req.headers["host"].startsWith("127.0.0.1") || req.headers["host"].startsWith("localhost") || req.headers["host"].startsWith("[::1]");
+      if (isHostLoopback) {
+        req.headers["host"] = trustedFwdHost;
+      }
+      req.headers["x-9r-forwarded-host"] = trustedFwdHost;
+    }
+    if (trustedFwdProto) {
+      req.headers["x-9r-forwarded-proto"] = trustedFwdProto;
+    }
 
     if (!isLoopbackProxy) {
       // Strip forged Cloudflare headers sent directly to raw TCP socket

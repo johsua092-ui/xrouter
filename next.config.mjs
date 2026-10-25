@@ -114,6 +114,18 @@ const nextConfig = {
         source: "/api/:path*",
         headers: [{ key: "Cache-Control", value: "no-store, private" }],
       },
+      {
+        source: "/dashboard/:path*",
+        headers: [{ key: "Cache-Control", value: "no-store, no-cache, must-revalidate, proxy-revalidate" }],
+      },
+      {
+        source: "/dashboard",
+        headers: [{ key: "Cache-Control", value: "no-store, no-cache, must-revalidate, proxy-revalidate" }],
+      },
+      {
+        source: "/login",
+        headers: [{ key: "Cache-Control", value: "no-store, no-cache, must-revalidate, proxy-revalidate" }],
+      },
     ];
   },
   async rewrites() {
