@@ -62,10 +62,6 @@ const nextConfig = {
   },
   env: stampBuild(),
   experimental: {
-    // Next 14 fallback keys
-    outputFileTracingRoot: tracingRoot,
-    outputFileTracingExcludes: tracingExcludes,
-    serverComponentsExternalPackages: externalPkgs,
     // #1529/#1572: LLM clients can send long context or base64 image payloads through /v1 rewrites.
     proxyClientMaxBodySize,
     // Cache fetch responses across HMR refreshes for faster dev reloads.
