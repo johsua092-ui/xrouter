@@ -11,6 +11,7 @@ import { MEDIA_ITEMS } from "@/shared/constants/navigation";
 import HeaderMenu from "@/shared/components/HeaderMenu";
 import NotificationBell from "@/shared/components/NotificationBell";
 import ThemeModal from "@/shared/components/ThemeModal";
+import LogoMark from "@/shared/components/LogoMark";
 
 /* Mobile navigation: a floating launcher in the bottom-left corner opens a
    full-height sheet. Nothing is docked to the top edge — the rail's mobile
@@ -93,9 +94,8 @@ export default function MobileNav() {
       {/* Mobile Top Bar — docked at top of viewport so it never scrolls away or disappears */}
       <header className="sticky top-0 z-40 flex h-12 w-full items-center justify-between border-b border-border bg-surface px-4 lg:hidden shrink-0 shadow-xs">
         <Link href="/dashboard/endpoint" className="flex items-center gap-2.5">
-          <div className="size-7 rounded-[6px] border border-primary/40 bg-surface-2 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/favicon.svg" alt="X Router" className="size-5 object-contain [filter:var(--logo-filter,none)]" />
+          <div className="size-7 rounded-[6px] border border-primary/40 bg-surface-2 flex items-center justify-center shrink-0 shadow-xs overflow-hidden p-0.5">
+            <LogoMark className="size-full" />
           </div>
           <div className="flex flex-col">
             <span className="text-[12.5px] font-bold tracking-wider uppercase text-text-main leading-tight">
@@ -132,8 +132,7 @@ export default function MobileNav() {
           <div className="slide-in-right absolute right-0 top-0 flex h-full w-[min(86vw,330px)] flex-col border-l border-border bg-surface">
             <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border-subtle px-3">
               <span className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-[6px] ring-1 ring-primary/40 bg-surface-2 p-0.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/favicon.svg" alt="X Router" className="size-full object-contain [filter:var(--logo-filter,none)]" />
+                <LogoMark className="size-full" />
               </span>
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-[13px] font-semibold leading-tight text-text-main">

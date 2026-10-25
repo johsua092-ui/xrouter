@@ -1,26 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" width="100%" height="100%" fill="none">
-  <!-- Squircle Icon Background -->
-  <rect x="10" y="10" width="100" height="100" rx="24" fill="#18191C" stroke="#26282D" stroke-width="1.5"/>
+  <!-- Squircle Icon Background (Light Ivory / Border) -->
+  <rect x="10" y="10" width="100" height="100" rx="24" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
   
   <!-- Icon Embedded at (20, 20) with size 80x80 -->
   <g transform="translate(20, 20) scale(0.8)">
-    <g stroke="#EB5E41" stroke-linecap="round" stroke-width="8">
+    <g stroke="#059669" stroke-linecap="round" stroke-width="8">
       <line x1="26" y1="74" x2="44" y2="56" />
       <line x1="26" y1="26" x2="44" y2="44" />
       <line x1="56" y1="44" x2="72" y2="28" />
       <line x1="56" y1="56" x2="72" y2="72" />
     </g>
-    <path d="M63 23 H77 V37 L70 30 Z" fill="#EB5E41" />
-    <path d="M77 63 V77 H63 L70 70 Z" fill="#EB5E41" />
+    <path d="M63 23 H77 V37 L70 30 Z" fill="#059669" />
+    <path d="M77 63 V77 H63 L70 70 Z" fill="#059669" />
     <path fill-rule="evenodd" clip-rule="evenodd" 
           d="M50 39 C43.925 39 39 43.925 39 50 C39 56.075 43.925 61 50 61 C56.075 61 61 56.075 61 50 C61 43.925 56.075 39 50 39 Z M50 45.5 C47.5147 45.5 45.5 47.5147 45.5 50 C45.5 52.4853 47.5147 54.5 50 54.5 C52.4853 54.5 54.5 52.4853 54.5 50 C54.5 47.5147 52.4853 45.5 50 45.5 Z" 
-          fill="#EB5E41" />
+          fill="#059669" />
   </g>
 
   <!-- Typography -->
   <text x="135" y="66" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="38" font-weight="800" letter-spacing="-0.5">
-    <tspan fill="#FFFFFF">X</tspan><tspan fill="#EB5E41">Router</tspan>
+    <tspan fill="#111827">X</tspan><tspan fill="#059669">Router</tspan>
   </text>
   
-  <text x="136" y="94" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13.5" font-weight="600" fill="#8A8F98" letter-spacing="3.2">LLM GATEWAY</text>
+  <text x="136" y="94" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13.5" font-weight="600" fill="#6B7280" letter-spacing="3.2">LLM GATEWAY</text>
 </svg>

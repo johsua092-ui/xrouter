@@ -8,6 +8,7 @@ import { cn } from "@/shared/utils/cn";
 import { APP_CONFIG } from "@/shared/constants/config";
 import { MEDIA_PROVIDER_KINDS } from "@/shared/constants/providers";
 import useSettingsStore from "@/store/settingsStore";
+import LogoMark from "@/shared/components/LogoMark";
 
 // const VISIBLE_MEDIA_KINDS = ["embedding", "image", "imageToText", "tts", "stt", "webSearch", "webFetch", "video", "music"];
 const VISIBLE_MEDIA_KINDS = ["embedding", "image", "video", "tts", "stt", "systemone"];
@@ -178,9 +179,8 @@ export default function Sidebar({ onClose }) {
           href="/dashboard"
           className="flex items-center gap-2.5 rounded-[9px] p-1.5 -m-1.5 transition-colors hover:bg-surface-2"
         >
-          <span className="relative flex items-center justify-center size-8 shrink-0 rounded-[9px] overflow-hidden ring-1 ring-brand-500/25">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/favicon.svg" alt="X Router" className="size-8 object-contain" />
+          <span className="relative flex items-center justify-center size-8 shrink-0 rounded-[9px] overflow-hidden ring-1 ring-primary/30 bg-surface-2 p-0.5">
+            <LogoMark className="size-full" />
           </span>
           <span className="flex flex-col min-w-0">
             <span className="text-[14px] font-semibold tracking-tight text-text-main leading-tight truncate">

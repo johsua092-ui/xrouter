@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/shared/utils/cn";
 import { APP_CONFIG } from "@/shared/constants/config";
+import LogoMark from "@/shared/components/LogoMark";
 import { useHeaderSearchStore } from "@/store/headerSearchStore";
 import HeaderMenu from "@/shared/components/HeaderMenu";
 import { useNavigation } from "@/shared/hooks/useNavigation";
@@ -241,9 +242,8 @@ export default function RightRail() {
           open ? "px-2" : "justify-center"
         )}
       >
-        <span className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-[6px] ring-1 ring-brand-500/30">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/favicon.svg" alt="X Router" className="size-7 object-contain" />
+        <span className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-[6px] ring-1 ring-primary/30 bg-surface-2 p-0.5">
+          <LogoMark className="size-full" />
         </span>
         {open && (
           <span className="flex min-w-0 flex-col">

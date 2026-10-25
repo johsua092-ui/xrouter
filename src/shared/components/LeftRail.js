@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/shared/utils/cn";
 import { APP_CONFIG } from "@/shared/constants/config";
 import HeaderMenu from "@/shared/components/HeaderMenu";
+import LogoMark from "@/shared/components/LogoMark";
 import { useNavigation } from "@/shared/hooks/useNavigation";
 import { MEDIA_ITEMS } from "@/shared/constants/navigation";
 
@@ -267,8 +268,8 @@ export default function LeftRail() {
               className="flex items-center gap-2 overflow-hidden transition-opacity hover:opacity-90 min-w-0 flex-1"
               title="X Router Dashboard"
             >
-              <div className="size-7 rounded-[5px] border border-primary/40 bg-surface flex items-center justify-center shrink-0 shadow-xs overflow-hidden p-0.5">
-                <img src="/favicon.svg" alt="X Router" className="size-full object-contain [filter:var(--logo-filter,none)]" />
+              <div className="size-7 rounded-[5px] border border-primary/40 bg-surface-2 flex items-center justify-center shrink-0 shadow-xs overflow-hidden p-0.5">
+                <LogoMark className="size-full" />
               </div>
               <div className="min-w-0 flex flex-col flex-1">
                 <span className="text-[11.5px] font-bold tracking-wider uppercase text-text-main truncate">

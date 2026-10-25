@@ -4,10 +4,16 @@
       <stop offset="0%" stop-color="#E25539"/>
       <stop offset="100%" stop-color="#EB6446"/>
     </linearGradient>
+    <style>
+      .squircle-bg { fill: #18191C; stroke: #26282D; }
+      @media (prefers-color-scheme: light) {
+        .squircle-bg { fill: #FDFAF6; stroke: #E2E8F0; }
+      }
+    </style>
   </defs>
 
   <!-- Squircle container -->
-  <rect x="4" y="4" width="92" height="92" rx="22" fill="#18191C" stroke="#26282D" stroke-width="2"/>
+  <rect x="4" y="4" width="92" height="92" rx="22" class="squircle-bg" stroke-width="2"/>
 
   <!-- Arms -->
   <g stroke="url(#xr-orange)" stroke-linecap="round" stroke-width="7.5">

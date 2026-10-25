@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Card, Button, Input } from "@/shared/components";
+import LogoMark from "@/shared/components/LogoMark";
 
 // Password default instance ini. Ditampilkan sebagai petunjuk di bawah input
 // supaya pemilik tidak terkunci di luar dashboard-nya sendiri.
@@ -22,11 +23,9 @@ function BrandPanel() {
       />
       <div className="relative">
         <div className="flex items-center gap-3">
-          <img
-            src="/favicon.svg"
-            alt="X Router"
-            className="h-11 w-11 rounded-[6px] border border-border-subtle object-cover"
-          />
+          <div className="h-11 w-11 rounded-[6px] border border-border-subtle overflow-hidden">
+            <LogoMark className="size-full" />
+          </div>
           <div className="leading-tight">
             <p className="text-[15px] font-semibold text-text-main">
               X <span className="text-primary">Router</span>
@@ -68,11 +67,9 @@ function BrandPanel() {
 function CompactBrand() {
   return (
     <div className="lg:hidden flex flex-col items-center text-center mb-8">
-      <img
-        src="/favicon.svg"
-        alt="X Router"
-        className="h-16 w-16 rounded-[6px] border border-border-subtle object-contain mb-4"
-      />
+      <div className="h-16 w-16 rounded-[6px] border border-border-subtle overflow-hidden mb-4">
+        <LogoMark className="size-full" />
+      </div>
       <h1 className="text-[26px] leading-tight font-semibold tracking-tight text-text-main">
         X <span className="text-primary">Router</span>
       </h1>
