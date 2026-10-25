@@ -1,26 +1,34 @@
 # v0.0.3 (2026-10-25)
 
 ## Core & Stability Fixes
+- **Cleaned Intrusive Error Boundary**:
+  - Removed synthetic `src/app/error.js` that intercepted mobile clients into a perpetual "Resuming session..." spinner, restoring native Next.js layout resilience.
 - **Reverse Proxy Redirect & Mixed-Content Fix**:
   - Fixed mobile browser "This page couldn't load" crash caused by loopback reverse-proxy hostname resolution overriding public domain with internal `127.0.0.1:8080`.
   - Preserved `X-Forwarded-Host` and `X-Forwarded-Proto` for all dashboard and auth redirects to prevent protocol downgrade and port leakage.
-  - Added App-wide `ErrorBoundary` in `src/app/error.js` with auto-reload recovery for stale client chunk caches when phone resumes from idle.
+  - Added direct fallback to `PUBLIC_BASE_URL` and `BASE_URL` environment variables when reverse proxy drops host headers.
   - Enforced `Cache-Control: no-store, no-cache, must-revalidate` on dashboard and login routes so Cloudflare edge never caches dynamic session pages.
-- **Model Allowlist Logic ('all' vs specific model)**:
+- **Seren Canonical Model Discovery & Allowlist Filter**:
+  - Adopted Seren's clean `buildModelsList` architecture in `GET /v1/models` with full capability metrics (`context_length`, `max_completion_tokens`), custom models, studio targets, and no-auth providers.
   - Aligned discovery (`/v1/models`) and chat gates (`/v1/chat/completions`): `allowedModels = 'all'` unlocks the entire catalog unrestricted, while specific model names restrict visibility and execution exclusively to that model.
+- **Next.js 16 Compatibility**:
+  - Cleaned deprecated `experimental` options in `next.config.mjs` (`outputFileTracingRoot`, `serverComponentsExternalPackages`) for flawless builds on Next 14, 15, and 16.
+- **Security & Session Management (OWASP Compliance)**:
+  - Maintained strict 24-hour maximum JWT session lifetime and added 60-minute inactivity auto-logout for shared and public devices (warnet safe).
 - **Deep Thinking & GLM 5.3 Streaming Normalization**:
   - Captured `delta.thought` and `delta.reasoning` chunks and mapped them to `delta.reasoning_content` to eliminate false "EMPTY STREAM" drops on thinking models.
 - **Theme & Branding Visual Polish**:
   - Added official **Light Mode** and 6 custom accent color palettes (Ember Orange, Electric Blue, Emerald Green, Violet Purple, Ruby Rose, Cyber Cyan).
   - Replaced static black-backed favicon image with adaptive `LogoMark` component supporting dual SVG marks and dynamic palette accenting.
+  - Synchronized Console Log viewer background and line colors to Light Mode.
 - **Ptero AI Integration**:
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
 - **Credits & Lineage Acknowledgement**:
-  - Explicitly credited foundational architecture and lineage to **decolua** (founder of 9router), **seren** (fork source), **Bayu**, and **Naub** in documentation.
-- **Version Bump**:
-  - Bumped version across Go Core (`internal/config`), NPM package (`cli/`), and web app to `v0.0.3`.
+  - Explicitly credited foundational architecture and lineage in order to **decolua** (founder of 9router), **seren** (fork source), **Bayu**, and **Naub** in documentation.
+- **Version Bump & Update Notifications**:
+  - Bumped version across Go Core (`internal/config`), NPM package (`cli/`), and web app to `v0.0.3` with real-time update notifications.
 
 # v0.0.2 (2026-10-24)
 
