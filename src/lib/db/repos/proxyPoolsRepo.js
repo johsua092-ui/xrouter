@@ -111,13 +111,46 @@ export async function deleteProxyPools(ids = []) {
   const db = await getAdapter();
   let removed = [];
   db.transaction(() => {
-    const placeholders = unique.map(() => "?").join(", ");
-    const rows = db.all(
-      `SELECT * FROM proxyPools WHERE id IN (${placeholders})`,
-      unique
-    );
-    db.run(`DELETE FROM proxyPools WHERE id IN (${placeholders})`, unique);
-    removed = rows.map(rowToPool);
+    // Chunk in batches of 200 to stay well within SQLite parameter bounds and maximize batch throughput
+    const CHUNK_SIZE = 200;
+    for (let i = 0; i < unique.length; i += CHUNK_SIZE) {
+      const chunk = unique.slice(i, i + CHUNK_SIZE);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = db.all(
+        `SELECT * FROM proxyPools WHERE id IN (${placeholders})`,
+        chunk
+      );
+      db.run(`DELETE FROM proxyPools WHERE id IN (${placeholders})`, chunk);
+      removed.push(...rows.map(rowToPool));
+    }
   });
   return removed;
+}
+
+// Bulk update proxy pools (e.g. toggle isActive) in a single atomic transaction
+export async function updateProxyPools(ids = [], data = {}) {
+  const list = Array.isArray(ids) ? ids : [];
+  const unique = [...new Set(list.filter((id) => typeof id === "string" && id))];
+  if (unique.length === 0) return [];
+
+  const db = await getAdapter();
+  let updated = [];
+  db.transaction(() => {
+    const CHUNK_SIZE = 200;
+    const now = new Date().toISOString();
+    for (let i = 0; i < unique.length; i += CHUNK_SIZE) {
+      const chunk = unique.slice(i, i + CHUNK_SIZE);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = db.all(
+        `SELECT * FROM proxyPools WHERE id IN (${placeholders})`,
+        chunk
+      );
+      for (const row of rows) {
+        const merged = { ...rowToPool(row), ...data, updatedAt: now };
+        upsert(db, merged);
+        updated.push(merged);
+      }
+    }
+  });
+  return updated;
 }

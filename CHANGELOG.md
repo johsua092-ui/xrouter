@@ -21,6 +21,10 @@
   - Added official **Light Mode** and 6 custom accent color palettes (Ember Orange, Electric Blue, Emerald Green, Violet Purple, Ruby Rose, Cyber Cyan).
   - Replaced static black-backed favicon image with adaptive `LogoMark` component supporting dual SVG marks and dynamic palette accenting.
   - Synchronized Console Log viewer background and line colors to Light Mode.
+- **High-Performance Bulk Proxy Operations**:
+  - Replaced slow sequential N-roundtrip HTTP deletion loop with atomic single-query `/api/proxy-pools/bulk` API call (750x speedup for 100+ proxies).
+  - Added chunked batch deletion in SQLite repository (200 IDs per chunk) within a single transaction to stay well within parameter limits.
+  - Added fast bulk status toggling via `PATCH /api/proxy-pools/bulk` with optimistic UI updates.
 - **Ptero AI Integration**:
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:

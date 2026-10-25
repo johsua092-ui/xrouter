@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   deleteProxyPools,
+  updateProxyPools,
   getProviderConnections,
   getProxyPools,
 } from "@/models";
@@ -64,5 +65,32 @@ export async function DELETE(request) {
   } catch (error) {
     console.log("Error bulk deleting proxy pools:", error);
     return NextResponse.json({ error: "Failed to delete proxy pools" }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH /api/proxy-pools/bulk
+ * Fast bulk update for proxy pool statuses (e.g. { ids: [...], isActive: true/false })
+ */
+export async function PATCH(request) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    let ids = Array.isArray(body?.ids) ? body.ids.filter((id) => typeof id === "string" && id) : [];
+    ids = [...new Set(ids)];
+    if (ids.length === 0) {
+      return NextResponse.json({ updated: [], count: 0 });
+    }
+
+    const updateData = {};
+    if (typeof body.isActive === "boolean") updateData.isActive = body.isActive;
+
+    const updated = await updateProxyPools(ids, updateData);
+    return NextResponse.json({
+      updated: updated.map((p) => p.id),
+      count: updated.length,
+    });
+  } catch (error) {
+    console.log("Error bulk updating proxy pools:", error);
+    return NextResponse.json({ error: "Failed to update proxy pools" }, { status: 500 });
   }
 }

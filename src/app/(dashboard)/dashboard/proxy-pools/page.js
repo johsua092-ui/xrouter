@@ -446,19 +446,21 @@ export default function ProxyPoolsPage() {
     if (targets.length === 0) return;
     setBulkBusy(true);
     try {
-      let ok = 0; let failed = 0;
-      for (const id of targets) {
-        try {
-          const res = await fetch(`/api/proxy-pools/${id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ isActive }),
-          });
-          if (res.ok) ok += 1; else failed += 1;
-        } catch { failed += 1; }
+      const res = await fetch("/api/proxy-pools/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: targets, isActive }),
+      });
+      if (res.ok) {
+        setProxyPools((prev) =>
+          prev.map((p) => (targets.includes(p.id) ? { ...p, isActive } : p))
+        );
+        notify.success(`${isActive ? "Activated" : "Deactivated"} ${targets.length} proxy pool(s)`);
+      } else {
+        notify.error("Failed to update proxy pools");
       }
-      await fetchProxyPools();
-      notify.success(`${isActive ? "Activated" : "Deactivated"} ${ok}${failed ? `, failed ${failed}` : ""}`);
+    } catch {
+      notify.error("Failed to update proxy pools");
     } finally {
       setBulkBusy(false);
     }
@@ -473,18 +475,24 @@ export default function ProxyPoolsPage() {
         setConfirmState(null);
         setBulkBusy(true);
         try {
-          let ok = 0; let blocked = 0; let failed = 0;
-          for (const id of selectedIds) {
-            try {
-              const res = await fetch(`/api/proxy-pools/${id}`, { method: "DELETE" });
-              if (res.ok) ok += 1;
-              else if (res.status === 409) blocked += 1;
-              else failed += 1;
-            } catch { failed += 1; }
+          const res = await fetch("/api/proxy-pools/bulk", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: selectedIds }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) {
+            const deletedSet = new Set(data.deleted || selectedIds);
+            setProxyPools((prev) => prev.filter((p) => !deletedSet.has(p.id)));
+            clearSelection();
+            notify.success(`Deleted ${data.deletedCount ?? selectedIds.length} proxy pool(s)`);
+          } else if (res.status === 409) {
+            notify.warning(`Cannot delete: ${data.boundConnectionCount || "some"} proxy pool(s) are in use by provider connections.`);
+          } else {
+            notify.error(data.error || "Failed to delete proxy pools");
           }
-          await fetchProxyPools();
-          clearSelection();
-          notify.success(`Deleted ${ok}${blocked ? `, ${blocked} bound` : ""}${failed ? `, ${failed} failed` : ""}`);
+        } catch {
+          notify.error("Failed to delete proxy pools");
         } finally {
           setBulkBusy(false);
         }
