@@ -56,7 +56,9 @@ function resolveDevinBin() {
       "/usr/bin/devin",
     ];
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
+    try {
+      if (fs.statSync(candidate, { throwIfNoEntry: false })) return candidate;
+    } catch {}
   }
 
   // 3. Fallback — rely on process.env.PATH
@@ -440,7 +442,7 @@ export class DevinCliExecutor extends BaseExecutor {
         // Spawn in the client workspace cwd (from <cwd> env context) so built-in
         // file tools create/delete relative paths in the user's project.
         // MCP config still comes from XDG_CONFIG_HOME (throwaway), not project .devin/.
-        const child = spawn(devinBin, acpArgs, {
+        const child = spawn(/*turbopackIgnore: true*/ devinBin, acpArgs, {
           env,
           cwd: workspaceCwd,
           stdio: ["pipe", "pipe", "pipe"],

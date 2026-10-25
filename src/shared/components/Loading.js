@@ -135,7 +135,7 @@ export function Skeleton({ className, ...props }) {
 // Card skeleton
 export function CardSkeleton() {
   return (
-    <div className="p-6 rounded-[6px] border border-border-subtle bg-surface shadow-[var(--shadow-[var(--shadow-elev)])]">
+    <div className="p-6 rounded-[6px] border border-border-subtle bg-surface shadow-[var(--shadow-elev)]">
       <div className="flex items-center justify-between mb-4">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="size-10 rounded-[6px]" />

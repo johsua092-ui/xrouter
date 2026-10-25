@@ -416,8 +416,20 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
     }
   }
 
-  // Trip circuit breaker on transient/rate-limit errors
-  if (shouldFallback && connectionId && connectionId !== "noauth") {
+  // Do NOT trip circuit breaker on per-model rate limits (e.g. Tagflow/ADCode "upstream-rate-limit" or single-model 429)
+  // Circuit breaker should only trip when an account itself is dead/failing globally (5xx/connection failure/exhausted)
+  const isPerModelRateLimit = status === 429 && (
+    (typeof reason === "string" && (
+      reason.includes("upstream-rate-limit") ||
+      reason.includes("FreeUsageLimitError") ||
+      reason.includes("rate limit") ||
+      reason.includes("Model is unavailable")
+    )) ||
+    model
+  );
+
+  // Trip circuit breaker on actual connection/server-level errors (not per-model rate limits)
+  if (shouldFallback && connectionId && connectionId !== "noauth" && !isPerModelRateLimit) {
     tripCircuitBreaker(connectionId, { status, error: reason, provider, model });
   }
 
