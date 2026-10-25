@@ -61,50 +61,32 @@ export default function DashboardLayout({ children }) {
   const notifications = useNotificationStore((state) => state.notifications);
   const removeNotification = useNotificationStore((state) => state.removeNotification);
 
-  // AFK & Chunk Error Auto-Healing
+  // Security: Inactivity / Idle Timeout (OWASP protection for public PCs / warnet)
+  // Auto-logs out if no keyboard/mouse/touch interaction for 60 minutes.
   useEffect(() => {
-    // 1. Intercept chunk load failures and auto-reload before React crashes
-    const handleChunkError = (e) => {
-      const msg = e?.message || e?.reason?.message || "";
-      if (/loading chunk|chunkloaderror|failed to fetch dynamically/i.test(msg)) {
-        const last = sessionStorage.getItem("xr_chunk_heal_ts");
-        const now = Date.now();
-        if (!last || now - Number(last) > 3000) {
-          sessionStorage.setItem("xr_chunk_heal_ts", String(now));
-          window.location.reload();
-        }
-      }
-    };
-    window.addEventListener("error", handleChunkError);
-    window.addEventListener("unhandledrejection", handleChunkError);
+    const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes of true inactivity
+    let lastActive = Date.now();
 
-    // 2. Wake-up keepalive: when tab becomes visible after AFK, silently touch auth
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        fetch("/api/auth/status", { cache: "no-store" })
-          .then((r) => r.json())
-          .then((d) => {
-            if (d && !d.authenticated && d.requireLogin) {
-              window.location.href = "/login";
-            }
-          })
-          .catch(() => {});
-      }
+    const recordActivity = () => {
+      lastActive = Date.now();
     };
-    document.addEventListener("visibilitychange", handleVisibility);
 
-    // 3. Periodic silent session touch every 10 minutes to prevent timeouts
-    const heartbeat = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        fetch("/api/auth/status", { cache: "no-store" }).catch(() => {});
+    const events = ["mousemove", "keydown", "click", "touchstart", "scroll"];
+    events.forEach((evt) => window.addEventListener(evt, recordActivity, { passive: true }));
+
+    const idleTimer = setInterval(() => {
+      if (Date.now() - lastActive > IDLE_TIMEOUT_MS) {
+        // True inactivity reached: terminate session to protect warnet / shared devices
+        fetch("/api/auth/logout", { method: "POST" })
+          .finally(() => {
+            window.location.href = "/login?reason=idle_timeout";
+          });
       }
-    }, 10 * 60 * 1000);
+    }, 30000); // Check every 30 seconds
 
     return () => {
-      window.removeEventListener("error", handleChunkError);
-      window.removeEventListener("unhandledrejection", handleChunkError);
-      document.removeEventListener("visibilitychange", handleVisibility);
-      clearInterval(heartbeat);
+      events.forEach((evt) => window.removeEventListener(evt, recordActivity));
+      clearInterval(idleTimer);
     };
   }, []);
 
