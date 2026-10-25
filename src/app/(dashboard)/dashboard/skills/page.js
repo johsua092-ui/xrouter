@@ -29,7 +29,7 @@ function SkillRow({ skill }) {
   const url = getSkillRawUrl(skill.id);
   return (
     <div
-      className={`flex items-start gap-3 p-4 rounded-[6px] border shadow-[var(--shadow-[var(--shadow-elev)])] transition-colors ${
+      className={`flex items-start gap-3 p-4 rounded-[6px] border shadow-[var(--shadow-elev)] transition-colors ${
         skill.isEntry
           ? "border-brand-500/40 bg-brand-500/5"
           : "border-border-subtle bg-surface hover:bg-surface-2"
