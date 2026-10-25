@@ -896,8 +896,7 @@ h1, h2, h3 {
   border-color: var(--color-field-border) !important;
 }
 
-/* Modals and dialog overlays need high contrast and solid backing to prevent background bleed-through */
+/* Modals and dialogs: solid surface matching X Router design language */
 [role="dialog"] {
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  background-color: var(--color-surface);
 }

@@ -232,7 +232,7 @@ export default function UpdateBanner({ pollMs = POLL_MS }) {
               <div className="flex items-center justify-center size-16 rounded-full bg-danger-bg text-danger mx-auto mb-4">
                 <span className="material-symbols-outlined text-[32px]">power_off</span>
               </div>
-              <h2 className="text-xl font-semibold text-white mb-2">Server Disconnected</h2>
+              <h2 className="text-xl font-semibold text-text-main mb-2">Server Disconnected</h2>
               <p className="text-text-muted mb-6">The proxy server has been stopped.</p>
               <Button variant="secondary" onClick={() => globalThis.location.reload()}>
                 Reload Page

@@ -459,7 +459,7 @@ export default function VouchersPage() {
           {/* Community Faucet Toggle */}
           <div className="rounded-[6px] border border-border bg-surface-2 p-3 flex items-center justify-between">
             <div>
-              <span className="font-semibold text-white block">Mark as Public 1-Click Faucet</span>
+              <span className="font-semibold text-text-main block">Mark as Public 1-Click Faucet</span>
               <span className="text-[11px] text-text-muted block">
                 Available on portal for instant key generation without entering code.
               </span>
@@ -575,8 +575,8 @@ export default function VouchersPage() {
                 className={cn(
                   "px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-colors cursor-pointer",
                   selectedModels.includes("*")
-                    ? "bg-brand-500 text-white"
-                    : "bg-surface-2 text-text-muted hover:text-white"
+                    ? "bg-primary text-white"
+                    : "bg-surface-2 text-text-muted hover:text-text-main"
                 )}
               >
                 Allow All Models (*)
@@ -620,10 +620,10 @@ export default function VouchersPage() {
                         className={cn(
                           "inline-flex items-center gap-1 px-2 py-1 rounded-[4px] text-[10.5px] font-mono border transition-all cursor-pointer",
                           isExplicitSelected
-                            ? "bg-brand-500 text-white border-brand-500 shadow-xs"
+                            ? "bg-primary text-white border-primary shadow-xs"
                             : isSelected
-                            ? "bg-surface text-text-main border-brand-500/40 opacity-80"
-                            : "bg-surface text-text-muted border-border hover:border-text-muted hover:text-white"
+                            ? "bg-surface text-text-main border-primary/40 opacity-80"
+                            : "bg-surface text-text-muted border-border hover:border-text-muted hover:text-text-main"
                         )}
                       >
                         <span>{m.id}</span>

@@ -306,6 +306,11 @@ export const __test__ = {
 export async function proxy(request) {
   const { pathname } = request.nextUrl;
 
+  // Auto-correct common typos like /dash, /dashb, /dashbc directly to /dashboard
+  if (pathname.startsWith("/dash") && !pathname.startsWith("/dashboard")) {
+    return redirectWithProto("/dashboard", request);
+  }
+
   // Block malicious probes, path traversal, and hidden/credential file leakage
   if (
     /\.\./.test(pathname) ||
@@ -427,6 +432,11 @@ export async function proxy(request) {
     }
 
     return redirectWithProto("/login", request);
+  }
+
+  // Redirect common typos like /dash, /dashb, /dashbc directly to /dashboard
+  if (pathname.startsWith("/dash") && !pathname.startsWith("/dashboard")) {
+    return redirectWithProto("/dashboard", request);
   }
 
   // Redirect / to /dashboard if logged in, or /dashboard if it's the root
