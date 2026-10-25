@@ -14,17 +14,17 @@ const LOG_LEVEL_COLORS = {
 
 function colorLine(line, index) {
   // Detect log level from tags like [LOG], [INFO], [WARN], [ERROR], [DEBUG]
-  let levelColor = "text-muted";
-  if (line.includes("[ERROR]") || line.includes("✗")) levelColor = "text-danger";
-  else if (line.includes("[WARN]")) levelColor = "text-warning";
+  let levelColor = "text-text-main/90";
+  if (line.includes("[ERROR]") || line.includes("✗")) levelColor = "text-danger font-medium";
+  else if (line.includes("[WARN]")) levelColor = "text-warning font-medium";
   else if (line.includes("[INFO]") || line.includes("▶")) levelColor = "text-info";
-  else if (line.includes("[DEBUG]")) levelColor = "text-info";
-  else if (line.includes("✓") || line.includes("done")) levelColor = "text-success";
+  else if (line.includes("[DEBUG]")) levelColor = "text-text-muted";
+  else if (line.includes("✓") || line.includes("done") || line.includes("DONE")) levelColor = "text-success font-medium";
 
   return (
-    <div className="flex gap-2 hover:bg-surface-2 px-1 rounded">
-      <span className="text-muted select-none shrink-0 w-8 text-right">{index + 1}</span>
-      <span className={levelColor}>{line}</span>
+    <div className="flex gap-2.5 hover:bg-surface-3/50 px-1.5 py-0.5 rounded transition-colors font-mono">
+      <span className="text-text-muted/60 select-none shrink-0 w-8 text-right tabular-nums">{index + 1}</span>
+      <span className={`break-all ${levelColor}`}>{line}</span>
     </div>
   );
 }
@@ -98,7 +98,7 @@ export default function ConsoleLogClient() {
         </div>
         <div
           ref={logRef}
-          className="bg-black rounded-b-lg p-4 text-xs font-mono h-[calc(100vh-220px)] overflow-y-auto"
+          className="bg-surface-2 dark:bg-[#0c0d0e] border-t border-border rounded-b-lg p-4 text-xs font-mono h-[calc(100vh-220px)] overflow-y-auto"
         >
           {logs.length === 0 ? (
             <span className="text-text-muted">No console logs yet.</span>
