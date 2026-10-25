@@ -65,9 +65,21 @@ function redirectWithProto(targetPath, request) {
   const cfVisitor = request.headers.get("cf-visitor");
   if (cfVisitor && cfVisitor.includes("https")) isHttps = true;
 
+  let host = request.headers.get("x-9r-forwarded-host") || request.headers.get("x-forwarded-host") || request.headers.get("host");
+  const isLoopbackHost = !host || host.startsWith("127.0.0.1") || host.startsWith("localhost") || host.startsWith("[::1]");
+  if (isLoopbackHost) {
+    const envBase = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
+    if (envBase) {
+      try {
+        const parsed = new URL(envBase);
+        host = parsed.host;
+        if (parsed.protocol === "https:") isHttps = true;
+      } catch {}
+    }
+  }
+
   url.protocol = isHttps ? "https:" : "http:";
 
-  const host = request.headers.get("x-9r-forwarded-host") || request.headers.get("x-forwarded-host") || request.headers.get("host");
   if (host) {
     const [h, p] = host.split(":");
     url.hostname = h;
