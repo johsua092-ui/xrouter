@@ -17,6 +17,8 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Credits & Lineage Acknowledgement**:
+  - Explicitly credited foundational architecture and lineage to **decolua** (founder of 9router), **seren** (fork source), **Bayu**, and **Naub** in documentation.
 - **Version Bump**:
   - Bumped version across Go Core (`internal/config`), NPM package (`cli/`), and web app to `v0.0.3`.
 

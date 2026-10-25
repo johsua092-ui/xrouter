@@ -284,12 +284,14 @@ curl -N https://your-domain.com/v1/chat/completions \
 
 ---
 
-## 🤝 Contributors & Special Thanks
+## 🤝 Credits & Acknowledgements
 
-Big shoutout and gratitude to the core minds shaping X Router:
+Deep gratitude and respect to the builders and minds behind the foundations of X Router:
 
-- **[Bayu (BvsshXyz)](https://github.com/BvsshXyz)** — Infrastructure architecture, remote daemon reliability, and high-performance server network bridges.
-- **[Naub (naummi)](https://github.com/naummi)** — Core model reverse-engineering, edge-case QA hunting, telemetry insights, and prompt intelligence.
+1. **[decolua](https://github.com/decolua)** — Founder and original creator of 9router (`decolua/9router`), pioneering unified AI gateway routing.
+2. **[seren](https://github.com/serenhope)** — Upstream fork source (`serenhope/9router`), core architectural improvements, and model catalog intelligence.
+3. **[Bayu (BvsshXyz)](https://github.com/BvsshXyz)** — Infrastructure architecture, remote daemon reliability, and high-performance server network bridges.
+4. **[Naub (naummi)](https://github.com/naummi)** — Core model reverse-engineering, edge-case QA hunting, telemetry insights, and prompt intelligence.
 
 ---
 
