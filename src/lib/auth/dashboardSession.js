@@ -7,9 +7,9 @@ import { DATA_DIR } from "@/lib/dataDir";
 import { getSettings } from "@/lib/localDb";
 import { sessionSubject, getVersion } from "@/lib/auth/sessionVersions";
 
-// Fork default password; upstream's 24h session lifetime is kept.
+// Long-lived session lifetime (30 days) so user sessions never expire when left AFK.
 const DEFAULT_PASSWORD = "synapse123";
-const SESSION_MAX_AGE_SEC = 24 * 60 * 60;
+const SESSION_MAX_AGE_SEC = 30 * 24 * 60 * 60;
 
 function loadJwtSecret() {
   if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
@@ -84,7 +84,7 @@ export async function createDashboardAuthToken(claims = {}) {
     .setProtectedHeader({ alg: "HS256" })
     .setJti(crypto.randomUUID())
     .setIssuedAt()
-    .setExpirationTime("24h")
+    .setExpirationTime("30d")
     .sign(SECRET);
 }
 

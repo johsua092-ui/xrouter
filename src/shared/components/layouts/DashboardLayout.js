@@ -61,8 +61,52 @@ export default function DashboardLayout({ children }) {
   const notifications = useNotificationStore((state) => state.notifications);
   const removeNotification = useNotificationStore((state) => state.removeNotification);
 
-  // Preload heavy usage charts in background when browser is idle
-  useEffect(() => {}, []);
+  // AFK & Chunk Error Auto-Healing
+  useEffect(() => {
+    // 1. Intercept chunk load failures and auto-reload before React crashes
+    const handleChunkError = (e) => {
+      const msg = e?.message || e?.reason?.message || "";
+      if (/loading chunk|chunkloaderror|failed to fetch dynamically/i.test(msg)) {
+        const last = sessionStorage.getItem("xr_chunk_heal_ts");
+        const now = Date.now();
+        if (!last || now - Number(last) > 3000) {
+          sessionStorage.setItem("xr_chunk_heal_ts", String(now));
+          window.location.reload();
+        }
+      }
+    };
+    window.addEventListener("error", handleChunkError);
+    window.addEventListener("unhandledrejection", handleChunkError);
+
+    // 2. Wake-up keepalive: when tab becomes visible after AFK, silently touch auth
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetch("/api/auth/status", { cache: "no-store" })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d && !d.authenticated && d.requireLogin) {
+              window.location.href = "/login";
+            }
+          })
+          .catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    // 3. Periodic silent session touch every 10 minutes to prevent timeouts
+    const heartbeat = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetch("/api/auth/status", { cache: "no-store" }).catch(() => {});
+      }
+    }, 10 * 60 * 1000);
+
+    return () => {
+      window.removeEventListener("error", handleChunkError);
+      window.removeEventListener("unhandledrejection", handleChunkError);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearInterval(heartbeat);
+    };
+  }, []);
 
   const isChat = pathname === "/dashboard/basic-chat";
   const showHeading = !hasOwnHeading(pathname);
