@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import PropTypes from "prop-types";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -8,6 +9,7 @@ import ProviderIcon from "@/shared/components/ProviderIcon";
 import { getPageInfo } from "@/shared/utils/pageInfo";
 import { translate } from "@/i18n/runtime";
 import NotificationBell from "@/shared/components/NotificationBell";
+import ThemeModal from "@/shared/components/ThemeModal";
 
 /* Full-bleed heading band. Every page opens with its own clean instrument band —
    crumb path / eyebrow, large title, description, and page-specific action slots or sub-tabs.
@@ -25,6 +27,7 @@ export default function PageHeading({
 }) {
   const pathname = usePathname();
   const info = getPageInfo(pathname);
+  const [themeModalOpen, setThemeModalOpen] = useState(false);
 
   const resolvedTitle = title ?? info.title;
   const resolvedDescription = description ?? info.description;
@@ -102,11 +105,22 @@ export default function PageHeading({
         {/* NotificationBell in PageHeading actions or docked */}
         <div className="flex shrink-0 items-center gap-2">
           {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
-          <div className="hidden lg:block shrink-0">
+          <div className="hidden lg:flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setThemeModalOpen(true)}
+              aria-label="Theme & Color Palette"
+              title="Theme & Color Palette"
+              className="flex size-9 items-center justify-center rounded-[6px] border border-border bg-surface-2 text-text-muted hover:text-text-main hover:bg-surface-3 transition-colors cursor-pointer shadow-xs active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[19px] text-primary">palette</span>
+            </button>
             <NotificationBell />
           </div>
         </div>
       </div>
+
+      <ThemeModal isOpen={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
 
       {/* Optional Page-Specific Sub-tabs (Level-2 navigation) */}
       {tabs && (

@@ -108,6 +108,15 @@ export default function MobileNav() {
         </Link>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setThemeModalOpen(true)}
+            aria-label="Theme & Color Palette"
+            title="Theme & Color Palette"
+            className="flex size-8 items-center justify-center rounded-[5px] border border-border bg-surface-2 text-text-muted hover:text-text-main hover:bg-surface-3 transition-colors cursor-pointer shadow-xs active:scale-95"
+          >
+            <span className="material-symbols-outlined text-[19px] text-primary">palette</span>
+          </button>
           <NotificationBell />
           <button
             type="button"
