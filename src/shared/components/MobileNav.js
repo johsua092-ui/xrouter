@@ -130,7 +130,7 @@ export default function MobileNav() {
           />
           <div className="slide-in-right absolute right-0 top-0 flex h-full w-[min(86vw,330px)] flex-col border-l border-border bg-surface">
             <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border-subtle px-3">
-              <span className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-[6px] ring-1 ring-primary/40 bg-surface-2 p-0.5">
+              <span className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-primary/40 bg-surface-2 p-1 shadow-xs">
                 <LogoMark className="size-full" />
               </span>
               <span className="flex min-w-0 flex-col">
@@ -247,7 +247,7 @@ export default function MobileNav() {
                     <span className="material-symbols-outlined text-[18px]">logout</span>
                   </button>
                 )}
-                {/* HeaderMenu removed from mobile drawer to eliminate duplicate portal instance */}
+                <HeaderMenu onLogout={handleLogout} />
               </div>
             </div>
           </div>

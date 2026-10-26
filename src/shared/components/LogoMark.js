@@ -27,16 +27,17 @@ export default function LogoMark({ className = "size-full" }) {
           width="92"
           height="92"
           rx="22"
-          className="fill-surface-2 dark:fill-[#18191C] stroke-border dark:stroke-[#26282D]"
+          fill="currentColor"
+          className="text-surface-2 dark:text-[#18191C] stroke-border dark:stroke-[#26282D]"
           strokeWidth="2"
         />
 
         {/* Dynamic Accent Arms */}
         <g stroke="url(#xr-dynamic-accent)" strokeLinecap="round" strokeWidth="7.5">
-          <line x1="26" y1="74" x2="44" y2="56" />
-          <line x1="26" y1="26" x2="44" y2="44" />
-          <line x1="56" y1="44" x2="72" y2="28" />
-          <line x1="56" y1="56" x2="72" y2="72" />
+          <line x1="26" y1="74" x2="44" y2="56" stroke="url(#xr-dynamic-accent)" />
+          <line x1="26" y1="26" x2="44" y2="44" stroke="url(#xr-dynamic-accent)" />
+          <line x1="56" y1="44" x2="72" y2="28" stroke="url(#xr-dynamic-accent)" />
+          <line x1="56" y1="56" x2="72" y2="72" stroke="url(#xr-dynamic-accent)" />
         </g>
 
         {/* Dynamic Accent Arrowheads */}
