@@ -45,6 +45,8 @@
   - Prioritized `readGitRevision()` over baked-in `process.env.APP_REVISION` in `updateCheck.js` so running instances immediately reflect local working copy commits without false 1-commit-behind notices.
 - **Changelog Fallback Search Path**:
   - Enhanced `/api/changelog` to search across `/root/xrouter`, `/root/xrouter-remake`, and process cwd so changelog notes always render properly and never display "Nothing to report".
+- **Changelog Public Route Authorization**:
+  - Whitelisted `/api/changelog` in `dashboardGuard.js` so client sessions and unauthenticated modal viewers can read the release changelog without encountering a 401 Unauthorized "Nothing to report" state.
 - **Fixed Inverted Version Update Notification Bug**:
   - Enforced strict version ordering (`compareReleases === 1`) in `updateCheck.js` so that when `v0.0.4` is installed, older remote versions (like `v0.0.3`) will never trigger false "Update available" banners.
 - **Adaptive LogoMark in Light Mode**:

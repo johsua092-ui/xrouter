@@ -31,6 +31,7 @@ const PUBLIC_API_PATHS = [
   "/api/auth/oidc",
   "/api/auth/saml",
   "/api/version",
+  "/api/changelog",
   "/api/settings/require-login",
   "/api/vouchers/claim",
   "/api/connection/telegram/webhook",
