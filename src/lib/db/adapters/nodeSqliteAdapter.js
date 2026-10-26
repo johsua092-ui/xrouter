@@ -4,6 +4,16 @@ import { PRAGMA_SQL } from "../schema.js";
 
 const CHECKPOINT_INTERVAL_MS = 60 * 1000;
 
+function cleanParams(params) {
+  if (!params || !Array.isArray(params)) return params;
+  return params.map((p) => {
+    if (typeof p === "string" && p.includes("\0")) {
+      return p.replace(/\0/g, "");
+    }
+    return p;
+  });
+}
+
 export async function createNodeSqliteAdapter(filePath) {
   // Suppress "ExperimentalWarning: SQLite is an experimental feature" from node:sqlite.
   // Stable enough for production use as of Node 22.x (RC quality).
@@ -51,14 +61,14 @@ export async function createNodeSqliteAdapter(filePath) {
   return {
     driver: "node:sqlite",
     run(sql, params = []) {
-      const r = prepare(sql).run(...params);
+      const r = prepare(sql).run(...cleanParams(params));
       return { changes: Number(r.changes ?? 0), lastInsertRowid: Number(r.lastInsertRowid ?? 0) };
     },
     get(sql, params = []) {
-      return prepare(sql).get(...params);
+      return prepare(sql).get(...cleanParams(params));
     },
     all(sql, params = []) {
-      return prepare(sql).all(...params);
+      return prepare(sql).all(...cleanParams(params));
     },
     exec(sql) { return db.exec(sql); },
     transaction(fn) {

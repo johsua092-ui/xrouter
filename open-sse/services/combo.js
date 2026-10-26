@@ -430,7 +430,13 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
 
       // Check if should fallback to next model
       const { provider } = parseModel(modelStr);
-      const { shouldFallback, cooldownMs } = checkFallbackError(result.status, errorText, 0, provider);
+      let { shouldFallback, cooldownMs } = checkFallbackError(result.status, errorText, 0, provider);
+
+      // In a model combo, if one model returns 4xx (e.g. 400 Bad Request / unsupported params),
+      // we STILL want the combo to advance to the next candidate model so the user gets a working answer! (Commit 5cdcddf)
+      if (!shouldFallback && result.status >= 400 && result.status < 500) {
+        shouldFallback = true;
+      }
 
       if (!shouldFallback) {
         log.warn("COMBO", `Model ${modelStr} failed (no fallback)`, { status: result.status });

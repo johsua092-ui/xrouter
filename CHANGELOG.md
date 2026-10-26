@@ -29,6 +29,17 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Upstream 9router Improvements Cherry-Picked (from Decolua PRs)**:
+  - **Missing Tool-Call ID & Pass-Through Repair** (PR #4992 / #4986): Auto-synthesizes missing tool call IDs in SSE deltas and normalizes tool names, preventing client SDK crashes.
+  - **SQLite NUL Byte Stripping** (PR #5055 / #4917): Automatically strips `\0` bytes from parameters in `better-sqlite3` and `node:sqlite` adapters to prevent database worker crashes on binary payloads.
+  - **Antigravity Hub 2.24.0 & Gemini 4 Argon** (PR #4816): Bumped User-Agent to `antigravity/hub/2.24.0 darwin/arm64` and registered `gemini-4-argon` variants (high/medium/low).
+  - **Antigravity Reasoning Effort Mapping** (Commit 82aeb90): Maps `reasoning_effort` directly to `thinkingConfig.thinkingBudget`.
+  - **Combo 4xx Graceful Advance** (Commit 5cdcddf): In model combos, 4xx errors gracefully advance to the next model candidate instead of dropping the request.
+  - **Claude Redacted Thinking Passthrough** (PR #5229 / #5233): Transparently passes through redacted thinking chunks without tripping empty-content detectors.
+  - **Qoder Model Queuing & Capabilities** (Commit 2720cd2): Restored `sonus` and `cantus` models with proper capability tags.
+- **UI & Harvester Typography Fixes**:
+  - Expanded Target input field and prevented text truncation in Auto-Harvester Engine.
+  - Converted LogoMark to fully reactive SVG utilizing dynamic CSS variables (`--color-brand-500` and `--color-brand-600`) so logos dynamically shift color to match Custom Palettes.
 - **Theme Icon Updated**:
   - Replaced the 4-square grid (`grid_view`) icon with the canonical theme palette (`palette`) icon on the trigger button in `HeaderMenu` for instant visual clarity.
 - **Robust Typo Auto-Redirect (/dashbc -> /dashboard)**:

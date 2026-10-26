@@ -232,9 +232,26 @@ export function createSSEStream(options = {}) {
               // causing premature `reasoning-end` on every chunk.
               if (parsed?.choices) {
                 for (const choice of parsed.choices) {
-                  if (choice.delta?.tool_calls && Array.isArray(choice.delta.tool_calls) && choice.delta.tool_calls.length === 0) {
-                    delete choice.delta.tool_calls;
-                    fieldsInjected = true;
+                  if (choice.delta?.tool_calls && Array.isArray(choice.delta.tool_calls)) {
+                    if (choice.delta.tool_calls.length === 0) {
+                      delete choice.delta.tool_calls;
+                      fieldsInjected = true;
+                    } else {
+                      // Fix missing tool-call ID & restore valid tool call shape for client SDKs (PR #4992 / #4986)
+                      choice.delta.tool_calls.forEach((tc, idx) => {
+                        if (tc && typeof tc === "object") {
+                          if (!tc.id && (tc.function?.name || tc.type === "function")) {
+                            tc.id = `call_${Date.now().toString(36)}_${idx}`;
+                            fieldsInjected = true;
+                          }
+                          // Normalize tool name from internal suffixes if any
+                          if (tc.function?.name && typeof tc.function.name === "string" && tc.function.name.endsWith("_client")) {
+                            tc.function.name = tc.function.name.replace(/_client$/, "");
+                            fieldsInjected = true;
+                          }
+                        }
+                      });
+                    }
                   }
                 }
               }

@@ -4,6 +4,16 @@ import { PRAGMA_SQL } from "../schema.js";
 // Periodic checkpoint to keep WAL file small (avoid huge -wal/-shm growth)
 const CHECKPOINT_INTERVAL_MS = 60 * 1000;
 
+function cleanParams(params) {
+  if (!params || !Array.isArray(params)) return params;
+  return params.map((p) => {
+    if (typeof p === "string" && p.includes("\0")) {
+      return p.replace(/\0/g, "");
+    }
+    return p;
+  });
+}
+
 export function createBetterSqliteAdapter(filePath) {
   const db = new Database(filePath);
   db.exec(PRAGMA_SQL);
@@ -40,9 +50,9 @@ export function createBetterSqliteAdapter(filePath) {
 
   return {
     driver: "better-sqlite3",
-    run(sql, params = []) { return prepare(sql).run(...params); },
-    get(sql, params = []) { return prepare(sql).get(...params); },
-    all(sql, params = []) { return prepare(sql).all(...params); },
+    run(sql, params = []) { return prepare(sql).run(...cleanParams(params)); },
+    get(sql, params = []) { return prepare(sql).get(...cleanParams(params)); },
+    all(sql, params = []) { return prepare(sql).all(...cleanParams(params)); },
     exec(sql) { return db.exec(sql); },
     transaction(fn) { return db.transaction(fn)(); },
     checkpoint() { try { db.pragma("wal_checkpoint(TRUNCATE)"); } catch {} },

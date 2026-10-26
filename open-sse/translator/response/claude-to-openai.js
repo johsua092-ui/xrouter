@@ -88,6 +88,11 @@ export function claudeToOpenAIResponse(chunk, state) {
         // Thinking travels only in reasoning_content. No "<think>" markers in
         // content: OpenAI-format clients render them as literal text.
         results.push(createChunk(state, reasoningDelta(delta.thinking)));
+      } else if (delta?.type === "redacted_thinking" || delta?.type === "redacted_thinking_delta") {
+        // Redacted thinking passthrough: preserve block without dropping or falsely detecting empty content (PR #5229 / #5233)
+        if (delta.data) {
+          results.push(createChunk(state, reasoningDelta(delta.data)));
+        }
       } else if (delta?.type === "input_json_delta" && delta.partial_json) {
         const toolCall = state.toolCalls.get(chunk.index);
         if (toolCall) {

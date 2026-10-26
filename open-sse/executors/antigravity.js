@@ -313,6 +313,16 @@ export class AntigravityExecutor extends BaseExecutor {
       generationConfig.maxOutputTokens = MAX_ANTIGRAVITY_OUTPUT_TOKENS;
     }
 
+    // Antigravity reasoning effort mapping: translate client reasoning_effort to thinkingConfig budget (Commit 82aeb90)
+    const rawEffort = body.reasoning_effort || body.request?.reasoning_effort;
+    if (rawEffort && typeof rawEffort === "string") {
+      const budgetMap = { low: 1024, medium: 4096, high: 16384 };
+      const budget = budgetMap[rawEffort.toLowerCase()] || 4096;
+      generationConfig.thinkingConfig = {
+        thinkingBudget: budget
+      };
+    }
+
     const transformedRequest = {
       ...requestWithoutTools,
       generationConfig,

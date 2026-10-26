@@ -967,8 +967,8 @@ export default function ProxyPoolsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t border-border/50 sm:border-t-0">
-          <div className="flex items-center gap-1.5 rounded-[6px] border border-border bg-surface px-2 py-1 text-xs">
-            <label className="text-text-muted font-mono text-[11px]">Target:</label>
+          <div className="flex items-center gap-1.5 rounded-[6px] border border-border bg-surface px-2.5 py-1 text-xs">
+            <label className="text-text-muted font-mono text-xs whitespace-nowrap">Target:</label>
             <input
               type="number"
               min="1"
@@ -976,13 +976,13 @@ export default function ProxyPoolsPage() {
               value={harvestTarget}
               onChange={(e) => setHarvestTarget(e.target.value)}
               disabled={harvesting}
-              className="w-12 rounded border border-border bg-surface-2 px-1.5 py-0.5 text-center font-mono text-xs text-text-main focus:border-primary focus:outline-none"
+              className="w-14 rounded border border-border bg-surface-2 px-1.5 py-0.5 text-center font-mono text-xs text-text-main focus:border-primary focus:outline-none"
               title="Target number of live proxies to collect"
             />
           </div>
 
-          <div className="flex items-center gap-1.5 rounded-[6px] border border-border bg-surface px-2 py-1 text-xs">
-            <label className="text-text-muted font-mono text-[11px]">Loop:</label>
+          <div className="flex items-center gap-1.5 rounded-[6px] border border-border bg-surface px-2.5 py-1 text-xs">
+            <label className="text-text-muted font-mono text-xs whitespace-nowrap">Loop:</label>
             <select
               value={harvestLoopMinutes}
               onChange={(e) => setHarvestLoopMinutes(Number(e.target.value))}
