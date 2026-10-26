@@ -111,15 +111,6 @@ export default function MobileNav() {
           <NotificationBell />
           <button
             type="button"
-            onClick={() => setThemeModalOpen(true)}
-            aria-label="Theme & Appearance"
-            className="flex size-8 items-center justify-center rounded-[6px] border border-border bg-surface-2 text-text-muted hover:text-text-main transition-colors cursor-pointer shadow-xs active:scale-95"
-            title="Theme & Appearance"
-          >
-            <span className="material-symbols-outlined text-primary text-[19px] leading-none">palette</span>
-          </button>
-          <button
-            type="button"
             onClick={() => setOpen(true)}
             aria-label="Open navigation menu"
             className="flex h-8 items-center gap-1.5 rounded-[5px] border border-brand-500/40 bg-surface-2 px-3 text-text-main hover:border-brand-500 hover:bg-surface-3 transition-colors cursor-pointer shadow-xs active:scale-95"

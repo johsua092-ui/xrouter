@@ -29,6 +29,8 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Single Unified Theme Button (Across from GitHub in Menu)**:
+  - Removed duplicate palette icon from the mobile top bar so that there is exactly 1 palette button on mobile, placed in the drawer footer across from the GitHub link.
 - **Fine-Tuned ModelRow Buttons & Restored Clean 'close' Icon**:
   - Restored clean `close` (X) icon across all model chip action buttons instead of the circled block symbol.
   - Reduced test, copy, and close button icons by an additional ~5% (from `12px` to `11px`) for subtle and refined visual balance.
