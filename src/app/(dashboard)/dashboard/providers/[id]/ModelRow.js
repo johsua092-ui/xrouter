@@ -39,7 +39,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
               className={`rounded p-0.5 text-text-muted transition-colors hover:bg-sidebar hover:text-primary ${isTesting ? "opacity-100 text-primary" : "opacity-80 hover:opacity-100"}`}
               title="Test Model"
             >
-              <span className="material-symbols-outlined text-[12px]" style={isTesting ? { animation: "spin 1s linear infinite" } : undefined}>
+              <span className="material-symbols-outlined text-[11px]" style={isTesting ? { animation: "spin 1s linear infinite" } : undefined}>
                 {isTesting ? "progress_activity" : "science"}
               </span>
             </button>
@@ -53,7 +53,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
             onClick={() => onCopy(displayModel, `model-${model.id}`)}
             className="rounded p-0.5 text-text-muted hover:bg-sidebar hover:text-primary"
           >
-            <span className="material-symbols-outlined text-[12px]">
+            <span className="material-symbols-outlined text-[11px]">
               {copied === `model-${model.id}` ? "check" : "content_copy"}
             </span>
           </button>
@@ -67,7 +67,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
             className="ml-auto rounded p-0.5 text-text-muted opacity-100 transition-opacity hover:bg-danger-bg hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
             title="Remove custom model"
           >
-            <span className="material-symbols-outlined text-[12px]">close</span>
+            <span className="material-symbols-outlined text-[11px]">close</span>
           </button>
         ) : onDisable ? (
           <button
@@ -75,7 +75,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
             className="ml-auto rounded p-0.5 text-text-muted opacity-100 transition-opacity hover:bg-danger-bg hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
             title="Disable model"
           >
-            <span className="material-symbols-outlined text-[12px]">block</span>
+            <span className="material-symbols-outlined text-[11px]">close</span>
           </button>
         ) : null}
       </div>

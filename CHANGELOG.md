@@ -29,6 +29,9 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Fine-Tuned ModelRow Buttons & Restored Clean 'close' Icon**:
+  - Restored clean `close` (X) icon across all model chip action buttons instead of the circled block symbol.
+  - Reduced test, copy, and close button icons by an additional ~5% (from `12px` to `11px`) for subtle and refined visual balance.
 - **Compact UI Optimization (-5% proportional scale)**:
   - Scaled down the navigation rows in `MobileNav.js` with tighter padding (`px-2.5 py-2`) and smaller font size (`text-[12.5px]`), reducing oversized drawer items.
   - Scaled down model chips and action buttons in `ModelRow.js`: reduced icon sizes to `12px/13px`, model code to `text-[10.5px]`, padding to `px-2 py-1`, creating a clean, compact, non-bulky layout for both mobile and desktop.
