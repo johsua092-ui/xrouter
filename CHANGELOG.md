@@ -41,6 +41,8 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Live Git SHA Priority in Update Check**:
+  - Prioritized `readGitRevision()` over baked-in `process.env.APP_REVISION` in `updateCheck.js` so running instances immediately reflect local working copy commits without false 1-commit-behind notices.
 - **Changelog Fallback Search Path**:
   - Enhanced `/api/changelog` to search across `/root/xrouter`, `/root/xrouter-remake`, and process cwd so changelog notes always render properly and never display "Nothing to report".
 - **Fixed Inverted Version Update Notification Bug**:

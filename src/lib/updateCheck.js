@@ -248,7 +248,7 @@ async function fetchPending(localSha) {
 }
 
 export async function getUpdateInfo(currentVersion) {
-  const localSha = process.env.APP_REVISION || await readGitRevision();
+  const localSha = await readGitRevision() || process.env.APP_REVISION;
   const ttl = cache.info && !cache.info.lookupFailed ? CHECK_TTL_MS : FAILURE_TTL_MS;
   if (cache.info && Date.now() - cache.fetchedAt < ttl) {
     return { ...cache.info, currentVersion, checkedAt: cache.fetchedAt };
