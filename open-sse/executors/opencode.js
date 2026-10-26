@@ -599,24 +599,27 @@ export class OpenCodeExecutor extends BaseExecutor {
       return result;
     }
 
-    // Upstream OpenCode cluster can experience transient 429 concurrency spikes ("Endpoint is unavailable").
-    // Retry up to 3 times with exponential backoff before throwing error on direct connections.
+    // Upstream OpenCode cluster can experience transient 429 concurrency spikes or FreeUsageLimitError.
+    // If FreeUsageLimitError or 429 occurs, immediately evict session and retry with a fresh session + client signature!
     for (let attempt = 0; attempt <= 3; attempt++) {
       const result = await super.execute({ ...args, credentials: creds });
       if (result.response.ok || (result.response.status !== 429 && result.response.status !== 503)) {
         return result;
       }
+
+      // Check if it's FreeUsageLimitError or rate limit
+      const peek = await result.response.clone().text().catch(() => "");
+      const isFreeUsageLimit = peek.includes("FreeUsageLimitError") || peek.includes("Free usage limit reached");
+
       if (attempt < 3) {
-        const delay = 1000 * Math.pow(1.5, attempt);
-        await new Promise(r => setTimeout(r, delay));
-        // Free tier is accounted per session, so a stuck/quota-drained session must be
-        // dropped from the stable store before the retry mints a new one — otherwise the
-        // retry reuses the same drained session and every attempt burns the same quota.
+        // Free tier is accounted per session/fingerprint: drop session immediately and re-mint
         evictStableSession(creds);
-        // Rotate session id on retry to bypass stuck upstream turn affinity
         if (creds && creds[SESSION_FIELD]) {
           creds[SESSION_FIELD] = generateSessionId();
         }
+        // If it's a hard FreeUsageLimitError on this session, rotate immediately without long sleep
+        const delay = isFreeUsageLimit ? 500 : 1000 * Math.pow(1.5, attempt);
+        await new Promise(r => setTimeout(r, delay));
       } else {
         return result;
       }

@@ -8,7 +8,6 @@ import { cn } from "@/shared/utils/cn";
 import { APP_CONFIG } from "@/shared/constants/config";
 import { LOCALE_COOKIE, normalizeLocale } from "@/i18n/config";
 import { LOCALE_FLAGS } from "@/shared/constants/locales";
-import useThemeStore, { THEME_IDS, ACCENT_PALETTES } from "@/store/themeStore";
 
 function getLocaleFromCookie() {
   if (typeof document === "undefined") return "en";
@@ -74,12 +73,6 @@ const IMPORT_JOB_ENDPOINT = "/api/settings/database/jobs";
 
 export default function ProfilePage() {
   const [locale, setLocale] = useState(() => getLocaleFromCookie());
-  const theme = useThemeStore((state) => state.theme);
-  const accent = useThemeStore((state) => state.accent || "orange");
-  const customColor = useThemeStore((state) => state.customColor || "#E56A4A");
-  const setTheme = useThemeStore((state) => state.setTheme);
-  const setAccent = useThemeStore((state) => state.setAccent);
-  const setCustomColor = useThemeStore((state) => state.setCustomColor);
   const [langOpen, setLangOpen] = useState(false);
   const [shutdownOpen, setShutdownOpen] = useState(false);
   const [isShuttingDown, setIsShuttingDown] = useState(false);
@@ -2121,154 +2114,6 @@ export default function ProfilePage() {
               onChange={updateObservabilityEnabled}
               disabled={loading}
             />
-          </div>
-        </Card>
-
-        {/* Theme & Appearance Settings (Mobile & Desktop Unified) */}
-        <Card className="space-y-5">
-          <div className="flex items-center gap-2 border-b border-border pb-3">
-            <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
-              <span className="material-symbols-outlined text-[20px]">palette</span>
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-semibold text-text-main">Theme & Appearance</h3>
-              <p className="text-xs text-text-muted">Customize interface theme mode and accent color palette</p>
-            </div>
-          </div>
-
-          {/* Mode Selector */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-text-muted uppercase tracking-wider block">
-              Appearance Mode
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              {[
-                { id: "dark", label: "Dark", icon: "dark_mode", desc: "Solid dark instrument panels" },
-                { id: "ember", label: "Ember", icon: "local_fire_department", desc: "Warm charcoal with ember glow" },
-                { id: "light", label: "Light", icon: "light_mode", desc: "Clean light panels on ivory base" },
-              ].map((m) => {
-                const active = theme === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setTheme(m.id)}
-                    className={cn(
-                      "flex items-center gap-3 p-3 rounded-[6px] border text-left transition-all cursor-pointer",
-                      active
-                        ? "border-primary bg-primary/10 shadow-xs"
-                        : "border-border-subtle bg-surface-2 hover:bg-surface-3"
-                    )}
-                  >
-                    <span className={cn("material-symbols-outlined text-[22px]", active ? "text-primary" : "text-text-muted")}>
-                      {m.icon}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className={cn("text-xs font-semibold", active ? "text-primary" : "text-text-main")}>
-                        {m.label}
-                      </div>
-                      <div className="text-[10.5px] text-text-muted truncate">
-                        {m.desc}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Preset Accent Palettes */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-text-muted uppercase tracking-wider block">
-              Accent Color Palette
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-              {ACCENT_PALETTES.map((pal) => {
-                const active = accent === pal.id;
-                return (
-                  <button
-                    key={pal.id}
-                    type="button"
-                    onClick={() => setAccent(pal.id)}
-                    className={cn(
-                      "flex items-center gap-2 p-2 rounded-[6px] border text-left transition-all cursor-pointer",
-                      active ? "border-primary bg-primary/10 shadow-xs" : "border-border-subtle bg-surface-2 hover:bg-surface-3"
-                    )}
-                  >
-                    <span className="size-3.5 rounded-full shrink-0 shadow-xs" style={{ backgroundColor: pal.primary }} />
-                    <span className={cn("text-xs font-medium truncate", active ? "text-primary" : "text-text-main")}>
-                      {pal.label.split(" ")[1] || pal.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Custom Accent Color */}
-          <div className="space-y-2 pt-2 border-t border-border-subtle">
-            <label className="text-xs font-semibold text-text-muted uppercase tracking-wider block">
-              Custom Palette
-            </label>
-            <div
-              className={cn(
-                "flex items-center justify-between p-3 rounded-[6px] border transition-all",
-                accent === "custom"
-                  ? "border-primary bg-primary/10 shadow-xs"
-                  : "border-border-subtle bg-surface-2"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <label className="relative flex items-center justify-center cursor-pointer">
-                  <span
-                    className="size-7 rounded-full border border-white/20 shadow-xs inline-block shrink-0"
-                    style={{ backgroundColor: customColor }}
-                  />
-                  <input
-                    type="color"
-                    value={customColor}
-                    onChange={(e) => setCustomColor(e.target.value)}
-                    className="absolute inset-0 opacity-0 cursor-pointer size-full"
-                    aria-label="Custom color picker"
-                  />
-                </label>
-                <div>
-                  <span className="text-xs font-medium text-text-main block">
-                    Custom Hex Color
-                  </span>
-                  <span className="text-[10px] font-mono text-text-muted uppercase block">
-                    {customColor}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  maxLength={7}
-                  value={customColor}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (/^#[0-9A-Fa-f]{0,6}$/.test(val) || /^[0-9A-Fa-f]{0,6}$/.test(val)) {
-                      setCustomColor(val.startsWith("#") ? val : `#${val}`);
-                    }
-                  }}
-                  className="w-24 px-2 py-1.5 rounded-[4px] border border-border bg-surface text-xs font-mono text-center text-text-main uppercase focus:border-primary focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setAccent("custom")}
-                  className={cn(
-                    "px-3 py-1.5 rounded-[4px] text-xs font-medium transition-colors cursor-pointer",
-                    accent === "custom"
-                      ? "bg-primary text-white"
-                      : "bg-surface text-text-muted hover:text-text-main border border-border"
-                  )}
-                >
-                  {accent === "custom" ? "Active" : "Apply"}
-                </button>
-              </div>
-            </div>
           </div>
         </Card>
 

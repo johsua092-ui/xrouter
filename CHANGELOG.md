@@ -29,12 +29,13 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
-- **ADCode Provider Deprecated & Removed**:
-  - Removed deprecated `adcode` from provider registry and dashboard as requested.
-- **Unified Theme Control on Instance Admin Widget**:
-  - Bound the 4-box grid icon on the bottom-left / top-bar (`grid_view`) directly to open the Theme & Appearance modal with zero layout disparity between desktop and mobile.
-- **OpenCode Lingling-Style Multipath Resiliency**:
-  - Embedded multi-lane DNS / IPv6 egress rotation and instant failover for OpenCode to prevent rate limits.
+- **OpenCode Free Tier Resilience & Auto-Rotation**:
+  - Automatically detect upstream `FreeUsageLimitError` and evict stuck sessions immediately, re-minting clean credentials to bypass throttles without getting stuck in 429 loops.
+- **Theme Centralization (4-Grid Icon Only)**:
+  - Bound Theme & Appearance modal exclusively to the 4-box grid icon (`grid_view`) beside Instance Admin / Mobile Header.
+  - Removed redundant theme settings section from `/dashboard/profile` as requested.
+- **ADCode Provider Fully Removed**:
+  - Cleanly purged all traces of deprecated `adcode` from provider registry, auth modals, and routes.
 - **Theme & Palette Stability**:
   - Fixed client-side exception caused by duplicate portal mounting and restored canonical ThemeModal instance in HeaderMenu.
   - Aligned mobile and desktop navigation with upstream architecture (no stray modals or missing controls).
