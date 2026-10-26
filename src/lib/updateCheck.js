@@ -215,7 +215,7 @@ function readLocalRelease() {
 // "-Custom". Numbers decide. On equal numbers an empty suffix is the older shape and
 // a different suffix means the repository moved to another build of that release.
 function compareReleases(remote, local) {
-  if (!remote || !local) return null;
+  if (!remote || !local) return 0;
   const split = (value) => {
     const cleaned = String(value).trim().replace(/^v/i, "");
     const dash = cleaned.indexOf("-");
@@ -286,8 +286,9 @@ export async function getUpdateInfo(currentVersion) {
     : behindBy > 0);
 
   // release signal: the repository's newest changelog entry against this build.
-  // For Go version, updates are driven purely by git commits on the Go repo.
-  const releaseOrder = isGoRepo ? 0 : compareReleases(effectiveRelease?.version, localRelease);
+  // ONLY alert if remote version is strictly newer than local version (releaseOrder === 1).
+  // If local is equal (0) or newer (-1), NEVER trigger update!
+  const releaseOrder = compareReleases(effectiveRelease?.version, localRelease);
   const releaseSaysUpdate = releaseOrder === 1;
 
   const hasUpdate = gitSaysUpdate || releaseSaysUpdate;

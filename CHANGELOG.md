@@ -41,6 +41,14 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Changelog Fallback Search Path**:
+  - Enhanced `/api/changelog` to search across `/root/xrouter`, `/root/xrouter-remake`, and process cwd so changelog notes always render properly and never display "Nothing to report".
+- **Fixed Inverted Version Update Notification Bug**:
+  - Enforced strict version ordering (`compareReleases === 1`) in `updateCheck.js` so that when `v0.0.4` is installed, older remote versions (like `v0.0.3`) will never trigger false "Update available" banners.
+- **Adaptive LogoMark in Light Mode**:
+  - Restored dynamic background fill (`fill-surface-2 dark:fill-[#18191C]`) on `LogoMark` so the squircle container matches light mode surfaces rather than remaining hardcoded black.
+- **Desktop Sidebar Compact Sizing**:
+  - Reduced sidebar navigation row heights and padding in `LeftRail.js` (`h-7.5 px-2`), delivering a tighter and more proportional desktop layout.
 - **Single Unified Theme Button (Across from GitHub in Menu)**:
   - Removed duplicate palette icon from the mobile top bar so that there is exactly 1 palette button on mobile, placed in the drawer footer across from the GitHub link.
 - **Fine-Tuned ModelRow Buttons & Restored Clean 'close' Icon**:

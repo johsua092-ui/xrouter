@@ -27,8 +27,7 @@ export default function LogoMark({ className = "size-full" }) {
           width="92"
           height="92"
           rx="22"
-          fill="#18191C"
-          stroke="#26282D"
+          className="fill-surface-2 dark:fill-[#18191C] stroke-border dark:stroke-[#26282D]"
           strokeWidth="2"
         />
 

@@ -7,12 +7,17 @@ export const dynamic = "force-dynamic";
 const OFFICIAL_URL = "https://raw.githubusercontent.com/decolua/9router/refs/heads/master/CHANGELOG.md";
 
 function readLocalChangelog(filename) {
-  try {
-    const text = fs.readFileSync(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ process.cwd(), filename), "utf8");
-    return text.trim() ? text : null;
-  } catch {
-    return null;
+  const dirs = [process.cwd(), "/root/xrouter", "/root/xrouter-remake"];
+  for (const dir of dirs) {
+    try {
+      const p = path.join(dir, filename);
+      if (fs.existsSync(p)) {
+        const text = fs.readFileSync(/*turbopackIgnore: true*/ p, "utf8");
+        if (text && text.trim()) return text;
+      }
+    } catch {}
   }
+  return null;
 }
 
 async function fetchOfficialChangelog() {

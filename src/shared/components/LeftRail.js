@@ -40,8 +40,8 @@ function RailRow({ href, icon, label, active, open, onClick, badge = null }) {
   );
 
   const cls = cn(
-    "relative flex h-8.5 w-full items-center gap-2.5 rounded-[5px] transition-colors duration-150 cursor-pointer",
-    open ? "px-2.5" : "justify-center px-0",
+    "relative flex h-7.5 w-full items-center gap-2 rounded-[5px] transition-colors duration-150 cursor-pointer",
+    open ? "px-2" : "justify-center px-0",
     active ? "bg-primary/15 text-primary font-medium border border-border-subtle" : "text-text-main/80 hover:bg-surface-2 hover:text-text-main"
   );
 
@@ -77,8 +77,8 @@ function GroupRow({ icon, label, active, open, expanded, onClick }) {
       title={label}
       aria-expanded={expanded}
       className={cn(
-        "relative flex h-8.5 w-full items-center gap-2.5 rounded-[5px] transition-colors duration-150 cursor-pointer",
-        open ? "px-2.5" : "justify-center px-0",
+        "relative flex h-7.5 w-full items-center gap-2 rounded-[5px] transition-colors duration-150 cursor-pointer",
+        open ? "px-2" : "justify-center px-0",
         active || expanded ? "bg-primary/15 text-primary border border-border-subtle font-medium" : "text-text-main/80 hover:bg-surface-2 hover:text-text-main"
       )}
     >
