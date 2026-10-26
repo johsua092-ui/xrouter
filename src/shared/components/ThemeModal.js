@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PropTypes from "prop-types";
 import { cn } from "@/shared/utils/cn";
@@ -46,6 +46,11 @@ export default function ThemeModal({ isOpen, onClose }) {
   const setAccent = useThemeStore((state) => state.setAccent);
   const setCustomColor = useThemeStore((state) => state.setCustomColor);
   const modalRef = useRef(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -63,11 +68,14 @@ export default function ThemeModal({ isOpen, onClose }) {
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen || typeof document === "undefined") return null;
+  if (!isOpen || !mounted || typeof document === "undefined") return null;
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-black/70"
+        onClick={onClose}
+      />
       <div
         ref={modalRef}
         role="dialog"
@@ -79,8 +87,8 @@ export default function ThemeModal({ isOpen, onClose }) {
           <h2 className="text-lg font-semibold text-text-main">Theme</h2>
           <button
             onClick={onClose}
+            className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-2 transition-all cursor-pointer"
             aria-label="Close"
-            className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-2 dark:hover:bg-surface-2 transition-all"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
@@ -218,7 +226,7 @@ export default function ThemeModal({ isOpen, onClose }) {
         </div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }
 

@@ -29,8 +29,13 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
-- **Credits & Lineage Acknowledgement**:
-  - Explicitly credited foundational architecture and lineage in order to **decolua** (founder of 9router), **seren** (fork source), **Bayu**, and **Naub** in documentation.
+- **Theme & Palette Stability**:
+  - Fixed client-side exception caused by duplicate portal mounting and restored canonical ThemeModal instance in HeaderMenu.
+  - Aligned mobile and desktop navigation with upstream architecture (no stray modals or missing controls).
+- **Cloudflare Tunnel Fallback**:
+  - Auto-fallback to direct `trycloudflare.com` tunnel URL when shortlink worker (`abc-tunnel.us`) is unreachable, preventing tunnel setup failures.
+- **Terminal Network Display**:
+  - Display actual public/LAN IP address when server binds to `0.0.0.0` (matching Seren reference implementation).
 - **Version Bump & Update Notifications**:
   - Bumped version across Go Core (`internal/config`), NPM package (`cli/`), and web app to `v0.0.3` with real-time update notifications.
 

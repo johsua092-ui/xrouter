@@ -10,7 +10,6 @@ import { useNavigation } from "@/shared/hooks/useNavigation";
 import { MEDIA_ITEMS } from "@/shared/constants/navigation";
 import HeaderMenu from "@/shared/components/HeaderMenu";
 import NotificationBell from "@/shared/components/NotificationBell";
-import ThemeModal from "@/shared/components/ThemeModal";
 import LogoMark from "@/shared/components/LogoMark";
 
 /* Mobile navigation: a floating launcher in the bottom-left corner opens a
@@ -64,7 +63,6 @@ Row.propTypes = {
 
 export default function MobileNav() {
   const [open, setOpen] = useState(false);
-  const [themeModalOpen, setThemeModalOpen] = useState(false);
   const pathname = usePathname();
   const { navItems, workshopItems, debugItems, systemItems, canOpenMedia, hasMediaNew, isApiKeyUser, isActive } =
     useNavigation();
@@ -108,16 +106,8 @@ export default function MobileNav() {
         </Link>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setThemeModalOpen(true)}
-            aria-label="Theme & Color Palette"
-            title="Theme & Color Palette"
-            className="flex size-8 items-center justify-center rounded-[5px] border border-border bg-surface-2 text-text-muted hover:text-text-main hover:bg-surface-3 transition-colors cursor-pointer shadow-xs active:scale-95"
-          >
-            <span className="material-symbols-outlined text-[19px] text-primary">palette</span>
-          </button>
           <NotificationBell />
+          <HeaderMenu onLogout={handleLogout} />
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -232,18 +222,6 @@ export default function MobileNav() {
                     active={isActive(item.href)}
                   />
                 ))}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    setThemeModalOpen(true);
-                  }}
-                  className="flex items-center gap-3 w-full rounded-[8px] px-3 py-2.5 text-text-main/80 hover:bg-surface-2 hover:text-text-main transition-colors text-left"
-                >
-                  <span className="material-symbols-outlined text-[19px] text-primary shrink-0 leading-none">palette</span>
-                  <span className="flex-1 truncate text-[13.5px] leading-none font-medium">Theme & Palette</span>
-                  <span className="text-[9.5px] font-semibold uppercase tracking-wider bg-primary/15 text-primary px-1.5 py-0.5 rounded-[4px]">Light / Colors</span>
-                </button>
               </Section>
             </div>
 
@@ -275,7 +253,6 @@ export default function MobileNav() {
           </div>
         </div>
       )}
-      <ThemeModal isOpen={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
     </>
   );
 }

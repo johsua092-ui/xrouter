@@ -372,14 +372,6 @@ http.createServer = (...args) => {
   server.headersTimeout = 66000;
   server.maxRequestsPerSocket = 0;
   server.once("listening", () => {
-    try {
-      const lanIp = getLanIp();
-      const addr = server.address();
-      const p = (addr && typeof addr === "object" && addr.port) || process.env.PORT || 20128;
-      if (lanIp) {
-        console.log(`\x1b[33m⚠ Network-exposed: reachable at http://${lanIp}:${p} (bound 0.0.0.0).\x1b[0m`);
-      }
-    } catch {}
     startBackgroundTokenRefreshFromCustomServer();
     startAutoBackupFromCustomServer();
     startDatabaseMaintenanceFromCustomServer();
@@ -432,6 +424,20 @@ http.createServer = (...args) => {
   };
   return server;
 };
+
+// Intercept Next.js bootstrap output so - Network: always prints the real accessible IP instead of 0.0.0.0
+try {
+  const lanIp = getLanIp();
+  if (lanIp) {
+    const origLog = console.log;
+    console.log = function (...args) {
+      if (typeof args[0] === "string" && args[0].includes("- Network:") && args[0].includes("0.0.0.0")) {
+        args[0] = args[0].replace("0.0.0.0", lanIp);
+      }
+      return origLog.apply(console, args);
+    };
+  }
+} catch {}
 
 if (require.main === module) {
   // If .next/standalone/server.js exists, prefer it directly so Next.js standalone output works properly

@@ -150,8 +150,10 @@ async function _doEnableTunnel(localPort) {
       console.warn(`[Tunnel] WARNING: public URL ${publicUrl} is NOT accessible. Use direct URL: ${tunnelUrl}`);
     }
 
+    // If publicUrl fails but direct trycloudflare is alive, prefer direct tunnelUrl as primary
+    const effectivePublicUrl = publicAlive ? publicUrl : tunnelUrl;
     console.log("[Tunnel] enable success");
-    return { success: true, tunnelUrl, shortId, publicUrl };
+    return { success: true, tunnelUrl, shortId, publicUrl: effectivePublicUrl };
   } catch (e) {
     // Suppress noise when spawn was deliberately killed (restart/disable superseded it)
     if (!/cloudflared killed|tunnel cancelled/.test(e.message)) {
@@ -186,9 +188,13 @@ export async function getTunnelStatus() {
   const settings = await getSettings();
   const settingsEnabled = settings.tunnelEnabled === true;
   const state = loadState();
-  const shortId = state?.shortId || "";
-  const publicUrl = shortId ? `https://r${shortId}.abc-tunnel.us` : "";
+  const shortId = state?.shortId;
+  let publicUrl = shortId ? `https://r${shortId}.abc-tunnel.us` : "";
   const tunnelUrl = state?.tunnelUrl || "";
+  // If shortlink worker is dead/unresponsive, fallback to direct trycloudflare tunnelUrl
+  if (!publicUrl || !tunnelActive) {
+    publicUrl = tunnelUrl;
+  }
 
   // Lazy: skip PID probe entirely when user disabled tunnel
   const running = settingsEnabled ? isCloudflaredRunning() : false;
