@@ -103,6 +103,7 @@ function PhotoshopColorPicker({ color, onChange, onApply, isActive }) {
   const [bri, setBri] = useState(hsb.b);
   const spectrumRef = useRef(null);
   const isDraggingSpectrum = useRef(false);
+  const rafId = useRef(null);
 
   useEffect(() => {
     const curRgb = hexToRgb(color);
@@ -116,9 +117,12 @@ function PhotoshopColorPicker({ color, onChange, onApply, isActive }) {
     setHue(newH);
     setSat(newS);
     setBri(newB);
-    const newRgb = hsbToRgb(newH, newS, newB);
-    const newHex = rgbToHex(newRgb.r, newRgb.g, newRgb.b);
-    onChange(newHex);
+    if (rafId.current) cancelAnimationFrame(rafId.current);
+    rafId.current = requestAnimationFrame(() => {
+      const newRgb = hsbToRgb(newH, newS, newB);
+      const newHex = rgbToHex(newRgb.r, newRgb.g, newRgb.b);
+      onChange(newHex);
+    });
   };
 
   const handleSpectrumMove = (e) => {

@@ -29,6 +29,11 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Logo Permanence & SVG Visibility**:
+  - Restored static container fill and distinct vector coloring in `LogoMark` with `#18191C` background and `#26282D` stroke, guaranteeing the X Router arrow logo never turns blank or transparent on mobile or light mode.
+- **Palette Performance Optimization**:
+  - Debounced real-time custom palette drag updates using `requestAnimationFrame`, eliminating UI lag while sliding colors.
+  - Removed heavy CSS hue-rotate filters on SVG images in favor of direct CSS variable stroke fills.
 - **Mobile Drawer Theme & Logo Visibility**:
   - Restored `HeaderMenu` (Theme Palette & System controls) to the mobile drawer footer so the theme button is always visible whether the drawer is open or closed.
   - Enhanced inline SVG rendering in `LogoMark` with fallback fills and explicit stroke mappings to ensure the X Router logo mark renders crisp on all mobile screens.

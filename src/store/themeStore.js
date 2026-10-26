@@ -105,12 +105,11 @@ function applyTheme(theme, accent = "orange", customColor = "#E56A4A") {
 
   if (accent === "custom" && customColor) {
     const hover = darkenColor(customColor, 15);
-    const filter = hexToHueRotate(customColor);
     root.style.setProperty("--color-brand-500", customColor);
     root.style.setProperty("--color-brand-600", hover);
     root.style.setProperty("--color-primary", customColor);
     root.style.setProperty("--color-primary-hover", hover);
-    root.style.setProperty("--logo-filter", filter);
+    root.style.setProperty("--logo-filter", "none");
     return;
   }
 
@@ -119,7 +118,7 @@ function applyTheme(theme, accent = "orange", customColor = "#E56A4A") {
   root.style.setProperty("--color-brand-600", palette.hover);
   root.style.setProperty("--color-primary", palette.primary);
   root.style.setProperty("--color-primary-hover", palette.hover);
-  root.style.setProperty("--logo-filter", palette.filter || "none");
+  root.style.setProperty("--logo-filter", "none");
 }
 
 export default useThemeStore;
