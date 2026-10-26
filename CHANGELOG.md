@@ -45,6 +45,13 @@
   - Prioritized `readGitRevision()` over baked-in `process.env.APP_REVISION` in `updateCheck.js` so running instances immediately reflect local working copy commits without false 1-commit-behind notices.
 - **Changelog Fallback Search Path**:
   - Enhanced `/api/changelog` to search across `/root/xrouter`, `/root/xrouter-remake`, and process cwd so changelog notes always render properly and never display "Nothing to report".
+- **OpenCode PR #5222 Merged (CLI `<env>` Marker & Shell Fingerprint Fix)**:
+  - Backported upstream PR #5222 / commit `25878ce`: added the CLI `<env>` environment marker to system prompts across flat, chat, and Claude request shapes.
+  - Updated tool parameter schemas for `read` (offset/limit) and `shell` with dynamic OS-specific wording (Linux/bash, macOS/zsh, Windows/powershell).
+  - Bumped OpenCode CLI User-Agent to `2.1.4` and eliminated 429 FreeUsageLimitError on `oc/*` models.
+- **Developer Access Portal Logo & Palette Button**:
+  - Replaced generic shield icon on `/claim` with official adaptive `LogoMark`.
+  - Added dedicated Palette Theme button on the `/claim` header to allow live switching between Dark, Light, and custom accent themes.
 - **Changelog Public Route Authorization**:
   - Whitelisted `/api/changelog` in `dashboardGuard.js` so client sessions and unauthenticated modal viewers can read the release changelog without encountering a 401 Unauthorized "Nothing to report" state.
 - **Fixed Inverted Version Update Notification Bug**:

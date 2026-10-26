@@ -11,25 +11,52 @@
 /** Canonical names required by the upstream free-tier gate. */
 export const OPENCODE_FINGERPRINT_TOOLS = ["read", "shell"];
 
+// Verbatim sentence chains from the OpenCode v2 CLI tool builders
+// (tool/plugin/read.ts, tool/plugin/shell.ts). Upstream compares description and
+// parameters, so do not reword or reformat these.
+const READ_DESCRIPTION = "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.";
+
+const SHELL_DESCRIPTION_HEAD = "Execute a shell command and return its output.";
+const SHELL_DESCRIPTION_TAIL = "Quote file paths containing spaces or special characters. Prefer dedicated tools over shell commands when possible. When output is large, the full result is saved to a file and a truncated preview is returned. Rely on automatic truncation unless filtering the output is more useful. Commands accept an optional timeout, background commands have no timeout by default. Background commands return immediately, and you will be notified when they complete.";
+const SHELL_PLATFORM_WORDINGS = {
+  linux: "Linux using bash",
+  darwin: "macOS using zsh",
+  win32: "Windows using powershell",
+};
+
+function shellDescription(platform) {
+  const wording = SHELL_PLATFORM_WORDINGS[platform] ?? SHELL_PLATFORM_WORDINGS.linux;
+  return `${SHELL_DESCRIPTION_HEAD} Commands run on ${wording}. ${SHELL_DESCRIPTION_TAIL}`;
+}
+
+const HOST_PLATFORM = process.platform || "linux";
+
 export const OPENCODE_CANONICAL_TOOL_DEFINITIONS = {
   read: {
-    description: "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+    description: READ_DESCRIPTION,
     parameters: {
       type: "object",
       properties: {
         path: { type: "string", description: "File or directory to read" },
+        offset: { type: "integer", minimum: 0, description: "The line or directory entry to start reading from (1-based)" },
+        limit: { type: "integer", minimum: 0, description: "The maximum number of lines or directory entries to read (defaults to and capped at 2000)" },
       },
       required: ["path"],
+      additionalProperties: false,
     },
   },
   shell: {
-    description: "Execute a shell command and return its output. Commands run on Windows using pwsh. Quote file paths containing spaces or special characters. Prefer dedicated tools over shell commands when possible. When output is large, the full result is saved to a file and a truncated preview is returned. Rely on automatic truncation unless filtering the output is more useful. Commands accept an optional timeout, background commands have no timeout by default. Background commands return immediately, and you will be notified when they complete.",
+    description: shellDescription(HOST_PLATFORM),
     parameters: {
       type: "object",
       properties: {
         command: { type: "string", description: "Shell command string to execute" },
+        workdir: { type: "string", description: "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead." },
+        timeout: { type: "integer", minimum: 0, description: "Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to 120000 for foreground commands. Background commands have no timeout by default." },
+        background: { type: "boolean", description: "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion." },
       },
       required: ["command"],
+      additionalProperties: false,
     },
   },
 };
@@ -157,6 +184,88 @@ export function retargetToolChoice(body, map) {
   }
 }
 
+const ENV_TAG = "<env>";
+const ENV_HEADING = "Here is some useful information about the environment you are running in:";
+const ENV_TMP_DIR = "/tmp/opencode";
+const ENV_WORKING_DIR = process.cwd();
+const ENV_FINGERPRINT_PROMPT = [
+  ENV_HEADING,
+  "<env>",
+  `  Working directory: ${ENV_WORKING_DIR}`,
+  `  Workspace root folder: ${ENV_WORKING_DIR}`,
+  "  Is directory a git repo: no",
+  `  Platform: ${HOST_PLATFORM}`,
+  `  Prefer ${ENV_TMP_DIR} over generic system temporary directories such as /tmp; it is pre-created and approved for external access.`,
+  "</env>",
+].join("\n");
+
+function systemCarriesEnv(system) {
+  if (typeof system === "string") return system.includes(ENV_TAG);
+  if (Array.isArray(system)) {
+    return system.some((block) => typeof block?.text === "string" && block.text.includes(ENV_TAG));
+  }
+  return false;
+}
+
+function appendSystemText(system, text) {
+  if (typeof system === "string") {
+    return system.trim() ? `${system}\n\n${text}` : text;
+  }
+  const blocks = Array.isArray(system) ? [...system] : [];
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const block = blocks[i];
+    if (typeof block?.text === "string") {
+      const existing = block.text.trim();
+      blocks[i] = { ...block, text: existing ? `${block.text}\n\n${text}` : text };
+      return blocks;
+    }
+  }
+  return [...blocks, { type: "text", text }];
+}
+
+export function applyEnvFingerprint(body, flat, { claude = false } = {}) {
+  try {
+    if (!body || typeof body !== "object") return false;
+
+    if (flat) {
+      if (body.instructions !== undefined && typeof body.instructions !== "string") return false;
+      if (systemCarriesEnv(body.instructions)) return false;
+      body.instructions = (typeof body.instructions === "string" && body.instructions.trim())
+        ? `${body.instructions}\n\n${ENV_FINGERPRINT_PROMPT}`
+        : ENV_FINGERPRINT_PROMPT;
+      return true;
+    }
+
+    if (claude || body.system !== undefined) {
+      if (systemCarriesEnv(body.system)) return false;
+      body.system = appendSystemText(body.system, ENV_FINGERPRINT_PROMPT);
+      return true;
+    }
+
+    if (Array.isArray(body.messages)) {
+      const idx = body.messages.findIndex((msg) => msg?.role === "system");
+      if (idx >= 0) {
+        const target = body.messages[idx];
+        if (Array.isArray(target.content)) {
+          if (systemCarriesEnv(target.content)) return false;
+          body.messages = body.messages.map((msg, i) =>
+            i === idx ? { ...msg, content: appendSystemText(target.content, ENV_FINGERPRINT_PROMPT) } : msg);
+          return true;
+        }
+        if (systemCarriesEnv(target.content)) return false;
+        const content = appendSystemText(typeof target.content === "string" ? target.content : "", ENV_FINGERPRINT_PROMPT);
+        body.messages = body.messages.map((msg, i) => (i === idx ? { ...msg, content } : msg));
+        return true;
+      }
+      body.messages = [{ role: "system", content: ENV_FINGERPRINT_PROMPT }, ...body.messages];
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Full request-side pass: canonicalise quartet case variants, remove duplicate
  * quartet declarations, append missing members and preserve the legacy
@@ -164,9 +273,11 @@ export function retargetToolChoice(body, map) {
  *
  * @param {object} body
  * @param {boolean} flat - true for Responses tools ({name}), false for chat tools
+ * @param {object} [options]
+ * @param {boolean} [options.claude]
  * @returns {Map<string,string>} map: sent name -> original name
  */
-export function applyFingerprintTools(body, flat) {
+export function applyFingerprintTools(body, flat, { claude = false } = {}) {
   if (!body || typeof body !== "object") return new Map();
 
   const hadClientTools = Array.isArray(body.tools) && body.tools.length > 0;
@@ -185,6 +296,10 @@ export function applyFingerprintTools(body, flat) {
     body.tool_choice = "auto";
   }
   recordRenamedToolNames(body, map);
+
+  // The `<env>` marker is required on every free-lane request to prevent 429 FreeUsageLimitError.
+  applyEnvFingerprint(body, flat, { claude });
+
   return map;
 }
 

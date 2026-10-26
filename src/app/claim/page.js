@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import LogoMark from "@/shared/components/LogoMark";
+import ThemeModal from "@/shared/components/ThemeModal";
 
 function formatTokenLimit(n) {
   const v = Number(n);
@@ -27,6 +29,7 @@ export default function ClaimPage() {
   const [result, setResult] = useState(null);
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState("");
+  const [themeModalOpen, setThemeModalOpen] = useState(false);
   const [activeSnippetTab, setActiveSnippetTab] = useState("curl");
 
   // Public faucet / community allocation info
@@ -649,10 +652,8 @@ export default function ClaimPage() {
       {/* Top Console Bar */}
       <header className="relative z-10 flex h-13 w-full items-center justify-between border-b border-border bg-surface px-4 sm:px-8">
         <div className="flex items-center gap-3">
-          <div className="flex size-7 items-center justify-center rounded-[4px] bg-primary/10 border border-primary/20 text-primary">
-            <svg viewBox="0 0 24 24" fill="currentColor" className="size-4">
-              <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z" />
-            </svg>
+          <div className="flex size-7 items-center justify-center rounded-[5px] border border-primary/40 bg-surface-2 shrink-0 shadow-xs overflow-hidden p-0.5">
+            <LogoMark className="size-full" />
           </div>
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs font-bold tracking-wider text-text-main">X ROUTER</span>
@@ -661,11 +662,24 @@ export default function ClaimPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] font-mono text-text-muted">
-          <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
-          <span>GATEWAY ONLINE</span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setThemeModalOpen(true)}
+            aria-label="Theme Settings"
+            title="Theme Settings"
+            className="flex items-center justify-center size-8 rounded-[5px] text-text-muted hover:text-text-main hover:bg-surface-2 transition-colors cursor-pointer border border-border/60 hover:border-border"
+          >
+            <span className="material-symbols-outlined text-[17px] leading-none text-primary">palette</span>
+          </button>
+          <div className="flex items-center gap-2 text-[11px] font-mono text-text-muted">
+            <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
+            <span>GATEWAY ONLINE</span>
+          </div>
         </div>
       </header>
+
+      <ThemeModal isOpen={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
 
       {/* Main Terminal Frame */}
       <main className="relative z-10 flex-1 flex items-center justify-center p-4 sm:p-6">
