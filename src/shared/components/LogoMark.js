@@ -11,12 +11,12 @@ export default function LogoMark({ className = "size-full" }) {
         height="100%"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="size-full overflow-hidden shrink-0"
+        className="size-full overflow-hidden block"
       >
         <defs>
-          <linearGradient id="xr-logo-accent" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="var(--color-brand-600, #E25539)" />
-            <stop offset="100%" stopColor="var(--color-brand-500, #EB6446)" />
+          <linearGradient id="xr-logo-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#E25539" />
+            <stop offset="100%" stopColor="#EB6446" />
           </linearGradient>
         </defs>
 
@@ -33,7 +33,7 @@ export default function LogoMark({ className = "size-full" }) {
         />
 
         {/* 4 Crossing Arrow Arms */}
-        <g stroke="url(#xr-logo-accent)" strokeLinecap="round" strokeWidth="7.5">
+        <g stroke="var(--color-brand-500, url(#xr-logo-gradient))" strokeLinecap="round" strokeWidth="7.5">
           <line x1="26" y1="74" x2="44" y2="56" />
           <line x1="26" y1="26" x2="44" y2="44" />
           <line x1="56" y1="44" x2="72" y2="28" />
@@ -49,7 +49,7 @@ export default function LogoMark({ className = "size-full" }) {
           fillRule="evenodd"
           clipRule="evenodd"
           d="M50 39.5 C44.2 39.5 39.5 44.2 39.5 50 C39.5 55.8 44.2 60.5 50 60.5 C55.8 60.5 60.5 55.8 60.5 50 C60.5 44.2 55.8 39.5 50 39.5 Z M50 45 C47.2 45 45 47.2 45 50 C45 52.8 47.2 55 50 55 C52.8 55 55 52.8 55 50 C55 47.2 52.8 45 50 45 Z"
-          fill="url(#xr-logo-accent)"
+          fill="var(--color-brand-500, url(#xr-logo-gradient))"
         />
       </svg>
     </span>

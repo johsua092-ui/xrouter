@@ -29,6 +29,9 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **LogoMark SVG Fallback & Rendering Enforcement**:
+  - Bound arrow strokes and center hub fill to `var(--color-brand-500, url(#xr-logo-gradient))` with absolute hex color stops `#E25539`/`#EB6446` in the definition.
+  - Fixes mobile WebKit / Chromium bug where dynamic variables inside `<stop>` tags failed to resolve and caused the logo vector to render invisible.
 - **Logo Permanence & SVG Visibility**:
   - Restored static container fill and distinct vector coloring in `LogoMark` with `#18191C` background and `#26282D` stroke, guaranteeing the X Router arrow logo never turns blank or transparent on mobile or light mode.
 - **Palette Performance Optimization**:
