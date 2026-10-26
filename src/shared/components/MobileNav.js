@@ -9,6 +9,7 @@ import { APP_CONFIG } from "@/shared/constants/config";
 import { useNavigation } from "@/shared/hooks/useNavigation";
 import { MEDIA_ITEMS } from "@/shared/constants/navigation";
 import HeaderMenu from "@/shared/components/HeaderMenu";
+import ThemeModal from "@/shared/components/ThemeModal";
 import NotificationBell from "@/shared/components/NotificationBell";
 import LogoMark from "@/shared/components/LogoMark";
 
@@ -63,6 +64,7 @@ Row.propTypes = {
 
 export default function MobileNav() {
   const [open, setOpen] = useState(false);
+  const [themeModalOpen, setThemeModalOpen] = useState(false);
   const pathname = usePathname();
   const { navItems, workshopItems, debugItems, systemItems, canOpenMedia, hasMediaNew, isApiKeyUser, isActive } =
     useNavigation();
@@ -107,7 +109,15 @@ export default function MobileNav() {
 
         <div className="flex items-center gap-2">
           <NotificationBell />
-          <HeaderMenu onLogout={handleLogout} />
+          <button
+            type="button"
+            onClick={() => setThemeModalOpen(true)}
+            aria-label="Theme & Appearance"
+            className="flex size-8 items-center justify-center rounded-[6px] border border-border bg-surface-2 text-text-muted hover:text-text-main transition-colors cursor-pointer shadow-xs active:scale-95"
+            title="Theme & Appearance"
+          >
+            <span className="material-symbols-outlined text-primary text-[19px] leading-none">palette</span>
+          </button>
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -247,12 +257,22 @@ export default function MobileNav() {
                     <span className="material-symbols-outlined text-[18px]">logout</span>
                   </button>
                 )}
-                <HeaderMenu onLogout={handleLogout} />
+                <button
+                  type="button"
+                  onClick={() => { setOpen(false); setThemeModalOpen(true); }}
+                  aria-label="Theme & Appearance"
+                  className="flex items-center justify-center p-2 rounded-[6px] text-text-muted hover:text-text-main hover:bg-surface-2 transition-colors cursor-pointer"
+                  title="Theme & Appearance"
+                >
+                  <span className="material-symbols-outlined text-primary text-[20px] leading-none">palette</span>
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      <ThemeModal isOpen={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
     </>
   );
 }

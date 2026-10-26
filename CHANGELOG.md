@@ -29,6 +29,14 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Telegram Bot Controller Service Extracted & Integrated**:
+  - Safely imported and integrated `telegramBotService.js` and `telegramBotService.cjs` (grammy long-polling controller with in-place UI and 16 dashboard operations) into `src/shared/services/`.
+- **ModelRow Compact Proportional UI**:
+  - Compacted the model chips in Provider details (`ModelRow.js`) with reduced padding, smaller fonts (`text-[11px]`), and streamlined action buttons, making the desktop and mobile interface clean, proportional, and no longer oversized.
+- **Dedicated Mobile Theme Trigger & Direct Opening**:
+  - Mounted dedicated palette button directly on the mobile top bar and inside the drawer footer, resolving user confusion on finding theme controls.
+- **Zero-Lag Color Palette Studio**:
+  - Integrated local state decoupling in `PhotoshopColorPicker` so sliding the custom palette updates smoothly at 60 FPS without UI stutter.
 - **LogoMark SVG Fallback & Rendering Enforcement**:
   - Bound arrow strokes and center hub fill to `var(--color-brand-500, url(#xr-logo-gradient))` with absolute hex color stops `#E25539`/`#EB6446` in the definition.
   - Fixes mobile WebKit / Chromium bug where dynamic variables inside `<stop>` tags failed to resolve and caused the logo vector to render invisible.

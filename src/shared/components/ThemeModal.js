@@ -96,7 +96,8 @@ function rgbToHex(r, g, b) {
  * Enhanced Photoshop-style Custom Palette Picker
  */
 function PhotoshopColorPicker({ color, onChange, onApply, isActive }) {
-  const rgb = hexToRgb(color);
+  const [internalHex, setInternalHex] = useState(color || "#E56A4A");
+  const rgb = hexToRgb(internalHex);
   const hsb = rgbToHsb(rgb.r, rgb.g, rgb.b);
   const [hue, setHue] = useState(hsb.h);
   const [sat, setSat] = useState(hsb.s);
@@ -106,21 +107,27 @@ function PhotoshopColorPicker({ color, onChange, onApply, isActive }) {
   const rafId = useRef(null);
 
   useEffect(() => {
-    const curRgb = hexToRgb(color);
-    const curHsb = rgbToHsb(curRgb.r, curRgb.g, curRgb.b);
-    setHue(curHsb.h);
-    setSat(curHsb.s);
-    setBri(curHsb.b);
+    if (color && color !== internalHex) {
+      setInternalHex(color);
+      const curRgb = hexToRgb(color);
+      const curHsb = rgbToHsb(curRgb.r, curRgb.g, curRgb.b);
+      setHue(curHsb.h);
+      setSat(curHsb.s);
+      setBri(curHsb.b);
+    }
   }, [color]);
 
   const updateFromHsb = (newH, newS, newB) => {
     setHue(newH);
     setSat(newS);
     setBri(newB);
+    const newRgb = hsbToRgb(newH, newS, newB);
+    const newHex = rgbToHex(newRgb.r, newRgb.g, newRgb.b);
+    setInternalHex(newHex);
+
+    // Throttle parent state update with requestAnimationFrame
     if (rafId.current) cancelAnimationFrame(rafId.current);
     rafId.current = requestAnimationFrame(() => {
-      const newRgb = hsbToRgb(newH, newS, newB);
-      const newHex = rgbToHex(newRgb.r, newRgb.g, newRgb.b);
       onChange(newHex);
     });
   };
@@ -234,10 +241,10 @@ function PhotoshopColorPicker({ color, onChange, onApply, isActive }) {
           <div className="flex items-center gap-2 pb-2 border-b border-border-subtle">
             <div
               className="h-7 flex-1 rounded-[4px] border border-border shadow-xs"
-              style={{ backgroundColor: color }}
+              style={{ backgroundColor: internalHex }}
             />
             <div className="flex flex-col text-[11px] leading-tight">
-              <span className="font-semibold text-text-main">{color}</span>
+              <span className="font-semibold text-text-main">{internalHex}</span>
               <span className="text-[9px] text-text-muted">HEX CODE</span>
             </div>
           </div>
@@ -276,11 +283,15 @@ function PhotoshopColorPicker({ color, onChange, onApply, isActive }) {
             <input
               type="text"
               maxLength={7}
-              value={color}
+              value={internalHex}
               onChange={(e) => {
                 const val = e.target.value;
                 if (/^#[0-9A-Fa-f]{0,6}$/.test(val) || /^[0-9A-Fa-f]{0,6}$/.test(val)) {
-                  onChange(val.startsWith("#") ? val : `#${val}`);
+                  const formatted = val.startsWith("#") ? val : `#${val}`;
+                  setInternalHex(formatted);
+                  if (formatted.length === 7) {
+                    onChange(formatted);
+                  }
                 }
               }}
               className="w-full px-1.5 py-0.5 rounded-[3px] border border-border bg-surface-2 text-xs font-mono text-center text-text-main uppercase focus:border-primary focus:outline-none"

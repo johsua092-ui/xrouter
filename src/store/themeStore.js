@@ -109,6 +109,8 @@ function applyTheme(theme, accent = "orange", customColor = "#E56A4A") {
     root.style.setProperty("--color-brand-600", hover);
     root.style.setProperty("--color-primary", customColor);
     root.style.setProperty("--color-primary-hover", hover);
+    root.style.setProperty("--brand-500", customColor);
+    root.style.setProperty("--brand-600", hover);
     root.style.setProperty("--logo-filter", "none");
     return;
   }
@@ -118,6 +120,8 @@ function applyTheme(theme, accent = "orange", customColor = "#E56A4A") {
   root.style.setProperty("--color-brand-600", palette.hover);
   root.style.setProperty("--color-primary", palette.primary);
   root.style.setProperty("--color-primary-hover", palette.hover);
+  root.style.setProperty("--brand-500", palette.primary);
+  root.style.setProperty("--brand-600", palette.hover);
   root.style.setProperty("--logo-filter", "none");
 }
 
