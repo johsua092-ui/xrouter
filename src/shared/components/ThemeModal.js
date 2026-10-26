@@ -346,9 +346,9 @@ export default function ThemeModal({ isOpen, onClose }) {
         role="dialog"
         aria-modal="true"
         aria-label="Theme"
-        className="relative w-full bg-surface border border-border rounded-[6px] shadow-[var(--shadow-elev)] animate-in fade-in zoom-in-95 duration-200 max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar"
+        className="relative w-full bg-surface border border-border rounded-[6px] shadow-[var(--shadow-elev)] animate-in fade-in zoom-in-95 duration-200 max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
       >
-        <div className="flex items-center justify-between gap-3 p-3 border-b border-border-subtle">
+        <div className="flex items-center justify-between gap-3 p-3 border-b border-border-subtle shrink-0 bg-surface">
           <h2 className="text-lg font-semibold text-text-main">Theme</h2>
           <button
             onClick={onClose}
@@ -359,7 +359,7 @@ export default function ThemeModal({ isOpen, onClose }) {
           </button>
         </div>
 
-        <div className="p-3 flex flex-col gap-2">
+        <div className="p-3 flex flex-col gap-2 overflow-y-auto custom-scrollbar flex-1 min-h-0">
           <div className="text-xs font-semibold text-text-muted px-1 uppercase tracking-wider">Appearance Mode</div>
           {THEME_IDS.map((id) => {
             const mode = MODES.find((m) => m.id === id);

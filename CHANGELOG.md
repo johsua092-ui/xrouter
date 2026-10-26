@@ -1,3 +1,15 @@
+# v0.0.4 (2026-10-26)
+
+## Releases & New Features
+- **Official Version Bump v0.0.4**:
+  - Upgraded core X Router engine and global CLI to version 0.0.4.
+- **Pinned Theme Modal Header**:
+  - Converted Theme Modal container to a flex column layout with a sticky/fixed header strip. The title and close button now remain permanently pinned at the top while scrolling color options.
+- **Update Check Cache Reset & Synchronization**:
+  - Synchronized git revision detection directly with VPS local checkout, resolving persistent false-positive update notifications.
+- **Telegram Bot Controller Service**:
+  - Integrated full-featured Telegram bot service from source package (`telegramBotService.js` / `.cjs`).
+
 # v0.0.3 (2026-10-25)
 
 ## Core & Stability Fixes

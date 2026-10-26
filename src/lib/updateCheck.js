@@ -92,10 +92,9 @@ function fetchText(url) {
 }
 
 function readGitRevision() {
-  if (cache.gitInstall !== undefined) return Promise.resolve(cache.gitInstall ? cache.revision : null);
   return new Promise((resolve) => {
     // Check both cwd and /root/xrouter for git revision
-    const targetDirs = [process.cwd(), "/root/xrouter"];
+    const targetDirs = ["/root/xrouter", process.cwd(), "/root/xrouter-remake"];
     const checkDir = (dirs) => {
       if (dirs.length === 0) {
         cache.gitInstall = false;
