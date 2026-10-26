@@ -75,7 +75,7 @@ export default function HeaderMenu({ onLogout }) {
           className="flex items-center justify-center p-2 rounded-[6px] text-text-muted hover:text-text-main hover:bg-surface-2 transition-all cursor-pointer"
           title="Theme & Appearance"
         >
-          <span className="material-symbols-outlined">grid_view</span>
+          <span className="material-symbols-outlined text-[20px]">palette</span>
         </button>
 
         {isOpen && (

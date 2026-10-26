@@ -29,6 +29,8 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Theme Icon Updated**:
+  - Replaced the 4-square grid (`grid_view`) icon with the canonical theme palette (`palette`) icon on the trigger button in `HeaderMenu` for instant visual clarity.
 - **Robust Typo Auto-Redirect (/dashbc -> /dashboard)**:
   - Added HTTP-level 307 interceptor in `custom-server.js` ensuring that requests to `/dashbc`, `/dashb`, etc., redirect directly to `/dashboard` before hitting Next.js 404 or throwing browser errors.
 - **Client-Side Exception Fix (UpdateBanner State Sync)**:
