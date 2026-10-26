@@ -39,16 +39,16 @@ function Row({ href, icon, label, active, onClick, badge = null }) {
       href={href}
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 rounded-[8px] px-3 py-2.5 transition-colors",
+        "flex items-center gap-2.5 rounded-[7px] px-2.5 py-2 transition-colors",
         active ? "bg-primary/15 text-primary font-medium" : "text-text-main/80 hover:bg-surface-2 hover:text-text-main"
       )}
     >
-      <span className={cn("material-symbols-outlined shrink-0 text-[19px] leading-none transition-colors", active ? "text-primary" : "text-text-main/70")}>
+      <span className={cn("material-symbols-outlined shrink-0 text-[18px] leading-none transition-colors", active ? "text-primary" : "text-text-main/70")}>
         {icon}
       </span>
-      <span className={cn("flex-1 truncate text-[13.5px] leading-none", active && "font-semibold text-primary")}>{label}</span>
+      <span className={cn("flex-1 truncate text-[12.5px] leading-none", active && "font-semibold text-primary")}>{label}</span>
       {badge}
-      {active && <span className="h-4 w-[2.5px] rounded-full bg-primary" aria-hidden="true" />}
+      {active && <span className="h-3.5 w-[2px] rounded-full bg-primary" aria-hidden="true" />}
     </Link>
   );
 }

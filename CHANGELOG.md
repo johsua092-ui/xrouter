@@ -29,6 +29,9 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Compact UI Optimization (-5% proportional scale)**:
+  - Scaled down the navigation rows in `MobileNav.js` with tighter padding (`px-2.5 py-2`) and smaller font size (`text-[12.5px]`), reducing oversized drawer items.
+  - Scaled down model chips and action buttons in `ModelRow.js`: reduced icon sizes to `12px/13px`, model code to `text-[10.5px]`, padding to `px-2 py-1`, creating a clean, compact, non-bulky layout for both mobile and desktop.
 - **Telegram Bot Controller Service Extracted & Integrated**:
   - Safely imported and integrated `telegramBotService.js` and `telegramBotService.cjs` (grammy long-polling controller with in-place UI and 16 dashboard operations) into `src/shared/services/`.
 - **ModelRow Compact Proportional UI**:
