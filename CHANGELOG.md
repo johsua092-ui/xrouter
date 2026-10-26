@@ -29,6 +29,9 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Unified Theme Settings Page**:
+  - Moved and unified full Theme & Appearance settings (Dark/Ember/Light mode, 6 preset palettes, and custom color picker) directly inside `/dashboard/profile` (Settings).
+  - Synchronized experience between mobile and desktop with zero layout discrimination.
 - **Theme & Palette Stability**:
   - Fixed client-side exception caused by duplicate portal mounting and restored canonical ThemeModal instance in HeaderMenu.
   - Aligned mobile and desktop navigation with upstream architecture (no stray modals or missing controls).
