@@ -29,6 +29,9 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Photoshop-Style Custom Palette Studio**:
+  - Upgraded Custom Palette into a full Photoshop-style color picker featuring a 2D Saturation/Brightness spectrum canvas, rainbow Hue slider, live Swatch comparison, RGB/HSB telemetry breakdown, and Hex input.
+  - Automatically drives real-time reactive theme variables and reactive SVG logos without page refreshes.
 - **Upstream 9router Improvements Cherry-Picked (from Decolua PRs)**:
   - **Missing Tool-Call ID & Pass-Through Repair** (PR #4992 / #4986): Auto-synthesizes missing tool call IDs in SSE deltas and normalizes tool names, preventing client SDK crashes.
   - **SQLite NUL Byte Stripping** (PR #5055 / #4917): Automatically strips `\0` bytes from parameters in `better-sqlite3` and `node:sqlite` adapters to prevent database worker crashes on binary payloads.
