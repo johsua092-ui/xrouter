@@ -56,6 +56,7 @@ const useThemeStore = create(
         const id = THEME_IDS.includes(theme) ? theme : "ember";
         set({ theme: id });
         applyTheme(id, get().accent || "orange", get().customColor || "#E56A4A");
+        syncThemeToServer(id, get().accent || "orange", get().customColor || "#E56A4A");
       },
 
       setAccent: (accent) => {
@@ -63,6 +64,7 @@ const useThemeStore = create(
         const valid = isPreset || accent === "custom" ? accent : "orange";
         set({ accent: valid });
         applyTheme(get().theme || "ember", valid, get().customColor || "#E56A4A");
+        syncThemeToServer(get().theme || "ember", valid, get().customColor || "#E56A4A");
       },
 
       setCustomColor: (color) => {
@@ -70,6 +72,7 @@ const useThemeStore = create(
         const normalized = color.startsWith("#") ? color : `#${color}`;
         set({ accent: "custom", customColor: normalized });
         applyTheme(get().theme || "ember", "custom", normalized);
+        syncThemeToServer(get().theme || "ember", "custom", normalized);
       },
 
       toggleTheme: () => {
@@ -77,10 +80,31 @@ const useThemeStore = create(
         const next = current === "light" ? "ember" : current === "ember" ? "dark" : "light";
         set({ theme: next });
         applyTheme(next, get().accent || "orange", get().customColor || "#E56A4A");
+        syncThemeToServer(next, get().accent || "orange", get().customColor || "#E56A4A");
       },
 
-      initTheme: () => {
+      initTheme: async () => {
+        // Apply current client store immediately
         applyTheme(get().theme || "ember", get().accent || "orange", get().customColor || "#E56A4A");
+
+        // Sync with global theme from server so public portals and new devices inherit instance theme
+        try {
+          const res = await fetch("/api/theme", { cache: "no-store" });
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.ok) {
+              const hasClientLocal = typeof window !== "undefined" && localStorage.getItem(THEME_CONFIG.storageKey);
+              if (!hasClientLocal || data.accent === "custom" || data.theme) {
+                set({
+                  theme: data.theme || get().theme,
+                  accent: data.accent || get().accent,
+                  customColor: data.customColor || get().customColor,
+                });
+                applyTheme(data.theme || get().theme, data.accent || get().accent, data.customColor || get().customColor);
+              }
+            }
+          }
+        } catch {}
       },
     }),
     {
@@ -88,6 +112,16 @@ const useThemeStore = create(
     },
   ),
 );
+
+// Sync theme to server for global public portals
+function syncThemeToServer(theme, accent, customColor) {
+  if (typeof window === "undefined") return;
+  fetch("/api/theme", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ theme, accent, customColor }),
+  }).catch(() => {});
+}
 
 // Apply theme & accent palette to document
 function applyTheme(theme, accent = "orange", customColor = "#E56A4A") {

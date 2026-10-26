@@ -251,8 +251,8 @@ export default function LeftRail() {
         setExpandedGroup(null);
       }}
       className={cn(
-        "relative isolate hidden my-2.5 ml-2.5 h-[calc(100vh-20px)] flex-col rounded-[8px] border border-border bg-surface select-none lg:flex z-30 shrink-0 shadow-lg",
-        open ? "w-[240px] overflow-hidden" : "w-[58px]"
+        "relative isolate hidden my-2 ml-2 h-[calc(100vh-16px)] flex-col rounded-[8px] border border-border bg-surface select-none lg:flex z-30 shrink-0 shadow-lg",
+        open ? "w-[212px] overflow-hidden" : "w-[52px]"
       )}
       aria-label="Application navigation"
     >
@@ -549,7 +549,13 @@ export default function LeftRail() {
       {/* Footer controls & user menu */}
       <div className="border-t border-border p-2 bg-surface-2 flex items-center justify-between gap-2 shrink-0">
         <div className={cn("flex items-center gap-2 min-w-0 overflow-hidden", !open && "w-full justify-center")}>
-          <HeaderMenu onLogout={handleLogout} />
+          {!isApiKeyUser ? (
+            <HeaderMenu onLogout={handleLogout} />
+          ) : (
+            <div className="flex items-center justify-center p-2 rounded-[6px] text-primary" title="API Session Active">
+              <span className="material-symbols-outlined text-[20px]">key</span>
+            </div>
+          )}
           {open && (
             <div className="min-w-0 flex flex-col">
               <span className="text-[11.5px] font-semibold text-text-main truncate">
@@ -565,7 +571,7 @@ export default function LeftRail() {
         {open && isApiKeyUser && (
           <button
             onClick={handleLogout}
-            className="flex items-center justify-center p-1.5 rounded-[6px] text-danger/80 hover:text-danger hover:bg-danger/10 transition-colors"
+            className="flex items-center justify-center p-1.5 rounded-[6px] text-primary hover:bg-primary/10 transition-colors"
             title="Log Out"
           >
             <span className="material-symbols-outlined text-[18px]">logout</span>

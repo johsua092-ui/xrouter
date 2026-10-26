@@ -45,6 +45,16 @@
   - Prioritized `readGitRevision()` over baked-in `process.env.APP_REVISION` in `updateCheck.js` so running instances immediately reflect local working copy commits without false 1-commit-behind notices.
 - **Changelog Fallback Search Path**:
   - Enhanced `/api/changelog` to search across `/root/xrouter`, `/root/xrouter-remake`, and process cwd so changelog notes always render properly and never display "Nothing to report".
+- **Global Theme Persistence Across All Public Surfaces**:
+  - Implemented `/api/theme` server endpoint to persist the instance owner's active theme and accent palette in the database `_meta` store.
+  - Public portals (login page, `/claim`, usage dashboard under API key) now automatically inherit the owner's chosen palette (e.g. Pink/Custom or any accent) across all devices and visitors.
+- **Removed Theme Trigger on Public/ApiKey Views**:
+  - Hid theme trigger button when logged in via API key and kept the `/claim` portal clean without unnecessary theme controls.
+  - Synchronized API Session logout button color with the current brand/theme palette (`text-primary hover:bg-primary/10`).
+- **Cleaned Duplicate Warning Icon in MITM Banner**:
+  - Removed redundant inline `warning` icon span inside the paragraph in `MitmPageClient.js`, keeping one clean warning icon on the left.
+- **Desktop Sidebar Proportional Slimdown**:
+  - Reduced desktop sidebar width from `240px` to `212px` (collapsed: `52px`) in `LeftRail.js`, perfectly balancing the desktop viewport.
 - **OpenCode PR #5222 Merged (CLI `<env>` Marker & Shell Fingerprint Fix)**:
   - Backported upstream PR #5222 / commit `25878ce`: added the CLI `<env>` environment marker to system prompts across flat, chat, and Claude request shapes.
   - Updated tool parameter schemas for `read` (offset/limit) and `shell` with dynamic OS-specific wording (Linux/bash, macOS/zsh, Windows/powershell).

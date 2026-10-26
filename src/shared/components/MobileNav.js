@@ -239,24 +239,25 @@ export default function MobileNav() {
                 </svg>
               </a>
               <div className="ml-auto flex items-center gap-1">
-                {isApiKeyUser && (
+                {isApiKeyUser ? (
                   <button
                     onClick={handleLogout}
-                    className="flex items-center justify-center p-2 rounded-[6px] text-danger/80 hover:text-danger hover:bg-danger/10 transition-colors"
+                    className="flex items-center justify-center p-2 rounded-[6px] text-primary hover:bg-primary/10 transition-colors"
                     title="Log Out"
                   >
                     <span className="material-symbols-outlined text-[18px]">logout</span>
                   </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setOpen(false); setThemeModalOpen(true); }}
+                    aria-label="Theme & Appearance"
+                    className="flex items-center justify-center p-2 rounded-[6px] text-text-muted hover:text-text-main hover:bg-surface-2 transition-colors cursor-pointer"
+                    title="Theme & Appearance"
+                  >
+                    <span className="material-symbols-outlined text-primary text-[20px] leading-none">palette</span>
+                  </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => { setOpen(false); setThemeModalOpen(true); }}
-                  aria-label="Theme & Appearance"
-                  className="flex items-center justify-center p-2 rounded-[6px] text-text-muted hover:text-text-main hover:bg-surface-2 transition-colors cursor-pointer"
-                  title="Theme & Appearance"
-                >
-                  <span className="material-symbols-outlined text-primary text-[20px] leading-none">palette</span>
-                </button>
               </div>
             </div>
           </div>

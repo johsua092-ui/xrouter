@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Modal from "./Modal";
 import Button from "./Button";
+import LogoMark from "./LogoMark";
 import { GITHUB_CONFIG } from "@/shared/constants/config";
 
 // Update notices live in their own banner, so this dialog stays about the repo.
@@ -52,11 +53,9 @@ export default function WelcomeModal() {
                 "radial-gradient(ellipse 70% 100% at 50% 0%, color-mix(in srgb, var(--color-primary) 26%, transparent), transparent 72%)",
             }}
           />
-          <img
-            src="/favicon.svg"
-            alt="X Router"
-            className="relative h-16 w-16 rounded-[6px] border border-border-subtle object-cover"
-          />
+          <div className="relative h-16 w-16 rounded-[6px] border border-border-subtle overflow-hidden p-1 bg-surface-2">
+            <LogoMark className="size-full" />
+          </div>
 
           <div className="relative space-y-2 max-w-sm">
             <p className="text-base font-semibold tracking-tight">

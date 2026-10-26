@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import LogoMark from "@/shared/components/LogoMark";
-import ThemeModal from "@/shared/components/ThemeModal";
 
 function formatTokenLimit(n) {
   const v = Number(n);
@@ -662,24 +661,11 @@ export default function ClaimPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setThemeModalOpen(true)}
-            aria-label="Theme Settings"
-            title="Theme Settings"
-            className="flex items-center justify-center size-8 rounded-[5px] text-text-muted hover:text-text-main hover:bg-surface-2 transition-colors cursor-pointer border border-border/60 hover:border-border"
-          >
-            <span className="material-symbols-outlined text-[17px] leading-none text-primary">palette</span>
-          </button>
-          <div className="flex items-center gap-2 text-[11px] font-mono text-text-muted">
-            <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
-            <span>GATEWAY ONLINE</span>
-          </div>
+        <div className="flex items-center gap-2 text-[11px] font-mono text-text-muted">
+          <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
+          <span>GATEWAY ONLINE</span>
         </div>
       </header>
-
-      <ThemeModal isOpen={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
 
       {/* Main Terminal Frame */}
       <main className="relative z-10 flex-1 flex items-center justify-center p-4 sm:p-6">
