@@ -73,7 +73,8 @@ export default function ProviderDetailPage() {
   const [bulkProxyPoolId, setBulkProxyPoolId] = useState("__none__");
   const [bulkUpdatingProxy, setBulkUpdatingProxy] = useState(false);
   const [providerStrategy, setProviderStrategy] = useState(null);
-  const [providerStickyLimit, setProviderStickyLimit] = useState("");
+  const [providerStickyLimit, setProviderStickyLimit] = useState("1");
+  const [providerProxyRotation, setProviderProxyRotation] = useState("none");
   const [thinkingMode, setThinkingMode] = useState("auto");
   const [autoPing, setAutoPing] = useState({ enabled: false, connections: {}, schedules: {} });
   const [scheduleConnection, setScheduleConnection] = useState(null);
@@ -361,6 +362,7 @@ export default function ProviderDetailPage() {
       const override = (settingsData.providerStrategies || {})[providerId] || {};
       setProviderStrategy(override.fallbackStrategy || null);
       setProviderStickyLimit(override.stickyRoundRobinLimit != null ? String(override.stickyRoundRobinLimit) : "1");
+      setProviderProxyRotation(override.rotateStrategy || "none");
       // Load per-provider thinking config
       const thinkingCfg = (settingsData.providerThinking || {})[providerId] || {};
       setThinkingMode(thinkingCfg.mode || "auto");
@@ -410,17 +412,27 @@ export default function ProviderDetailPage() {
     }
   };
 
-  const saveProviderStrategy = async (strategy, stickyLimit) => {
+  const saveProviderStrategy = async (strategy, stickyLimit, rotateStrategy = providerProxyRotation) => {
     try {
       const settingsRes = await fetch("/api/settings", { cache: "no-store" });
       const settingsData = settingsRes.ok ? await settingsRes.json() : {};
       const current = settingsData.providerStrategies || {};
 
       // Build override: null strategy means remove override, use global
-      const override = {};
+      const override = { ...(current[providerId] || {}) };
       if (strategy) override.fallbackStrategy = strategy;
+      else delete override.fallbackStrategy;
+
       if (strategy === "round-robin" && stickyLimit !== "") {
         override.stickyRoundRobinLimit = Number(stickyLimit) || 3;
+      } else {
+        delete override.stickyRoundRobinLimit;
+      }
+
+      if (rotateStrategy && rotateStrategy !== "none") {
+        override.rotateStrategy = rotateStrategy;
+      } else {
+        delete override.rotateStrategy;
       }
 
       const updated = { ...current };
@@ -1656,6 +1668,27 @@ export default function ProviderDetailPage() {
                   )}
                 </>
               )}
+              {/* Proxy rotation selector */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-text-muted font-medium whitespace-nowrap">Proxy rotation:</span>
+                <select
+                  value={providerProxyRotation}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setProviderProxyRotation(val);
+                    saveProviderStrategy(providerStrategy, providerStickyLimit, val);
+                  }}
+                  className="py-1 px-2 text-xs text-text-main bg-background border border-border rounded-md focus:outline-none focus:border-primary"
+                >
+                  <option value="none">None (per-connection)</option>
+                  <option value="round-robin">Round-robin (live pools)</option>
+                  <option value="random">Random (live pools)</option>
+                </select>
+                {providerProxyRotation !== "none" && (
+                  <span className="text-[11px] text-text-muted italic">live from DB</span>
+                )}
+              </div>
+
               {/* Round Robin toggle */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-text-muted font-medium">Round Robin</span>

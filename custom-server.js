@@ -247,6 +247,18 @@ function toGuardRequest(req) {
 // True when the guard answered the request itself (deny or redirect).
 async function runAuthGuard(req, res) {
   if (GUARD_SKIP.test(normalizedPathname(req.url))) return false;
+
+  // Intercept and auto-redirect typo routes like /dash, /dashb, /dashbc directly to /dashboard
+  const normPath = normalizedPathname(req.url);
+  if (normPath.startsWith("/dash") && !normPath.startsWith("/dashboard")) {
+    const proto = (req.headers && (req.headers["x-9r-forwarded-proto"] || req.headers["x-forwarded-proto"] || req.headers["x-forwarded-protocol"])) || "http";
+    const host = (req.headers && (req.headers["x-9r-forwarded-host"] || req.headers["x-forwarded-host"] || req.headers["host"])) || "localhost";
+    const targetUrl = `${proto}://${host}/dashboard`;
+    res.statusCode = 307;
+    res.setHeader("Location", targetUrl);
+    res.end();
+    return true;
+  }
   const guard = await getGuardModule();
   if (!guard) {
     if (!runAuthGuard._warned) {

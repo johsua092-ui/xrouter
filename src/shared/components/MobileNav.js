@@ -247,7 +247,7 @@ export default function MobileNav() {
                     <span className="material-symbols-outlined text-[18px]">logout</span>
                   </button>
                 )}
-                <HeaderMenu onLogout={handleLogout} />
+                {/* HeaderMenu removed from mobile drawer to eliminate duplicate portal instance */}
               </div>
             </div>
           </div>

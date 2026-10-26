@@ -286,7 +286,33 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       setAffinityConnection(providerId, conversationKey, connection.id);
     }
 
-    const resolvedProxy = await resolveConnectionProxyConfig(connection.providerSpecificData || {});
+    let connectionSpecificData = connection.providerSpecificData || {};
+
+    // Provider-level proxy rotation for standard providers (Round-robin live pools / Random)
+    if (providerOverride.rotateStrategy && providerOverride.rotateStrategy !== "none") {
+      try {
+        const { getProxyPools } = await import("@/lib/db/repos/proxyPoolsRepo");
+        const allPools = await getProxyPools({ isActive: true });
+        const validPools = allPools.filter((p) => p.proxyUrl);
+        const eligiblePools = validPools.filter((p) => !isProxyQuarantined(p.id));
+        const activeList = eligiblePools.length > 0 ? eligiblePools : validPools;
+
+        if (activeList.length > 0) {
+          const poolIds = activeList.map((p) => p.id);
+          const pickedPoolId = pickProxyPoolId(poolIds, providerOverride.rotateStrategy, providerId) || poolIds[0];
+          if (pickedPoolId) {
+            connectionSpecificData = {
+              ...connectionSpecificData,
+              proxyPoolId: pickedPoolId,
+            };
+          }
+        }
+      } catch (err) {
+        log.warn("AUTH", `${provider} | proxy rotation resolution failed: ${err.message}`);
+      }
+    }
+
+    const resolvedProxy = await resolveConnectionProxyConfig(connectionSpecificData);
 
     return {
       authType: connection.authType,

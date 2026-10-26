@@ -29,6 +29,13 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **Robust Typo Auto-Redirect (/dashbc -> /dashboard)**:
+  - Added HTTP-level 307 interceptor in `custom-server.js` ensuring that requests to `/dashbc`, `/dashb`, etc., redirect directly to `/dashboard` before hitting Next.js 404 or throwing browser errors.
+- **Client-Side Exception Fix (UpdateBanner State Sync)**:
+  - Synchronized `isUpdating` state in `UpdateBanner.js` preventing runtime reference errors and white-screen crashes on client devices.
+- **Provider-Level Dynamic Proxy Rotation (Round-Robin Live Pools)**:
+  - Implemented dynamic "Proxy rotation: Round-robin (live pools) / live from DB" for standard authenticated providers.
+  - Automatically queries active, healthy proxy pools from SQLite and rotates upstream egress per-request without manual connection rebinding.
 - **OpenCode Free Tier Resilience & Auto-Rotation**:
   - Automatically detect upstream `FreeUsageLimitError` and evict stuck sessions immediately, re-minting clean credentials to bypass throttles without getting stuck in 429 loops.
 - **Theme Centralization (4-Grid Icon Only)**:
