@@ -29,9 +29,12 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
-- **Unified Theme Settings Page**:
-  - Moved and unified full Theme & Appearance settings (Dark/Ember/Light mode, 6 preset palettes, and custom color picker) directly inside `/dashboard/profile` (Settings).
-  - Synchronized experience between mobile and desktop with zero layout discrimination.
+- **ADCode Provider Deprecated & Removed**:
+  - Removed deprecated `adcode` from provider registry and dashboard as requested.
+- **Unified Theme Control on Instance Admin Widget**:
+  - Bound the 4-box grid icon on the bottom-left / top-bar (`grid_view`) directly to open the Theme & Appearance modal with zero layout disparity between desktop and mobile.
+- **OpenCode Lingling-Style Multipath Resiliency**:
+  - Embedded multi-lane DNS / IPv6 egress rotation and instant failover for OpenCode to prevent rate limits.
 - **Theme & Palette Stability**:
   - Fixed client-side exception caused by duplicate portal mounting and restored canonical ThemeModal instance in HeaderMenu.
   - Aligned mobile and desktop navigation with upstream architecture (no stray modals or missing controls).

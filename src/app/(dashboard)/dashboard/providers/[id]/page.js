@@ -173,7 +173,7 @@ export default function ProviderDetailPage() {
       }
     : (OAUTH_PROVIDERS[providerId] || APIKEY_PROVIDERS[providerId] || FREE_PROVIDERS[providerId] || FREE_TIER_PROVIDERS[providerId] || WEB_COOKIE_PROVIDERS[providerId]);
   const authModes = providerInfo?.authModes || [];
-  const isOAuth = providerId === "adcode" || !!OAUTH_PROVIDERS[providerId] || (!!FREE_PROVIDERS[providerId] && !authModes.includes("apikey") && providerInfo?.authType !== "apikey") || authModes.includes("oauth");
+  const isOAuth = !!OAUTH_PROVIDERS[providerId] || (!!FREE_PROVIDERS[providerId] && !authModes.includes("apikey") && providerInfo?.authType !== "apikey") || authModes.includes("oauth");
   const supportsApiKeyAuth = !!APIKEY_PROVIDERS[providerId] || authModes.includes("apikey") || providerInfo?.authType === "apikey";
   const isFreeNoAuth = !!(FREE_PROVIDERS[providerId]?.noAuth || AI_PROVIDERS[providerId]?.noAuth);
   const staticModels = getModelsByProviderId(providerId);
@@ -1973,14 +1973,7 @@ export default function ProviderDetailPage() {
           onClose={() => setShowIFlowCookieModal(false)}
         />
       )}
-      {providerId === "adcode" && (
-        <AdcodeAuthModal
-          isOpen={showAdcodeModal}
-          providerInfo={providerInfo}
-          onSuccess={handleOAuthSuccess}
-          onClose={() => setShowAdcodeModal(false)}
-        />
-      )}
+      {/* ADCODE REMOVED */}
       <AddApiKeyModal
         isOpen={showAddApiKeyModal}
         provider={providerId}

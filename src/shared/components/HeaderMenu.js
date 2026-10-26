@@ -71,9 +71,9 @@ export default function HeaderMenu({ onLogout }) {
     <>
       <div className="relative" ref={menuRef}>
         <button
-          onClick={() => setIsOpen((v) => !v)}
-          className="flex items-center justify-center p-2 rounded-[6px] text-text-muted hover:text-text-main hover:bg-surface-2 transition-all"
-          title="Menu"
+          onClick={() => setThemeModalOpen(true)}
+          className="flex items-center justify-center p-2 rounded-[6px] text-text-muted hover:text-text-main hover:bg-surface-2 transition-all cursor-pointer"
+          title="Theme & Appearance"
         >
           <span className="material-symbols-outlined">grid_view</span>
         </button>
