@@ -133,12 +133,33 @@ function PhotoshopColorPicker({ color, onChange, onApply, isActive }) {
     updateFromHsb(hue, newSat, newBri);
   };
 
+  const handlePointerDown = (e) => {
+    isDraggingSpectrum.current = true;
+    handleSpectrumMove(e);
+    if (e.target.setPointerCapture && e.pointerId !== undefined) {
+      try { e.target.setPointerCapture(e.pointerId); } catch {}
+    }
+  };
+
+  const handlePointerMove = (e) => {
+    if (isDraggingSpectrum.current) {
+      handleSpectrumMove(e);
+    }
+  };
+
+  const handlePointerUp = (e) => {
+    isDraggingSpectrum.current = false;
+    if (e.target.releasePointerCapture && e.pointerId !== undefined) {
+      try { e.target.releasePointerCapture(e.pointerId); } catch {}
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2.5 p-3 rounded-[6px] border border-border bg-surface-2/70 select-none">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-          <span className="material-symbols-outlined text-[15px]">colorize</span>
-          Photoshop Studio Color Picker
+          <span className="material-symbols-outlined text-[15px]">palette</span>
+          X Router Custom Studio Palette
         </span>
         <button
           type="button"
@@ -159,31 +180,21 @@ function PhotoshopColorPicker({ color, onChange, onApply, isActive }) {
         <div className="sm:col-span-7 flex flex-col gap-2">
           <div
             ref={spectrumRef}
-            onMouseDown={(e) => {
-              isDraggingSpectrum.current = true;
-              handleSpectrumMove(e);
-              const onMove = (ev) => isDraggingSpectrum.current && handleSpectrumMove(ev);
-              const onUp = () => {
-                isDraggingSpectrum.current = false;
-                window.removeEventListener("mousemove", onMove);
-                window.removeEventListener("mouseup", onUp);
-              };
-              window.addEventListener("mousemove", onMove);
-              window.addEventListener("mouseup", onUp);
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onClick={handleSpectrumMove}
+            style={{
+              backgroundColor: `hsl(${hue}, 100%, 50%)`,
+              touchAction: "none",
             }}
-            onTouchStart={(e) => {
-              isDraggingSpectrum.current = true;
-              handleSpectrumMove(e);
-            }}
-            onTouchMove={(e) => isDraggingSpectrum.current && handleSpectrumMove(e)}
-            onTouchEnd={() => { isDraggingSpectrum.current = false; }}
-            style={{ backgroundColor: `hsl(${hue}, 100%, 50%)` }}
             className="relative h-36 w-full rounded-[4px] overflow-hidden cursor-crosshair shadow-inner border border-black/20"
           >
             {/* White to transparent horizontal gradient (Saturation) */}
-            <div className="absolute inset-0 bg-gradient-to-r from-white to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-white to-transparent pointer-events-none" />
             {/* Transparent to black vertical gradient (Brightness) */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent pointer-events-none" />
 
             {/* Target circular picker cursor */}
             <div

@@ -29,6 +29,9 @@
   - Added zero-auth anonymous Ptero AI provider with automatic nonce extraction and client-side token minting.
 - **Master Jailbreak Kernel (4-in-1 Vault)**:
   - Unified Multi-Layer Kernel with TrustMeBro tool output cloaking in an encrypted, tamper-proof vault.
+- **X Router Custom Studio Palette Renamed & Touch Fix**:
+  - Rebranded color picker header to **X Router Custom Studio Palette** and replaced icon with `palette`.
+  - Switched interaction to Pointer Events with `setPointerCapture` and `touch-action: none` to fix unclickable/frozen color picker on mobile and desktop browsers.
 - **Photoshop-Style Custom Palette Studio**:
   - Upgraded Custom Palette into a full Photoshop-style color picker featuring a 2D Saturation/Brightness spectrum canvas, rainbow Hue slider, live Swatch comparison, RGB/HSB telemetry breakdown, and Hex input.
   - Automatically drives real-time reactive theme variables and reactive SVG logos without page refreshes.
