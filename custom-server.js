@@ -283,6 +283,18 @@ async function runAuthGuard(req, res) {
   return true;
 }
 
+function getLanIp() {
+  try {
+    const os = require("node:os");
+    for (const ifaces of Object.values(os.networkInterfaces())) {
+      for (const i of ifaces || []) {
+        if (i.family === "IPv4" && !i.internal) return i.address;
+      }
+    }
+  } catch {}
+  return null;
+}
+
 // Wrap Next standalone HTTP server: derive client IP from the TCP socket
 // (unspoofable) and strip client-supplied forwarding headers so downstream
 // rate-limiting keys on the real peer address instead of attacker-controlled XFF.
@@ -360,6 +372,14 @@ http.createServer = (...args) => {
   server.headersTimeout = 66000;
   server.maxRequestsPerSocket = 0;
   server.once("listening", () => {
+    try {
+      const lanIp = getLanIp();
+      const addr = server.address();
+      const p = (addr && typeof addr === "object" && addr.port) || process.env.PORT || 20128;
+      if (lanIp) {
+        console.log(`\x1b[33m⚠ Network-exposed: reachable at http://${lanIp}:${p} (bound 0.0.0.0).\x1b[0m`);
+      }
+    } catch {}
     startBackgroundTokenRefreshFromCustomServer();
     startAutoBackupFromCustomServer();
     startDatabaseMaintenanceFromCustomServer();
