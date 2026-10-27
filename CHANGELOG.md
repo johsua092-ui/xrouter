@@ -2,10 +2,11 @@
 
 ## Releases & New Features
 - **Adaptive SVG & Palette Tinting for Custom Compatible Providers**:
-  - Implemented official vector SVG squircle marks for Custom OpenAI, Anthropic, and Moonshot Compatible providers.
-  - Dynamically harmonized squircle borders and symbols across 6 preset stock palettes (Ember Orange, Electric Blue, Emerald Green, Violet Purple, Ruby Rose, Cyber Cyan) and custom hex palettes.
-  - Fixed dark/light mode rendering: squircle background dynamically toggles (#0a0a0a in dark, #ffffff in light) with sharp high-contrast border outlines.
-  - Added theme palette hairline accent on custom provider cards.
+  - Replaced static <img> file references with `CustomCompatibleIcon` component that directly inherits active theme variables.
+  - In light mode: clean white background (`#ffffff`) with crisp black squircle border outline (`stroke="black"`).
+  - In dark mode: dark sleek background (`#0a0a0a`) with white squircle border outline (`stroke="white"`).
+  - Brand symbols (OpenAI flower, Anthropic delta, Moonshot lines) dynamically render in active theme color (`var(--color-primary)`) across all 6 stock palettes and custom hex palettes.
+  - Fixed dark mode icon leaking into light mode.
 - **Provider Identity & Metadata Fixes**:
   - Fixed MoonshotAI Compatible cards displaying "OpenAI Compatible" subtitle; now correctly labeled as "MoonshotAI Compatible".
   - Dedicated custom Moonshot vector badge loaded for all Moonshot/Kimi compatible endpoints.

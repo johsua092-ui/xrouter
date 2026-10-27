@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import CustomCompatibleIcon from "@/shared/components/CustomCompatibleIcon";
 import { getProviderIconSrc, markProviderIconMissing } from "@/shared/utils/providerIcon";
 import { getCustomLogo } from "@/shared/utils/providerLogo";
 import { buildStudioTargetIndex } from "@/shared/utils/studioModelVisibility";
@@ -1492,7 +1493,13 @@ export default function ProviderDetailPage() {
             className="flex size-12 shrink-0 items-center justify-center rounded-lg"
             style={{ backgroundColor: `${providerInfo.color}15` }}
           >
-            {headerImgError || !getHeaderIconPath() ? (
+            {/custom-openai/i.test(getHeaderIconPath()) ? (
+              <CustomCompatibleIcon variant="openai" size={48} className="rounded-lg" />
+            ) : /custom-anthropic/i.test(getHeaderIconPath()) ? (
+              <CustomCompatibleIcon variant="anthropic" size={48} className="rounded-lg" />
+            ) : /custom-moonshot/i.test(getHeaderIconPath()) ? (
+              <CustomCompatibleIcon variant="moonshot" size={48} className="rounded-lg" />
+            ) : headerImgError || !getHeaderIconPath() ? (
               <span className="text-sm font-bold text-primary">
                 {providerInfo.textIcon || providerInfo.id.slice(0, 2).toUpperCase()}
               </span>
@@ -1502,15 +1509,7 @@ export default function ProviderDetailPage() {
                 alt={providerInfo.name}
                 width={48}
                 height={48}
-                className={cn(
-                  "max-h-12 max-w-12 rounded-lg object-contain",
-                  /custom-(openai|anthropic|moonshot)/i.test(getHeaderIconPath()) && "dark:brightness-100"
-                )}
-                style={{
-                  filter: /custom-(openai|anthropic|moonshot)/i.test(getHeaderIconPath())
-                    ? "var(--logo-filter, none)"
-                    : undefined,
-                }}
+                className="max-h-12 max-w-12 rounded-lg object-contain"
                 sizes="48px"
                 onError={() => {
                   markProviderIconMissing(providerInfo.id);

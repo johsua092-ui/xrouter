@@ -48,20 +48,6 @@
   /* Primary (legacy alias for backward compat with existing components) */
   --color-primary: var(--color-brand-500);
   --color-primary-hover: var(--color-brand-600);
-.dark .squircle-bg {
-  fill: #0a0a0a !important;
-  stroke: #ffffff !important;
-}
-:root:not(.dark) .squircle-bg {
-  fill: #ffffff !important;
-  stroke: #0a0a0a !important;
-}
-.dark .symbol-fg {
-  fill: var(--color-primary, #E56A4A) !important;
-}
-:root:not(.dark) .symbol-fg {
-  fill: var(--color-primary, #E56A4A) !important;
-}
 
   /* Surfaces & backgrounds (light) */
   --color-bg: #FDFAF6;
