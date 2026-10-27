@@ -921,10 +921,15 @@ function ProviderCard({
   const isCompatible = isCompatibleOverride ?? providerId.startsWith(OPENAI_COMPATIBLE_PREFIX);
   const isAnthropicCompatible = isAnthropicCompatibleOverride ?? providerId.startsWith(ANTHROPIC_COMPATIBLE_PREFIX);
 
+  const isMoonshot =
+    provider.brand === "moonshot" ||
+    providerId.startsWith("moonshot-") ||
+    /moonshot|kimi/i.test(provider.name || "");
+
   const getIconPath = () => {
     const customLogo = getCustomLogo(provider);
     if (customLogo) return customLogo;
-    if (isCompatible && (provider.brand === "moonshot" || /moonshot|kimi/i.test(provider.name || "")))
+    if (isMoonshot)
       return "/providers/custom-moonshot.svg";
     if (isCompatible)
       return "/providers/custom-openai.svg";
@@ -932,17 +937,19 @@ function ProviderCard({
     return getProviderIconSrc(provider.id) || `/providers/${provider.id}.png`;
   };
 
-  const typeLabel = isCompatible
-    ? (provider.apiType === "responses" ? "OpenAI Responses" : "OpenAI Compatible")
-    : isAnthropicCompatible
-      ? "Anthropic Compatible"
-      : authType === "oauth"
-        ? "OAuth 2.0"
-        : authType === "free"
-          ? "Free / Public"
-          : authType === "cookie"
-            ? "Session Cookie"
-            : "API Key";
+  const typeLabel = isMoonshot
+    ? "MoonshotAI Compatible"
+    : isCompatible
+      ? (provider.apiType === "responses" ? "OpenAI Responses" : "OpenAI Compatible")
+      : isAnthropicCompatible
+        ? "Anthropic Compatible"
+        : authType === "oauth"
+          ? "OAuth 2.0"
+          : authType === "free"
+            ? "Free / Public"
+            : authType === "cookie"
+              ? "Session Cookie"
+              : "API Key";
 
   return (
     <Link href={`/dashboard/providers/${providerId}`} className="group min-w-0 block h-full">
@@ -958,7 +965,9 @@ function ProviderCard({
         <span
           className={cn(
             "absolute top-0 inset-x-0 h-[2px] transition-colors",
-            connected > 0 ? "bg-primary shadow-[0_0_8px_rgba(var(--color-primary-rgb,229,106,74),0.6)]" : "bg-transparent group-hover:bg-border"
+            (connected > 0 || isCompatible || isAnthropicCompatible || isMoonshot)
+              ? "bg-primary shadow-[0_0_8px_rgba(var(--color-primary-rgb,229,106,74),0.6)]"
+              : "bg-transparent group-hover:bg-border"
           )}
           aria-hidden="true"
         />

@@ -1456,10 +1456,15 @@ export default function ProviderDetailPage() {
     );
   }
 
+  const isMoonshot =
+    (providerInfo.brand === "moonshot" ||
+    providerId.startsWith("moonshot-") ||
+    /moonshot|kimi/i.test(providerInfo.name || ""));
+
   // Determine icon path: OpenAI Compatible providers use specialized icons
   const getHeaderIconPath = () => {
     if (getCustomLogo(providerInfo)) return getCustomLogo(providerInfo);
-    if (isOpenAICompatible && (providerInfo.brand === "moonshot" || /moonshot|kimi/i.test(providerInfo.name || ""))) {
+    if (isMoonshot) {
       return "/providers/custom-moonshot.svg";
     }
     if (isOpenAICompatible) {
@@ -1566,9 +1571,9 @@ export default function ProviderDetailPage() {
         <Card>
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <h2 className="text-lg font-semibold">{isAnthropicCompatible ? "Anthropic Compatible Details" : (providerNode?.brand === "moonshot" || /(moonshot|kimi)/i.test(providerNode?.name || "")) ? "MoonshotAI Compatible Details" : "OpenAI Compatible Details"}</h2>
-              <p className="break-all text-sm text-text-muted">
-                {isAnthropicCompatible ? "Messages API" : (providerNode?.brand === "moonshot" || /(moonshot|kimi)/i.test(providerNode?.name || "")) ? "Chat Completions (Kimi)" : (providerNode.apiType === "responses" ? "Responses API" : "Chat Completions")} · {(providerNode.baseUrl || "").replace(/\/$/, "")}/
+              <h2 className="text-lg font-semibold">{isAnthropicCompatible ? "Anthropic Compatible Details" : isMoonshot ? "MoonshotAI Compatible Details" : "OpenAI Compatible Details"}</h2>
+              <p className="text-xs text-text-muted mt-1 font-mono">
+                {isAnthropicCompatible ? "Messages API" : isMoonshot ? "Chat Completions (Kimi)" : (providerNode.apiType === "responses" ? "Responses API" : "Chat Completions")} · {(providerNode.baseUrl || "").replace(/\/$/, "")}/
                 {isAnthropicCompatible ? "messages" : (providerNode.apiType === "responses" ? "responses" : "chat/completions")}
               </p>
             </div>

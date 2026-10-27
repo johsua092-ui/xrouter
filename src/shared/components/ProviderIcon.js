@@ -50,8 +50,7 @@ export default function ProviderIcon({
       style={{
         filter: isCustomCompatible ? "var(--logo-filter, none)" : undefined,
       }}
-      loading="lazy"
-      decoding="async"
+      loading="eager"
       onError={() => {
         const m = effectiveSrc.match(/^\/providers\/([^/]+)\.png$/i);
         if (m) markProviderIconMissing(m[1]);

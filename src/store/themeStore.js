@@ -8,11 +8,11 @@ export const THEME_IDS = ["ember", "dark", "light"];
 
 export const ACCENT_PALETTES = [
   { id: "orange", label: "Ember Orange", primary: "#E56A4A", hover: "#c04a2c", filter: "none" },
-  { id: "blue", label: "Electric Blue", primary: "#2563EB", hover: "#1D4ED8", filter: "hue-rotate(205deg) saturate(1.4)" },
-  { id: "emerald", label: "Emerald Green", primary: "#059669", hover: "#047857", filter: "hue-rotate(130deg) saturate(1.2)" },
-  { id: "purple", label: "Violet Purple", primary: "#7C3AED", hover: "#6D28D9", filter: "hue-rotate(245deg) saturate(1.3)" },
-  { id: "rose", label: "Ruby Rose", primary: "#E11D48", hover: "#BE123C", filter: "hue-rotate(335deg) saturate(1.3)" },
-  { id: "cyan", label: "Cyber Cyan", primary: "#0891B2", hover: "#0E7490", filter: "hue-rotate(175deg) saturate(1.4)" },
+  { id: "blue", label: "Electric Blue", primary: "#2563EB", hover: "#1D4ED8", filter: "hue-rotate(195deg) saturate(1.8)" },
+  { id: "emerald", label: "Emerald Green", primary: "#059669", hover: "#047857", filter: "hue-rotate(115deg) saturate(1.5)" },
+  { id: "purple", label: "Violet Purple", primary: "#7C3AED", hover: "#6D28D9", filter: "hue-rotate(240deg) saturate(1.7)" },
+  { id: "rose", label: "Ruby Rose", primary: "#E11D48", hover: "#BE123C", filter: "hue-rotate(330deg) saturate(1.6)" },
+  { id: "cyan", label: "Cyber Cyan", primary: "#0891B2", hover: "#0E7490", filter: "hue-rotate(170deg) saturate(1.8)" },
 ];
 
 export function darkenColor(hex, percent = 15) {
@@ -42,7 +42,7 @@ export function hexToHueRotate(hex) {
     h = Math.round(h * 60);
   }
   const delta = (h - 12 + 360) % 360;
-  return `hue-rotate(${delta}deg) saturate(1.3)`;
+  return `hue-rotate(${delta}deg) saturate(1.4)`;
 }
 
 const useThemeStore = create(
