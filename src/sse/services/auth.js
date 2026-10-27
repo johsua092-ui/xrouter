@@ -49,7 +49,12 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     const providerId = resolveProviderId(provider);
 
     // Inject a virtual connection for no-auth free providers (with optional proxy pool from settings)
-    if (FREE_PROVIDERS[providerId]?.noAuth || AI_PROVIDERS[providerId]?.noAuth) {
+    const isNoAuth =
+      providerId === "opencode" ||
+      Boolean(FREE_PROVIDERS[providerId]?.noAuth) ||
+      Boolean(AI_PROVIDERS[providerId]?.noAuth);
+
+    if (isNoAuth) {
       if (excludeSet.has("noauth") || excludeSet.has("noauth-direct")) return null;
       const settings = await getSettings();
       const override = (settings.providerStrategies || {})[providerId] || {};
@@ -88,9 +93,22 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
           pickedId = fallbackPoolIds.length > 0 ? fallbackPoolIds[0] : null;
         }
 
-        // When proxy/rotation is ON, fail when all proxies are exhausted (never leak/fallback to direct VPS IP)
+        // When proxy/rotation is ON but pool is empty, fail-open to direct so requests never hard-abort
         if (!pickedId) {
-          return null;
+          return {
+            id: "noauth-direct",
+            connectionId: "noauth-direct",
+            connectionName: "Public (Direct)",
+            isActive: true,
+            accessToken: "public",
+            providerSpecificData: {
+              connectionProxyEnabled: false,
+              connectionProxyUrl: "",
+              connectionNoProxy: "",
+              connectionProxyPoolId: null,
+              vercelRelayUrl: "",
+            },
+          };
         }
       } else {
         // Proxy is OFF: use direct VPS connection as usual
