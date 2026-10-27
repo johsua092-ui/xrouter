@@ -102,6 +102,35 @@ export function resolveRetryEntry(entry) {
   };
 }
 
+function envChoice(name, validChoices, def) {
+  const raw = process.env[name];
+  if (raw && validChoices.includes(raw.toLowerCase())) return raw.toLowerCase();
+  return def;
+}
+
+export const EGRESS_CONFIG = {
+  mode: envChoice("EGRESS_PROBE_MODE", ["off", "auto", "always"], "auto"),
+  probeUrl: envUrl("EGRESS_PROBE_URL", "https://api64.ipify.org?format=json"),
+  probeTimeoutMs: envMs("EGRESS_PROBE_TIMEOUT_MS", 2500),
+  ipCacheTtlMs: envMs("EGRESS_IP_CACHE_TTL_MS", 10 * 60 * 1000),
+  ipStaleTtlMs: envMs("EGRESS_IP_STALE_TTL_MS", 60 * 60 * 1000),
+  directRecheckMs: envMs("EGRESS_DIRECT_RECHECK_MS", 15 * 1000),
+  minCooldownMs: envMs("EGRESS_MIN_COOLDOWN_MS", 1000),
+  maxCooldownMs: envMs("EGRESS_MAX_COOLDOWN_MS", 24 * 60 * 60 * 1000),
+  defaultCooldownMs: envMs("EGRESS_DEFAULT_COOLDOWN_MS", 60 * 1000),
+  limitMessage: envUrl(
+    "EGRESS_LIMIT_MESSAGE",
+    "Free usage limit reached on the current egress. Retry after the indicated delay or switch proxies."
+  ),
+};
+
+export const OPENCODE_TRANSPORT_CONFIG = {
+  mode: envChoice("OPENCODE_TRANSPORT", ["off", "auto"], "auto"),
+  bunBin: envUrl("OPENCODE_BUN_BIN", "bun"),
+  readyTimeoutMs: envMs("OPENCODE_TRANSPORT_READY_TIMEOUT_MS", 8000),
+  failureBackoffMs: envMs("OPENCODE_TRANSPORT_BACKOFF_MS", 5 * 60 * 1000),
+};
+
 // Requests containing these texts will bypass provider
 export const SKIP_PATTERNS = [
   "Please write a 5-10 word title for the following conversation:"

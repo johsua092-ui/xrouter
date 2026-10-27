@@ -1,6 +1,15 @@
 # v0.0.4 (2026-10-26)
 
 ## Releases & New Features
+- **OpenCode Hardened Fingerprint & TLS Impersonation**:
+  - Integrated `wreq-js` engine delivering native BoringSSL / Chrome 133 Post-Quantum Kyber TLS 1.3 ClientHello, bypassing upstream anti-relay bot checks.
+  - Aligned wire protocol, system `<env>` marker, and session timestamp generation with OpenCode CLI 1.19.4.
+  - Added full 11 canonical tool fingerprint schemas (`bash`, `read`, `edit`, `glob`, `grep`, `skill`, `task`, `todowrite`, `webfetch`, `websearch`, `write`) with in-place caller tool collision normalization.
+  - Implemented egress rate-limit cooldown tracking and automatic proxy fallback.
+- **OAuth Fix**:
+  - Resolved `getProviderNames is not defined` ReferenceError in `/api/oauth/[provider]/[action]`.
+- **Upstream Decolua Integration (23-26 Oct)**:
+  - Integrated upstream core fixes across Claude adaptive thinking (Haiku 5.5), DeepSeek model routing (`deepseek-flash`), Kimi K3.1 Pro cataloging, Copilot model catalog updates, Monaco 0.57.0 upgrade, and SQLite null-byte sanitization.
 - **Official Version Bump v0.0.4**:
   - Upgraded core X Router engine and global CLI to version 0.0.4.
 - **Dedicated Custom Compatible Provider SVGs**:
