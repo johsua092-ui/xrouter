@@ -27,8 +27,8 @@ const ICON_ALIASES = {
 };
 
 const TYPE_PREFIX_ALIASES = {
-  "openai-compatible-": "openai",
-  "anthropic-compatible-": "anthropic",
+  "openai-compatible-": "custom-openai.svg",
+  "anthropic-compatible-": "custom-anthropic.svg",
   "custom-embedding-": "selfhosted-embedding",
 };
 
@@ -59,7 +59,9 @@ export function resolveProviderIconId(providerId) {
 /** `/providers/{id}.png?v=0.5.155` or null when previously failed. */
 export function getProviderIconSrc(providerId) {
   const id = resolveProviderIconId(providerId);
-  return id ? `/providers/${id}.png?v=0.5.155` : null;
+  if (!id) return null;
+  if (id.endsWith(".svg")) return `/providers/${id}`;
+  return `/providers/${id}.png?v=0.5.155`;
 }
 
 /** Call from img onError so later mounts skip the request. */

@@ -5,11 +5,9 @@ import PropTypes from "prop-types";
 import { getProviderIconSrc, markProviderIconMissing } from "@/shared/utils/providerIcon";
 
 function resolveSrc(src, providerId) {
+  if (src) return src;
   if (providerId) return getProviderIconSrc(providerId);
-  if (!src) return null;
-  const m = String(src).match(/^\/providers\/([^/?]+)\.png/i);
-  if (m) return getProviderIconSrc(m[1]);
-  return src;
+  return null;
 }
 
 export default function ProviderIcon({
