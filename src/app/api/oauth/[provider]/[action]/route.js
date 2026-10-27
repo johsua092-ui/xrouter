@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import {
   getProvider,
+  getProviderNames,
   generateAuthData,
   exchangeTokens,
   requestDeviceCode,
