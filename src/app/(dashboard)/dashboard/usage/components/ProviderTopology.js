@@ -115,6 +115,7 @@ function RouterNode({ data }) {
         src="/favicon.svg"
         alt="X Router"
         className={`w-6 h-6 mr-2 ${powering ? "topology-router-icon" : ""}`}
+        style={{ filter: "var(--logo-filter, none)" }}
         loading="lazy"
         decoding="async"
       />

@@ -145,7 +145,7 @@ function applyTheme(theme, accent = "orange", customColor = "#E56A4A") {
     root.style.setProperty("--color-primary-hover", hover);
     root.style.setProperty("--brand-500", customColor);
     root.style.setProperty("--brand-600", hover);
-    root.style.setProperty("--logo-filter", "none");
+    root.style.setProperty("--logo-filter", hexToHueRotate(customColor));
     return;
   }
 
@@ -156,7 +156,7 @@ function applyTheme(theme, accent = "orange", customColor = "#E56A4A") {
   root.style.setProperty("--color-primary-hover", palette.hover);
   root.style.setProperty("--brand-500", palette.primary);
   root.style.setProperty("--brand-600", palette.hover);
-  root.style.setProperty("--logo-filter", "none");
+  root.style.setProperty("--logo-filter", palette.filter || "none");
 }
 
 export default useThemeStore;

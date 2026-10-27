@@ -4,7 +4,10 @@ import React from "react";
 
 export default function LogoMark({ className = "size-full" }) {
   return (
-    <span className={`relative inline-flex items-center justify-center ${className}`.trim()}>
+    <span
+      className={`relative inline-flex items-center justify-center text-primary ${className}`.trim()}
+      style={{ filter: "var(--logo-filter, none)" }}
+    >
       <svg
         viewBox="0 0 100 100"
         width="100%"
@@ -13,13 +16,6 @@ export default function LogoMark({ className = "size-full" }) {
         xmlns="http://www.w3.org/2000/svg"
         className="size-full overflow-hidden block"
       >
-        <defs>
-          <linearGradient id="xr-logo-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#E25539" />
-            <stop offset="100%" stopColor="#EB6446" />
-          </linearGradient>
-        </defs>
-
         {/* Squircle container background */}
         <rect
           x="4"
@@ -32,7 +28,7 @@ export default function LogoMark({ className = "size-full" }) {
         />
 
         {/* 4 Crossing Arrow Arms */}
-        <g stroke="var(--color-brand-500, url(#xr-logo-gradient))" strokeLinecap="round" strokeWidth="7.5">
+        <g stroke="currentColor" strokeLinecap="round" strokeWidth="7.5">
           <line x1="26" y1="74" x2="44" y2="56" />
           <line x1="26" y1="26" x2="44" y2="44" />
           <line x1="56" y1="44" x2="72" y2="28" />
@@ -40,15 +36,15 @@ export default function LogoMark({ className = "size-full" }) {
         </g>
 
         {/* Arrowheads */}
-        <path d="M63 23 H77 V37 L70 30 Z" fill="var(--color-brand-500, #EB6446)" />
-        <path d="M77 63 V77 H63 L70 70 Z" fill="var(--color-brand-500, #EB6446)" />
+        <path d="M63 23 H77 V37 L70 30 Z" fill="currentColor" />
+        <path d="M77 63 V77 H63 L70 70 Z" fill="currentColor" />
 
         {/* Center Hub */}
         <path
           fillRule="evenodd"
           clipRule="evenodd"
           d="M50 39.5 C44.2 39.5 39.5 44.2 39.5 50 C39.5 55.8 44.2 60.5 50 60.5 C55.8 60.5 60.5 55.8 60.5 50 C60.5 44.2 55.8 39.5 50 39.5 Z M50 45 C47.2 45 45 47.2 45 50 C45 52.8 47.2 55 50 55 C52.8 55 55 52.8 55 50 C55 47.2 52.8 45 50 45 Z"
-          fill="var(--color-brand-500, url(#xr-logo-gradient))"
+          fill="currentColor"
         />
       </svg>
     </span>
