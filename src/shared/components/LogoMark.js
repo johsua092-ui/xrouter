@@ -8,7 +8,6 @@ export default function LogoMark({ className = "size-full" }) {
       className={`relative inline-flex items-center justify-center ${className}`.trim()}
       style={{
         color: "var(--color-primary, #E56A4A)",
-        filter: "var(--logo-filter, none)",
       }}
     >
       <svg
