@@ -129,31 +129,31 @@ export default function UpdateBanner({ pollMs = POLL_MS }) {
   return (
     <>
       {visible && (
-        <div className="mx-6 lg:mx-10 mb-4 max-w-7xl slide-in-top">
-          <div className="flex flex-col gap-2.5 rounded-[6px] border border-warning-border bg-warning-bg px-4 py-3 sm:flex-row sm:items-center">
-            <span className="material-symbols-outlined shrink-0 text-[20px] text-warning">system_update_alt</span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-warning">
-                {info.behindBy ? `Update available: ${info.behindBy} commit${info.behindBy > 1 ? "s" : ""} behind` : `Update available: ${info.latestVersion}`}
-              </p>
-              <p className="text-xs text-text-muted">{summaryFor(info)}</p>
-              {Array.isArray(info.releaseNotes) && info.releaseNotes.length > 0 && (
-                <ul className="mt-1 space-y-0.5">
-                  {info.releaseNotes.slice(0, 3).map((note) => (
-                    <li key={note} className="truncate text-xs text-text-muted" title={note}>{note}</li>
-                  ))}
-                </ul>
-              )}
+        <div className="mx-4 sm:mx-6 lg:mx-10 my-3 max-w-7xl slide-in-top">
+          <div className="flex flex-col gap-3 rounded-[6px] border border-warning-border bg-warning-bg p-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5 min-w-0">
+              <span className="material-symbols-outlined shrink-0 text-[20px] text-warning mt-0.5 sm:mt-0">system_update_alt</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-warning">
+                  {info.behindBy ? `Update available: ${info.behindBy} commit${info.behindBy > 1 ? "s" : ""} behind` : `Update available: ${info.latestVersion}`}
+                </p>
+                <p className="text-xs text-text-muted">{summaryFor(info)}</p>
+                {Array.isArray(info.releaseNotes) && info.releaseNotes.length > 0 && (
+                  <ul className="mt-1 space-y-0.5">
+                    {info.releaseNotes.slice(0, 3).map((note) => (
+                      <li key={note} className="truncate text-xs text-text-muted" title={note}>{note}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <code className="hidden select-all overflow-x-auto whitespace-nowrap rounded-lg border border-border-subtle bg-bg px-2.5 py-1.5 font-mono text-[11px] text-text-muted sm:block">
-                {installCmd}
-              </code>
+            <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 justify-end">
               <Button
                 variant="outline"
                 size="sm"
                 icon={copied ? "check" : "content_copy"}
                 onClick={() => copy(installCmd)}
+                className="text-xs h-7 px-2"
               >
                 {copied ? "Copied" : "Copy"}
               </Button>
@@ -162,6 +162,7 @@ export default function UpdateBanner({ pollMs = POLL_MS }) {
                 size="sm"
                 icon="system_update_alt"
                 onClick={() => setShowConfirm(true)}
+                className="text-xs h-7 px-2.5 font-semibold"
               >
                 Update now
               </Button>
@@ -170,14 +171,10 @@ export default function UpdateBanner({ pollMs = POLL_MS }) {
                 size="sm"
                 icon="receipt_long"
                 onClick={() => setShowChangelog(true)}
+                className="text-xs h-7 px-2"
               >
                 Changelog
               </Button>
-              <a href={GITHUB_CONFIG.repoUrl} target="_blank" rel="noopener noreferrer">
-                <Button variant="secondary" size="sm" icon="open_in_new">
-                  GitHub
-                </Button>
-              </a>
               <button
                 type="button"
                 onClick={() => {
@@ -188,11 +185,11 @@ export default function UpdateBanner({ pollMs = POLL_MS }) {
                   }
                   setDismissed(identity);
                 }}
-                className="rounded p-1 text-text-muted transition-colors hover:text-warning"
+                className="rounded p-1 text-text-muted transition-colors hover:text-warning cursor-pointer ml-1"
                 title="Close"
                 aria-label="Dismiss update notice"
               >
-                <span className="material-symbols-outlined text-[16px]">close</span>
+                <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
           </div>

@@ -138,14 +138,15 @@ export default function DashboardLayout({ children }) {
 
       {/* Content column */}
       <div className="flex min-w-0 flex-1 flex-col">
-      <div className="relative z-40">
-        <UpdateBanner />
-      </div>
       <TaskDock />
 
       {/* Docked mobile top bar */}
       <div className="relative z-50">
         <MobileNav />
+      </div>
+
+      <div className="relative z-40">
+        <UpdateBanner />
       </div>
 
         {/* No `isolate` here on purpose. `isolate` opens a stacking context,
