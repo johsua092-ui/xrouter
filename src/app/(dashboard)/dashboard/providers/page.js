@@ -431,7 +431,7 @@ export default function ProvidersPage() {
               placeholder="Search providers by name, protocol, or ID..."
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
-              className="w-full pl-9 pr-8 py-1.5 bg-surface-2 border border-border rounded-[6px] text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/40"
+              className="w-full pl-9 pr-8 py-1.5 bg-surface-2 border border-border rounded-[6px] text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/40"
             />
             {localSearch && (
               <button
@@ -450,7 +450,7 @@ export default function ProvidersPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-8 rounded-[6px] border border-border bg-surface-2 px-2.5 text-xs text-text-main outline-none transition-colors hover:border-brand-500/40 cursor-pointer"
+              className="h-8 rounded-[6px] border border-border bg-surface-2 px-2.5 text-xs text-text-main outline-none transition-colors hover:border-primary/50 cursor-pointer"
               aria-label="Filter providers by connection status"
             >
               {STATUS_FILTER_OPTIONS.map((option) => (
@@ -520,7 +520,7 @@ export default function ProvidersPage() {
             className={cn(
               "px-3 py-1 rounded-[4px] font-medium whitespace-nowrap border transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer",
               categoryTab === "all"
-                ? "bg-brand-500 text-white border-brand-500 font-semibold shadow-xs"
+                ? "bg-primary text-white border-primary font-semibold shadow-xs"
                 : "bg-surface-2 border-border text-text-muted hover:text-text-main hover:bg-surface-3"
             )}
           >
@@ -535,7 +535,7 @@ export default function ProvidersPage() {
             className={cn(
               "px-3 py-1 rounded-[4px] font-medium whitespace-nowrap border transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer",
               categoryTab === "custom"
-                ? "bg-brand-500 text-white border-brand-500 font-semibold shadow-xs"
+                ? "bg-primary text-white border-primary font-semibold shadow-xs"
                 : "bg-surface-2 border-border text-text-muted hover:text-text-main hover:bg-surface-3"
             )}
           >
@@ -550,7 +550,7 @@ export default function ProvidersPage() {
             className={cn(
               "px-3 py-1 rounded-[4px] font-medium whitespace-nowrap border transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer",
               categoryTab === "oauth"
-                ? "bg-brand-500 text-white border-brand-500 font-semibold shadow-xs"
+                ? "bg-primary text-white border-primary font-semibold shadow-xs"
                 : "bg-surface-2 border-border text-text-muted hover:text-text-main hover:bg-surface-3"
             )}
           >
@@ -565,7 +565,7 @@ export default function ProvidersPage() {
             className={cn(
               "px-3 py-1 rounded-[4px] font-medium whitespace-nowrap border transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer",
               categoryTab === "apikey"
-                ? "bg-brand-500 text-white border-brand-500 font-semibold shadow-xs"
+                ? "bg-primary text-white border-primary font-semibold shadow-xs"
                 : "bg-surface-2 border-border text-text-muted hover:text-text-main hover:bg-surface-3"
             )}
           >
@@ -580,7 +580,7 @@ export default function ProvidersPage() {
             className={cn(
               "px-3 py-1 rounded-[4px] font-medium whitespace-nowrap border transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer",
               categoryTab === "free"
-                ? "bg-brand-500 text-white border-brand-500 font-semibold shadow-xs"
+                ? "bg-primary text-white border-primary font-semibold shadow-xs"
                 : "bg-surface-2 border-border text-text-muted hover:text-text-main hover:bg-surface-3"
             )}
           >
@@ -951,14 +951,14 @@ function ProviderCard({
           "relative flex flex-col justify-between h-full p-4 rounded-[6px] border bg-surface transition-all duration-200 overflow-hidden",
           allDisabled
             ? "opacity-60 border-border bg-surface-2"
-            : "border-border hover:border-brand-500/50 hover:bg-surface-2 hover:-translate-y-px shadow-[var(--shadow-elev)]"
+            : "border-border hover:border-primary/50 hover:bg-surface-2 hover:-translate-y-px shadow-[var(--shadow-elev)]"
         )}
       >
-        {/* Top hairline accent in ember when connected */}
+        {/* Top hairline accent in theme primary color when connected */}
         <span
           className={cn(
             "absolute top-0 inset-x-0 h-[2px] transition-colors",
-            connected > 0 ? "bg-brand-500 shadow-[0_0_8px_rgba(229,106,74,0.6)]" : "bg-transparent group-hover:bg-border"
+            connected > 0 ? "bg-primary shadow-[0_0_8px_rgba(var(--color-primary-rgb,229,106,74),0.6)]" : "bg-transparent group-hover:bg-border"
           )}
           aria-hidden="true"
         />
