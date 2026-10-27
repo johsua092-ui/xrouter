@@ -19,10 +19,11 @@ export default function CustomCompatibleIcon({
     >
       <g>
         {/* Squircle Background & Outline:
-            - Dark mode: background #0a0a0a with white stroke
-            - Light mode: background #ffffff with black stroke */}
+            - Fill matches theme background
+            - Border outline matches active theme primary palette color */}
         <path
-          className="fill-white dark:fill-[#0a0a0a] stroke-black dark:stroke-white"
+          className="fill-white dark:fill-[#0a0a0a]"
+          style={{ stroke: "var(--color-primary, #E56A4A)" }}
           strokeWidth="15.009"
           strokeMiterlimit="22.9256"
           d="M126.208 15.147l285.584 0c61.327,0 111.061,49.734 111.061,111.061l0 285.584c0,61.326 -49.734,111.06 -111.061,111.06l-285.584 0.001c-61.326,-0.001 -111.06,-49.735 -111.06,-111.062l-0.001 -285.583c0.001,-61.327 49.735,-111.061 111.062,-111.061z"

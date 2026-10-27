@@ -1490,8 +1490,15 @@ export default function ProviderDetailPage() {
         </Link>
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <div
-            className="flex size-12 shrink-0 items-center justify-center rounded-lg"
-            style={{ backgroundColor: `${providerInfo.color}15` }}
+            className="flex size-12 shrink-0 items-center justify-center rounded-lg border"
+            style={{
+              backgroundColor: (isOpenAICompatible || isAnthropicCompatible || isMoonshot)
+                ? "color-mix(in srgb, var(--color-primary, #E56A4A) 10%, transparent)"
+                : `${providerInfo.color}15`,
+              borderColor: (isOpenAICompatible || isAnthropicCompatible || isMoonshot)
+                ? "var(--color-primary, #E56A4A)"
+                : "transparent",
+            }}
           >
             {/custom-openai/i.test(getHeaderIconPath()) ? (
               <CustomCompatibleIcon variant="openai" size={48} className="rounded-lg" />
