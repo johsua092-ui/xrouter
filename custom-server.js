@@ -443,8 +443,10 @@ try {
   if (lanIp) {
     const origLog = console.log;
     console.log = function (...args) {
-      if (typeof args[0] === "string" && args[0].includes("- Network:") && args[0].includes("0.0.0.0")) {
-        args[0] = args[0].replace("0.0.0.0", lanIp);
+      for (let i = 0; i < args.length; i++) {
+        if (typeof args[i] === "string" && args[i].includes("- Network:") && args[i].includes("0.0.0.0")) {
+          args[i] = args[i].replace("0.0.0.0", lanIp);
+        }
       }
       return origLog.apply(console, args);
     };

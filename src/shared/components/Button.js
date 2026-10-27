@@ -7,16 +7,16 @@ import { cn } from "@/shared/utils/cn";
    white-on-fill contrast stays guaranteed in both themes. */
 const variants = {
   primary:
-    "bg-brand-600 hover:bg-brand-700 text-white " +
+    "bg-primary hover:bg-primary-hover text-white " +
     "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_1px_2px_rgba(0,0,0,0.16)] " +
     "hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.20),0_2px_6px_rgba(0,0,0,0.18)] " +
     "disabled:bg-surface-3 disabled:text-text-subtle disabled:shadow-none",
   secondary:
     "bg-surface-2 hover:bg-surface-3 text-text-main border border-border " +
-    "hover:border-brand-500/40 disabled:opacity-50",
+    "hover:border-primary/40 disabled:opacity-50",
   outline:
     "bg-transparent border border-border text-text-main " +
-    "hover:bg-surface-2 hover:border-brand-500/50",
+    "hover:bg-surface-2 hover:border-primary/50",
   ghost: "text-text-muted hover:bg-surface-2 hover:text-text-main",
   danger:
     "bg-danger-solid hover:brightness-110 text-white " +
