@@ -8,7 +8,7 @@ import { getSettings } from "@/lib/localDb";
 import { sessionSubject, getVersion } from "@/lib/auth/sessionVersions";
 
 // Default password and strict 24h maximum session lifetime.
-const DEFAULT_PASSWORD = "synapse123";
+const DEFAULT_PASSWORD = "xrouter123";
 const SESSION_MAX_AGE_SEC = 24 * 60 * 60;
 
 function loadJwtSecret() {

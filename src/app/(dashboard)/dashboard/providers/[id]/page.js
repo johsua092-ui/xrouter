@@ -193,7 +193,6 @@ export default function ProviderDetailPage() {
     : providerId === "kimi" ? "Kimi Coding OAuth"
     : providerId === "xiaomi-mimo" ? "MiMo Account Login"
     : providerId === "adcode" ? "Connect ADCode Account"
-    : providerId === "hoplite" ? "Hoplite Login"
     : "OAuth";
   const apiKeyConnectionLabel =
     providerId === "xai" ? "xAI API Key"

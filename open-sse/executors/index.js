@@ -30,7 +30,6 @@ import { DefaultExecutor } from "./default.js";
 import { DevinCliExecutor } from "./devin-cli.js";
 import { MinimaxCodeExecutor } from "./minimax-code.js";
 import { KiloGatewayExecutor } from "./kilo-gateway.js";
-import { HopliteExecutor } from "./hoplite.js";
 import { OpenSatanExecutor } from "./opensatan.js";
 import { AdcodeExecutor } from "./adcode.js";
 import { PteroExecutor } from "./ptero.js";
@@ -45,7 +44,6 @@ const executors = {
   "qoder-cn": new QoderExecutor("qoder-cn"),
   "minimax-code": new MinimaxCodeExecutor("minimax-code"),
   "minimax-code-global": new MinimaxCodeExecutor("minimax-code-global"),
-  hoplite: new HopliteExecutor(),
   kiro: new KiroExecutor(),
   kimchi: new KimchiExecutor(),
   codex: new CodexExecutor(),

@@ -19,7 +19,6 @@ import {
   refreshWindsurfToken,
   refreshMiniMaxCodeToken,
   refreshNousToken,
-  refreshHopliteToken,
   classifyOAuthRefreshError,
 } from "./tokenRefresh/providers.js";
 
@@ -42,7 +41,6 @@ export {
   refreshWindsurfToken,
   refreshMiniMaxCodeToken,
   refreshNousToken,
-  refreshHopliteToken,
   classifyOAuthRefreshError,
 };
 
@@ -166,8 +164,6 @@ const REFRESH_HANDLERS = {
   "minimax-code": (c, log) => refreshMiniMaxCodeToken("minimax-code", c.refreshToken, log),
   "minimax-code-global": (c, log) => refreshMiniMaxCodeToken("minimax-code-global", c.refreshToken, log),
   nous: (c, log) => refreshNousToken(c.refreshToken, log),
-  // Hoplite AI — OAuth 2.1 refresh_token grant, needs the DCR client_id
-  hoplite: (c, log) => refreshHopliteToken(c.refreshToken, c, log),
   vertex: vertexRefreshHandler,
   "vertex-partner": vertexRefreshHandler
 };

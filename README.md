@@ -201,7 +201,7 @@ Environment=HOME=/root/xrouter-remake
 Environment=NODE_ENV=production
 Environment=PORT=8080
 Environment=DATA_DIR=/root/xrouter-remake/data
-Environment=INITIAL_PASSWORD=synapse123
+Environment=INITIAL_PASSWORD=xrouter123
 Environment=BASE_URL=https://your-domain.com
 Environment=PUBLIC_BASE_URL=https://your-domain.com
 Environment=NEXT_PUBLIC_BASE_URL=https://your-domain.com

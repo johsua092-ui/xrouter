@@ -102,7 +102,7 @@ export async function POST(request) {
       );
     }
 
-    // Default password is 'synapse123' if not set
+    // Default password is 'xrouter123' if not set
     const storedHash = settings.password;
 
     if (settings.authMode === "sso" || settings.authMode === "saml" || settings.authMode === "oidc") {
@@ -120,7 +120,7 @@ export async function POST(request) {
       isValid = await bcrypt.compare(String(password || ""), storedHash);
     } else {
       // Use env var or default with constant-time equality check (Anti-Timing Attack)
-      const initialPassword = process.env.INITIAL_PASSWORD || "synapse123";
+      const initialPassword = process.env.INITIAL_PASSWORD || "xrouter123";
       const bufA = Buffer.from(String(password || ""));
       const bufB = Buffer.from(initialPassword);
       isValid = bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);

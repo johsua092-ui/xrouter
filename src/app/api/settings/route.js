@@ -61,8 +61,8 @@ export async function PATCH(request) {
         }
       } else {
         // First time setting password, no current password needed
-        // Allow empty currentPassword or default "synapse123"
-        if (body.currentPassword && body.currentPassword !== "synapse123") {
+        // Allow empty currentPassword or default "xrouter123"
+        if (body.currentPassword && body.currentPassword !== "xrouter123") {
            return NextResponse.json({ error: "Invalid current password" }, { status: 401 });
         }
       }

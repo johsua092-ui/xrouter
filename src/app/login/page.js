@@ -6,7 +6,7 @@ import LogoMark from "@/shared/components/LogoMark";
 
 // Password default instance ini. Ditampilkan sebagai petunjuk di bawah input
 // supaya pemilik tidak terkunci di luar dashboard-nya sendiri.
-const DEFAULT_PASSWORD = "synapse123";
+const DEFAULT_PASSWORD = "xrouter123";
 
 // Panel brand kiri: dipakai oleh semua state login (form, no-access, ganti password).
 function BrandPanel() {

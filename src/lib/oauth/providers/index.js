@@ -32,7 +32,6 @@ import glm from "./glm.js";
 import minimaxCode from "./minimax-code.js";
 import minimaxCodeGlobal from "./minimax-code-global.js";
 import nous from "./nous.js";
-import hoplite from "./hoplite.js";
 
 // Provider configurations
 const PROVIDERS = {
@@ -64,7 +63,6 @@ const PROVIDERS = {
   "minimax-code": minimaxCode,
   "minimax-code-global": minimaxCodeGlobal,
   nous,
-  hoplite,
 };
 
 export { PROVIDERS };
@@ -112,7 +110,7 @@ export async function generateAuthData(providerName, redirectUri, meta) {
     // Device code flow doesn't have auth URL upfront
     authUrl = null;
   } else if (provider.flowType === "authorization_code_pkce") {
-    // Awaited: some providers (Hoplite) resolve the client_id via Dynamic
+    // Awaited: some providers resolve the client_id via Dynamic
     // Client Registration inside buildAuthUrl, so it can return a promise.
     authUrl = await provider.buildAuthUrl(config, redirectUri, state, codeChallenge, meta || {});
   } else {

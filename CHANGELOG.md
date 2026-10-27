@@ -1,6 +1,10 @@
 # v0.0.4 (2026-10-26)
 
 ## Releases & New Features
+- **Official Default Password Update**:
+  - Changed default instance password from `synapse123` to `xrouter123` across Go runtime, Next.js dashboard guard, settings routes, and login screens.
+- **Provider Cleanup**:
+  - Completely purged deprecated and broken `hoplite` provider registry, executor, OAuth flow, and token refresh logic.
 - **OpenCode Hardened Fingerprint & TLS Impersonation**:
   - Integrated `wreq-js` engine delivering native BoringSSL / Chrome 133 Post-Quantum Kyber TLS 1.3 ClientHello, bypassing upstream anti-relay bot checks.
   - Aligned wire protocol, system `<env>` marker, and session timestamp generation with OpenCode CLI 1.19.4.

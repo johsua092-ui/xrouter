@@ -39,7 +39,7 @@ func Load() *Config {
 
 	initialPassword := os.Getenv("INITIAL_PASSWORD")
 	if initialPassword == "" {
-		initialPassword = "synapse123"
+		initialPassword = "xrouter123"
 	}
 
 	publicBaseUrl := os.Getenv("PUBLIC_BASE_URL")

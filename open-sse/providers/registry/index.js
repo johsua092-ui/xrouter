@@ -142,7 +142,6 @@ import p143 from "./river.js";
 import p145 from "./nous.js";
 import p146 from "./minimax-code.js";
 import p147 from "./minimax-code-global.js";
-import p148 from "./hoplite.js";
 import p149 from "./dothoosh.js";
 import p150 from "./opensatan.js";
 import p153 from "./ptero.js";
@@ -292,7 +291,6 @@ export default [
   p145,
   p146,
   p147,
-  p148,
   p149,
   p150,
   p153,
