@@ -3,6 +3,11 @@
 ## Releases & New Features
 - **Official Version Bump v0.0.4**:
   - Upgraded core X Router engine and global CLI to version 0.0.4.
+- **Dedicated Custom Compatible Provider SVGs**:
+  - Replaced generic icon fallbacks with dedicated vector SVG marks for Custom OpenAI Compatible, Anthropic Compatible, and Moonshot Compatible provider cards.
+  - Implemented automatic Light/Dark mode contrast adaptation for custom SVG icons.
+- **Provider Theme Palette Synchronization**:
+  - Removed hardcoded orange (`brand-500`) accents from provider category pills, search inputs, and card connection status hairlines, dynamically harmonizing them with the active theme primary color.
 - **Pinned Theme Modal Header**:
   - Converted Theme Modal container to a flex column layout with a sticky/fixed header strip. The title and close button now remain permanently pinned at the top while scrolling color options.
 - **Update Check Cache Reset & Synchronization**:

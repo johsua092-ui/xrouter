@@ -1461,13 +1461,13 @@ export default function ProviderDetailPage() {
   const getHeaderIconPath = () => {
     if (getCustomLogo(providerInfo)) return getCustomLogo(providerInfo);
     if (isOpenAICompatible && (providerInfo.brand === "moonshot" || /moonshot|kimi/i.test(providerInfo.name || ""))) {
-      return "/providers/moonshot-ai.png";
+      return "/providers/custom-moonshot.svg";
     }
-    if (isOpenAICompatible && providerInfo.apiType) {
-      return providerInfo.apiType === "responses" ? "/providers/oai-r.png" : "/providers/oai-cc.png";
+    if (isOpenAICompatible) {
+      return "/providers/custom-openai.svg";
     }
     if (isAnthropicCompatible) {
-      return "/providers/anthropic-m.png";
+      return "/providers/custom-anthropic.svg";
     }
     return getProviderIconSrc(providerInfo.id);
   };

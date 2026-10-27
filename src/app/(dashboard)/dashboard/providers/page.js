@@ -925,10 +925,10 @@ function ProviderCard({
     const customLogo = getCustomLogo(provider);
     if (customLogo) return customLogo;
     if (isCompatible && (provider.brand === "moonshot" || /moonshot|kimi/i.test(provider.name || "")))
-      return "/providers/moonshot-ai.png";
-    if (isCompatible && provider.apiType)
-      return provider.apiType === "responses" ? "/providers/oai-r.png" : "/providers/oai-cc.png";
-    if (isAnthropicCompatible) return "/providers/anthropic-m.png";
+      return "/providers/custom-moonshot.svg";
+    if (isCompatible)
+      return "/providers/custom-openai.svg";
+    if (isAnthropicCompatible) return "/providers/custom-anthropic.svg";
     return getProviderIconSrc(provider.id) || `/providers/${provider.id}.png`;
   };
 

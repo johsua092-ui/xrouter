@@ -46,7 +46,7 @@ export default function ProviderIcon({
       alt={alt}
       width={size}
       height={size}
-      className={`object-contain ${/oai-cc|oai-r|openai|github/i.test(effectiveSrc) ? "dark:invert" : ""} ${className}`.trim()}
+      className={`object-contain ${/custom-openai/i.test(effectiveSrc) ? "invert dark:invert-0" : /oai-cc|oai-r|openai|github/i.test(effectiveSrc) ? "dark:invert" : ""} ${className}`.trim()}
       loading="lazy"
       decoding="async"
       onError={() => {
