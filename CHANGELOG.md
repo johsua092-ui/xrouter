@@ -1,6 +1,14 @@
 # v0.0.4 (2026-10-26)
 
 ## Releases & New Features
+- **Adaptive SVG & Palette Tinting for Custom Compatible Providers**:
+  - Implemented official vector SVG squircle marks for Custom OpenAI, Anthropic, and Moonshot Compatible providers.
+  - Dynamically harmonized squircle borders and symbols across 6 preset stock palettes (Ember Orange, Electric Blue, Emerald Green, Violet Purple, Ruby Rose, Cyber Cyan) and custom hex palettes.
+  - Fixed dark/light mode rendering: squircle background dynamically toggles (#0a0a0a in dark, #ffffff in light) with sharp high-contrast border outlines.
+  - Added theme palette hairline accent on custom provider cards.
+- **Provider Identity & Metadata Fixes**:
+  - Fixed MoonshotAI Compatible cards displaying "OpenAI Compatible" subtitle; now correctly labeled as "MoonshotAI Compatible".
+  - Dedicated custom Moonshot vector badge loaded for all Moonshot/Kimi compatible endpoints.
 - **Official Default Password Update**:
   - Changed default instance password from `synapse123` to `xrouter123` across Go runtime, Next.js dashboard guard, settings routes, and login screens.
 - **Provider Cleanup**:
