@@ -1488,7 +1488,7 @@ export default function ProviderDetailPage() {
             style={{ backgroundColor: `${providerInfo.color}15` }}
           >
             {headerImgError || !getHeaderIconPath() ? (
-              <span className="text-sm font-bold" style={{ color: providerInfo.color }}>
+              <span className="text-sm font-bold text-primary">
                 {providerInfo.textIcon || providerInfo.id.slice(0, 2).toUpperCase()}
               </span>
             ) : (
@@ -1497,14 +1497,22 @@ export default function ProviderDetailPage() {
                 alt={providerInfo.name}
                 width={48}
                 height={48}
-                className="max-h-12 max-w-12 rounded-lg object-contain"
+                className={cn(
+                  "max-h-12 max-w-12 rounded-lg object-contain",
+                  /custom-(openai|anthropic|moonshot)/i.test(getHeaderIconPath()) && "dark:brightness-100"
+                )}
+                style={{
+                  filter: /custom-(openai|anthropic|moonshot)/i.test(getHeaderIconPath())
+                    ? "var(--logo-filter, none)"
+                    : undefined,
+                }}
                 sizes="48px"
                 onError={() => {
                   markProviderIconMissing(providerInfo.id);
                   setHeaderImgError(true);
                 }}
-              loading="lazy"
-              decoding="async"
+                loading="lazy"
+                decoding="async"
               />
             )}
           </div>

@@ -94,7 +94,10 @@ export default function MobileNav() {
       {/* Mobile Top Bar — docked at top of viewport so it never scrolls away or disappears */}
       <header className="sticky top-0 z-40 flex h-12 w-full items-center justify-between border-b border-border bg-surface px-4 lg:hidden shrink-0 shadow-xs">
         <Link href="/dashboard/endpoint" className="flex items-center gap-2.5">
-          <div className="size-7 rounded-[6px] border border-primary/40 bg-surface-2 flex items-center justify-center shrink-0 shadow-xs overflow-hidden p-0.5">
+          <div
+            className="size-7 rounded-[6px] border bg-surface-2 flex items-center justify-center shrink-0 shadow-xs overflow-hidden p-0.5"
+            style={{ borderColor: "var(--color-primary, #E56A4A)" }}
+          >
             <LogoMark className="size-full" />
           </div>
           <div className="flex flex-col">

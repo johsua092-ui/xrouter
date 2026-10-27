@@ -268,7 +268,10 @@ export default function LeftRail() {
               className="flex items-center gap-2 overflow-hidden transition-opacity hover:opacity-90 min-w-0 flex-1"
               title="X Router Dashboard"
             >
-              <div className="size-7 rounded-[5px] border border-primary/40 bg-surface-2 flex items-center justify-center shrink-0 shadow-xs overflow-hidden p-0.5">
+              <div
+                className="size-7 rounded-[5px] border bg-surface-2 flex items-center justify-center shrink-0 shadow-xs overflow-hidden p-0.5"
+                style={{ borderColor: "var(--color-primary, #E56A4A)" }}
+              >
                 <LogoMark className="size-full" />
               </div>
               <div className="min-w-0 flex flex-col flex-1">

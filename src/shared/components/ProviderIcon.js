@@ -38,13 +38,18 @@ export default function ProviderIcon({
     );
   }
 
+  const isCustomCompatible = /custom-(openai|anthropic|moonshot)/i.test(effectiveSrc);
+
   return (
     <img
       src={effectiveSrc}
       alt={alt}
       width={size}
       height={size}
-      className={`object-contain ${/custom-openai/i.test(effectiveSrc) ? "invert dark:invert-0" : /oai-cc|oai-r|openai|github/i.test(effectiveSrc) ? "dark:invert" : ""} ${className}`.trim()}
+      className={`object-contain ${isCustomCompatible ? "" : /oai-cc|oai-r|openai|github/i.test(effectiveSrc) ? "dark:invert" : ""} ${className}`.trim()}
+      style={{
+        filter: isCustomCompatible ? "var(--logo-filter, none)" : undefined,
+      }}
       loading="lazy"
       decoding="async"
       onError={() => {

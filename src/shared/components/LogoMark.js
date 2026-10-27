@@ -5,8 +5,11 @@ import React from "react";
 export default function LogoMark({ className = "size-full" }) {
   return (
     <span
-      className={`relative inline-flex items-center justify-center text-primary ${className}`.trim()}
-      style={{ filter: "var(--logo-filter, none)" }}
+      className={`relative inline-flex items-center justify-center ${className}`.trim()}
+      style={{
+        color: "var(--color-primary, #E56A4A)",
+        filter: "var(--logo-filter, none)",
+      }}
     >
       <svg
         viewBox="0 0 100 100"

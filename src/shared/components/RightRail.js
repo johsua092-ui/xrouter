@@ -242,7 +242,10 @@ export default function RightRail() {
           open ? "px-2" : "justify-center"
         )}
       >
-        <span className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-[6px] ring-1 ring-primary/30 bg-surface-2 p-0.5">
+        <span
+          className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-[6px] border bg-surface-2 p-0.5"
+          style={{ borderColor: "var(--color-primary, #E56A4A)" }}
+        >
           <LogoMark className="size-full" />
         </span>
         {open && (
