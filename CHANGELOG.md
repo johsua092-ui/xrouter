@@ -45,6 +45,10 @@
   - Prioritized `readGitRevision()` over baked-in `process.env.APP_REVISION` in `updateCheck.js` so running instances immediately reflect local working copy commits without false 1-commit-behind notices.
 - **Changelog Fallback Search Path**:
   - Enhanced `/api/changelog` to search across `/root/xrouter`, `/root/xrouter-remake`, and process cwd so changelog notes always render properly and never display "Nothing to report".
+- **Network IP Banner Print Resolution**:
+  - Fixed Next.js bootstrap logger interception in `custom-server.js` to iterate all arguments rather than just `args[0]`, ensuring `- Network:` output replaces `0.0.0.0` with the actual public/LAN IP (`${lanIp}`) during `npm start`.
+- **Theme-Bound Button & Form Controls**:
+  - Bound `Button.js` and `Toggle.js` directly to `bg-primary` and `hover:bg-primary-hover` instead of hardcoded `bg-brand-600`, ensuring submit buttons (such as "Masuk dengan API Key" on the login page) accurately reflect the active theme accent (pink, blue, etc.).
 - **Global Theme Persistence Across All Public Surfaces**:
   - Implemented `/api/theme` server endpoint to persist the instance owner's active theme and accent palette in the database `_meta` store.
   - Public portals (login page, `/claim`, usage dashboard under API key) now automatically inherit the owner's chosen palette (e.g. Pink/Custom or any accent) across all devices and visitors.
