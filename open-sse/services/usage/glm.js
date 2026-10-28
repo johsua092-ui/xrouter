@@ -17,6 +17,14 @@ const GLM_QUOTA_URLS = {
  * Supports both TOKENS_LIMIT and CREDIT_LIMIT and dynamic intervals (e.g. session 5h, weekly 7d).
  */
 export function parseGlmQuotaResponse(json) {
+  if (json?.success === false || (json?.code !== undefined && ![0, 200].includes(json.code))) {
+    const rawMsg = json?.msg || json?.message || "No coding plan package active for this account";
+    const message = rawMsg.includes("不存在coding plan")
+      ? "Akun ini belum memiliki paket Coding Plan aktif di Z.ai. Silakan aktifkan paket di chat.z.ai / api.z.ai."
+      : rawMsg;
+    return { plan: "None", quotas: {}, message };
+  }
+
   const data = json?.data && typeof json.data === "object" ? json.data : {};
   const limits = Array.isArray(data.limits) ? data.limits : [];
   const quotas = {};
@@ -53,9 +61,13 @@ export function parseGlmQuotaResponse(json) {
   const levelRaw = typeof data.level === "string" ? data.level : "";
   const plan = levelRaw
     ? levelRaw.charAt(0).toUpperCase() + levelRaw.slice(1).toLowerCase()
-    : "Unknown";
+    : limits.length > 0 ? "Standard" : "None";
 
-  return { plan, quotas };
+  const message = limits.length === 0
+    ? "Akun ini belum memiliki paket Coding Plan aktif di Z.ai (0 kuota)."
+    : null;
+
+  return { plan, quotas, message };
 }
 
 function glmResetError(message, status = 502) {
@@ -169,8 +181,8 @@ export async function getGlmUsage(apiKey, provider, proxyOptions = null) {
     }
 
     const json = await response.json();
-    const { plan, quotas } = parseGlmQuotaResponse(json);
-    return { plan, quotas };
+    const { plan, quotas, message } = parseGlmQuotaResponse(json);
+    return { plan, quotas, message };
   } catch (error) {
     return { message: `GLM error: ${error.message}` };
   }

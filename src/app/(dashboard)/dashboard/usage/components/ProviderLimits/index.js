@@ -1372,6 +1372,10 @@ export default function ProviderLimits() {
                   <div className="text-center py-5">
                     <p className="text-xs text-text-muted">{quota.message}</p>
                   </div>
+                ) : visibleQuotas.length === 0 ? (
+                  <div className="text-center py-5 text-text-muted">
+                    <p className="text-xs">No active quota limits reported for this account.</p>
+                  </div>
                 ) : (
                   <QuotaTable
                     quotas={visibleQuotas}

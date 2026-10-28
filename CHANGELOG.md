@@ -1,5 +1,9 @@
 # v0.0.4 (2026-10-26)
 
+- **Fix GLM Usage Empty Card & Quota Normalization**:
+  - Added `case "glm"` and `case "glm-cn"` in `parseQuotaData` (`ProviderLimits/utils.js`) to properly map GLM rate-limit windows.
+  - Handled Z.ai upstream `code 500` ("当前用户不存在coding plan") and empty quota responses in `open-sse/services/usage/glm.js`, surfacing a clear message instead of an empty box.
+  - Added an empty state fallback in `ProviderLimits/index.js` when zero quotas are available.
 - **GLM Auto-Redeem Reset Card on Quota Depleted (Error 1113)**:
   - Integrated runtime hook in `open-sse/handlers/chatCore.js` that automatically fetches available 5-hour/weekly reset cards from Z.ai and redeems them on-the-fly when receiving HTTP 429 `code 1113` ("Insufficient balance or no resource package"), immediately retrying inference seamlessly without dropping the stream.
 - **Fix Gemini Web Session Parameter Parsing**:
