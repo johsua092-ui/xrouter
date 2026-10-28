@@ -78,9 +78,15 @@ const SESSION_CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutes validity
 export function normalizeGeminiCookieInput(raw, cookieName = "__Secure-1PSID") {
   const trimmed = String(raw ?? "").trim();
   if (!trimmed) return "";
-  if (trimmed.startsWith("{")) {
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
       const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        const pairs = parsed
+          .filter((c) => c && c.name && c.value)
+          .map((c) => `${c.name}=${String(c.value).trim()}`);
+        if (pairs.length > 0) return pairs.join("; ");
+      }
       const cookies =
         parsed.cookies && typeof parsed.cookies === "object" && !Array.isArray(parsed.cookies)
           ? parsed.cookies

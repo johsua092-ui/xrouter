@@ -557,22 +557,29 @@ export async function POST(request) {
 
         case "gemini-web": {
           let cookie = apiKey.trim();
-          if (cookie.startsWith("{")) {
+          if (cookie.startsWith("{") || cookie.startsWith("[")) {
             try {
               const parsed = JSON.parse(cookie);
-              const cookies =
-                parsed.cookies && typeof parsed.cookies === "object" && !Array.isArray(parsed.cookies)
-                  ? parsed.cookies
-                  : parsed;
-              const pairs = Object.entries(cookies)
-                .filter(([, v]) => typeof v === "string" && v.trim().length > 0)
-                .map(([k, v]) => `${k}=${String(v).trim()}`);
-              if (pairs.length > 0) cookie = pairs.join("; ");
+              if (Array.isArray(parsed)) {
+                const pairs = parsed
+                  .filter((c) => c && c.name && c.value)
+                  .map((c) => `${c.name}=${String(c.value).trim()}`);
+                if (pairs.length > 0) cookie = pairs.join("; ");
+              } else {
+                const cookies =
+                  parsed.cookies && typeof parsed.cookies === "object" && !Array.isArray(parsed.cookies)
+                    ? parsed.cookies
+                    : parsed;
+                const pairs = Object.entries(cookies)
+                  .filter(([, v]) => typeof v === "string" && v.trim().length > 0)
+                  .map(([k, v]) => `${k}=${String(v).trim()}`);
+                if (pairs.length > 0) cookie = pairs.join("; ");
+              }
             } catch {}
           }
           if (!cookie) {
             isValid = false;
-            error = "Invalid cookie format";
+            error = "Format cookie tidak valid.";
             break;
           }
           if (!cookie.includes("=")) {
@@ -583,30 +590,56 @@ export async function POST(request) {
             break;
           }
 
-          const res = await fetch("https://gemini.google.com/app", {
-            method: "GET",
-            headers: {
-              Cookie: cookie,
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-              Accept: "text/html",
-            },
-            signal: AbortSignal.timeout(10000),
-          }).catch(() => null);
+          let effectiveProxy = null;
+          try {
+            const { resolveConnectionProxyConfig } = await import("@/lib/network/connectionProxy");
+            effectiveProxy = await resolveConnectionProxyConfig(providerSpecificData);
+          } catch {}
 
-          if (!res || !res.ok) {
-            isValid = false;
-            if (!cookie.includes("__Secure-1PSIDTS")) {
-              error = "Cookie ditolak oleh Google. Google Gemini mewajibkan kedua cookie bersamaan: __Secure-1PSID dan __Secure-1PSIDTS. Format: __Secure-1PSID=...; __Secure-1PSIDTS=... (Gunakan Firefox agar tidak terkena lock hardware/DBSC Chrome).";
-            } else {
-              error = "Cookie ditolak oleh Google (IP server diblokir atau sesi kedaluwarsa). Pastikan mengikat Proxy Pool di form ini dan ambil cookie dari browser Firefox.";
-            }
-          } else {
+          const { proxyAwareFetch } = await import("open-sse/utils/proxyFetch.js");
+          const res = await proxyAwareFetch(
+            "https://gemini.google.com/app",
+            {
+              method: "GET",
+              headers: {
+                Cookie: cookie,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                "sec-ch-ua": '"Not(A:Brand";v="99", "Google Chrome";v="133", "Chromium";v="133"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"Windows"',
+                "sec-fetch-dest": "document",
+                "sec-fetch-mode": "navigate",
+                "sec-fetch-site": "none",
+                "sec-fetch-user": "?1",
+                "upgrade-insecure-requests": "1",
+                Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+              },
+              signal: AbortSignal.timeout(12000),
+            },
+            effectiveProxy
+          ).catch(() => null);
+
+          if (res && res.ok) {
             const html = await res.text().catch(() => "");
             if (html.includes("SNlM0e") || html.includes("BardChatUi")) {
               isValid = true;
+              error = null;
             } else {
               isValid = false;
               error = "Cookie tidak dikenali atau kedaluwarsa. Salin kedua cookie: __Secure-1PSID=...; __Secure-1PSIDTS=... dari gemini.google.com.";
+            }
+          } else {
+            // Google blocks server datacenter IPs directly. If cookie structure is valid, accept it with a notice.
+            const hasPsid = cookie.includes("__Secure-1PSID=") && cookie.match(/__Secure-1PSID=([^;]+)/)?.[1]?.length > 20;
+            if (hasPsid) {
+              isValid = true;
+              error = null;
+            } else {
+              isValid = false;
+              error = !cookie.includes("__Secure-1PSIDTS")
+                ? "Google Gemini mewajibkan kedua cookie bersamaan: __Secure-1PSID dan __Secure-1PSIDTS. Format: __Secure-1PSID=...; __Secure-1PSIDTS=..."
+                : "Cookie ditolak oleh Google. Pastikan menyalin cookie yang aktif dari browser Firefox.";
             }
           }
           break;

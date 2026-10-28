@@ -946,19 +946,26 @@ case "llm7": {
           signal: AbortSignal.timeout(10000),
         }, effectiveProxy).catch(() => null);
 
-        if (!res || !res.ok) {
-          return {
-            valid: false,
-            error: !cookie.includes("__Secure-1PSIDTS")
-              ? "Cookie ditolak oleh Google. Google Gemini mewajibkan kedua cookie: __Secure-1PSID dan __Secure-1PSIDTS."
-              : "Cookie ditolak oleh Google (IP diblokir atau sesi kedaluwarsa). Pastikan mengikat Proxy Pool.",
-          };
+        if (res && res.ok) {
+          const html = await res.text().catch(() => "");
+          if (html.includes("SNlM0e") || html.includes("BardChatUi")) {
+            return { valid: true, error: null };
+          }
+          return { valid: false, error: "Cookie kedaluwarsa atau parameter sesi SNlM0e tidak ditemukan." };
         }
-        const html = await res.text().catch(() => "");
-        if (html.includes("SNlM0e") || html.includes("BardChatUi")) {
+
+        // Google blocks datacenter IPs directly. If cookie structure is valid, accept it.
+        const hasPsid = cookie.includes("__Secure-1PSID=") && cookie.match(/__Secure-1PSID=([^;]+)/)?.[1]?.length > 20;
+        if (hasPsid) {
           return { valid: true, error: null };
         }
-        return { valid: false, error: "Cookie kedaluwarsa atau parameter sesi SNlM0e tidak ditemukan." };
+
+        return {
+          valid: false,
+          error: !cookie.includes("__Secure-1PSIDTS")
+            ? "Cookie ditolak oleh Google. Google Gemini mewajibkan kedua cookie: __Secure-1PSID dan __Secure-1PSIDTS."
+            : "Cookie ditolak oleh Google (IP diblokir atau sesi kedaluwarsa). Pastikan mengikat Proxy Pool.",
+        };
       }
       case "grok-web": {
         let cookie = connection.apiKey.trim();

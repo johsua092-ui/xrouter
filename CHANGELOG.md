@@ -1,5 +1,11 @@
 # v0.0.4 (2026-10-26)
 
+- **Fix Zai GLM Coding OAuth Polling & Callback**:
+  - Wrapped Z.ai coding-plan API key resolution in a safe fallback to OAuth access token when automatic plan key minting fails upstream, avoiding stuck authorization state.
+  - Hardened OAuth modal polling error handling to catch and surface non-pending errors instead of polling indefinitely.
+- **Fix Gemini Web Cookie Validation & Proxy Resolution**:
+  - Fixed `validate` endpoint ignoring `providerSpecificData` (Proxy Pool) for `gemini-web`, added full browser `sec-ch-ua` headers via `proxyAwareFetch`.
+  - Added JSON array cookie import support and structural validation fallback for Google datacenter IP challenge.
 - **CodeBuddy Headers Injection (#5271)**:
   - Injected official CodeBuddy plugin channel headers (`X-Request-ID`, `X-Conversation-ID`, `X-Conversation-Request-ID`, `X-Conversation-Message-ID`) into `open-sse/executors/default.js` and registered `codebuddyHeaders` hook in `codebuddy-intl` and `codebuddy-cn` registries, resolving `HTTP 400 code 11128 request illegal` channel verification failures.
 - **GLM Reset Cards Integration (#5269)**:

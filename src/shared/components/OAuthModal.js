@@ -166,7 +166,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
           body: JSON.stringify({ deviceCode, codeVerifier, extraData }),
         });
 
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
 
         if (data.success) {
           pollingAbortRef.current = true; // Stop polling immediately
@@ -176,7 +176,11 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
           return;
         }
 
-        if (data.error === "expired_token" || data.error === "access_denied" || data.fatal) {
+        if (!res.ok) {
+          throw new Error(data.errorDescription || data.error || data.message || `Poll failed (HTTP ${res.status})`);
+        }
+
+        if (data.error && data.error !== "authorization_pending" && data.error !== "slow_down") {
           throw new Error(data.errorDescription || data.error);
         }
 

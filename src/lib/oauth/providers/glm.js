@@ -128,7 +128,15 @@ const glm = {
     }
 
     // ready.accessToken is the Z.AI OAuth token — derive the coding-plan API key
-    const { planApiKey, businessToken } = await resolveCodingPlanApiKey(config, zaiAccessToken);
+    let planApiKey = zaiAccessToken;
+    let businessToken = "";
+    try {
+      const resolved = await resolveCodingPlanApiKey(config, zaiAccessToken);
+      planApiKey = resolved.planApiKey;
+      businessToken = resolved.businessToken;
+    } catch (err) {
+      console.warn("[glm-oauth] resolveCodingPlanApiKey failed, falling back to zaiAccessToken:", err?.message || err);
+    }
 
     return {
       ok: true,
