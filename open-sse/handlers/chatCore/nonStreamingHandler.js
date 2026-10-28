@@ -265,6 +265,9 @@ export function providerResponseToOpenAI(responseBody, targetFormat) {
         completion_tokens: usage.candidatesTokenCount || 0,
         total_tokens: usage.totalTokenCount || 0
       };
+      if (usage.cachedContentTokenCount > 0) {
+        result.usage.prompt_tokens_details = { cached_tokens: usage.cachedContentTokenCount };
+      }
       if (usage.thoughtsTokenCount > 0) {
         result.usage.completion_tokens_details = { reasoning_tokens: usage.thoughtsTokenCount };
       }

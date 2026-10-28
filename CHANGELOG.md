@@ -1,5 +1,8 @@
-# v0.0.4 (2026-10-26)
+# v0.0.4 (2026-10-28)
 
+- **Notification Bell & Changelog Access UX**:
+  - Replaced dead-end "Nothing to report." text in `NotificationBell.js` with an actionable `View Changelog` shortcut button, allowing instant access to release notes even when there are no active alert conditions.
+  - Bumped release changelog heading date to `2026-10-28`.
 - **Route OpenCode Free-Tier TLS Fetch Through Connection Proxies (PR #5297)**:
   - Backported upstream PR #5297 (`b630c92d`): wired `directFetchProxy` across `BaseExecutor`, `OpenCodeExecutor`, and `proxyAwareFetch`.
   - Impersonating TLS fetch (`wreq-js`) now rides on the connection proxy pool instead of falling back to native Node TLS on proxied paths, eliminating 429 `FreeUsageLimitError` rejections when using proxy pools with OpenCode free tier.

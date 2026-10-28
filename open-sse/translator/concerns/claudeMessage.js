@@ -37,8 +37,13 @@ export function openAICompletionToClaudeMessage(responseBody) {
   if (content.length === 0) content.push({ type: CLAUDE_BLOCK.TEXT, text: "" });
 
   const usage = responseBody.usage || {};
+  const promptTokens = usage.prompt_tokens || usage.input_tokens || 0;
+  const completionTokens = usage.completion_tokens || usage.output_tokens || 0;
+  const cachedTokens = usage.prompt_tokens_details?.cached_tokens ?? usage.cached_tokens ?? 0;
+  const inputTokens = Math.max(0, promptTokens - cachedTokens);
+
   return {
-    id: String(responseBody.id || `msg_${Date.now()}`).replace(/^chatcmpl-/, ""),
+    id: `msg_${String(responseBody.id || Date.now()).replace(/^msg_/, "").replace(/^chatcmpl-/, "")}`,
     type: RESPONSES_ITEM.MESSAGE,
     role: ROLE.ASSISTANT,
     model: responseBody.model || MODEL_FALLBACK,
@@ -46,8 +51,9 @@ export function openAICompletionToClaudeMessage(responseBody) {
     stop_reason: fromOpenAIFinish(choice.finish_reason, FORMATS.CLAUDE),
     stop_sequence: null,
     usage: {
-      input_tokens: usage.prompt_tokens || usage.input_tokens || 0,
-      output_tokens: usage.completion_tokens || usage.output_tokens || 0,
+      input_tokens: inputTokens,
+      output_tokens: completionTokens,
+      ...(cachedTokens > 0 ? { cache_read_input_tokens: cachedTokens } : {}),
     },
   };
 }

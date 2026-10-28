@@ -353,9 +353,18 @@ export function isZeroContentResponse(data) {
  * @param {number|string} [options.comboStickyLimit=1] - Requests per combo model before switching
  * @returns {Promise<Response>}
  */
-export async function handleComboChat({ body, models, handleSingleModel, log, comboName, comboStrategy, comboStickyLimit = 1, autoSwitch = true }) {
+export async function handleComboChat({ body, models, handleSingleModel, log, comboName, comboStrategy, comboStickyLimit = 1, autoSwitch = true, resolveQuotaOrder = null }) {
   // Apply rotation strategy if enabled
-  let rotatedModels = getRotatedModels(models, comboName, comboStrategy, comboStickyLimit);
+  let rotatedModels = models;
+  if (comboStrategy === "tokenmaxxing" && typeof resolveQuotaOrder === "function") {
+    try {
+      rotatedModels = await resolveQuotaOrder(models);
+    } catch (err) {
+      log?.warn?.("COMBO", `tokenmaxxing error, fallback to order`, { error: err?.message || String(err) });
+    }
+  } else {
+    rotatedModels = getRotatedModels(models, comboName, comboStrategy, comboStickyLimit);
+  }
 
   // Auto-switch: float models that satisfy the request's required capabilities to the front.
   if (autoSwitch) {

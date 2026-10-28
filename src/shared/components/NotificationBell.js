@@ -270,9 +270,22 @@ export default function NotificationBell() {
             {visible.length === 0 ? (
               // Only claim "nothing" when the panel really is empty: a running
               // job listed just above contradicts it.
-              <p className="px-4 py-6 text-center text-xs text-text-muted">
-                {jobs.length > 0 ? "No notifications." : "Nothing to report."}
-              </p>
+              <div className="px-4 py-5 text-center">
+                <p className="text-xs text-text-muted">
+                  {jobs.length > 0 ? "No notifications." : "No new notifications."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setChangelogOpen(true);
+                  }}
+                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-text-main hover:border-primary/40 hover:text-primary transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[14px]">history</span>
+                  <span>View Changelog</span>
+                </button>
+              </div>
             ) : (
               visible.map((n) => {
                 const style = SEVERITY_STYLE[n.severity] || SEVERITY_STYLE.info;
