@@ -248,7 +248,13 @@ async function exchangeBusinessToken(config, zaiAccessToken) {
 // Business endpoints answer {code, msg, data}; code 0/200 (or absent) = success.
 // data is returned directly (null when missing).
 async function fetchBusinessJson(url, options, label) {
-  const response = await fetch(url, options);
+  const { proxyAwareFetch } = await import("open-sse/utils/proxyFetch.js");
+  const response = await proxyAwareFetch(url, {
+    ...options,
+    signal: options.signal || AbortSignal.timeout(10000),
+  }).catch((err) => {
+    throw new Error(`Z.ai ${label} network error: ${err?.message || err}`);
+  });
   const text = await response.text();
   if (!response.ok) {
     throw new Error(`Z.ai ${label} request failed (HTTP ${response.status}): ${text.slice(0, 200)}`);

@@ -90,7 +90,7 @@ export async function resolveConnectionProxyConfig(
 ) {
   try {
     const proxyPoolIdRaw = normalizeString(
-      providerSpecificData?.proxyPoolId
+      providerSpecificData?.proxyPoolId || providerSpecificData?.connectionProxyPoolId
     );
 
     // "__none__" means explicitly disabled

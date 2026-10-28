@@ -127,6 +127,7 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
     const data = {};
     if (formData.proxyPoolId && formData.proxyPoolId !== NONE_PROXY_POOL_VALUE) {
       data.connectionProxyPoolId = formData.proxyPoolId;
+      data.proxyPoolId = formData.proxyPoolId;
     }
     if (isOllamaLocal && formData.ollamaHostUrl.trim()) {
       data.baseUrl = formData.ollamaHostUrl.trim();
@@ -181,23 +182,30 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
     if (isCompatible && !formData.defaultModel.trim()) return;
 
     setSaving(true);
+    const timeoutCtrl = new AbortController();
+    const timeoutTimer = setTimeout(() => timeoutCtrl.abort(), 12000);
+    let isValid = false;
     try {
-      let isValid = false;
-      try {
-        setValidating(true);
-        setValidationResult(null);
-        const res = await fetch("/api/providers/validate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider, apiKey: formData.apiKey, providerSpecificData: buildProviderSpecificData() }),
-        });
-        const data = await res.json();
-        isValid = !!data.valid;
-        setValidationResult(isValid ? "success" : "failed");
-      } catch {
-        setValidationResult("failed");
-      } finally {
-        setValidating(false);
+      if (isGeminiWeb) {
+        isValid = true;
+      } else {
+        try {
+          setValidating(true);
+          setValidationResult(null);
+          const res = await fetch("/api/providers/validate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ provider, apiKey: formData.apiKey, providerSpecificData: buildProviderSpecificData() }),
+            signal: timeoutCtrl.signal,
+          });
+          const data = await res.json().catch(() => ({}));
+          isValid = !!data.valid;
+          setValidationResult(isValid ? "success" : "failed");
+        } catch {
+          setValidationResult("failed");
+        } finally {
+          setValidating(false);
+        }
       }
 
       await onSave({
@@ -210,6 +218,7 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
         providerSpecificData: buildProviderSpecificData()
       });
     } finally {
+      clearTimeout(timeoutTimer);
       setSaving(false);
     }
   };

@@ -921,8 +921,8 @@ export default function ProviderDetailPage() {
       }
 
       if (res.ok) {
-        await fetchConnections();
         setShowAddApiKeyModal(false);
+        await fetchConnections();
         return;
       }
 

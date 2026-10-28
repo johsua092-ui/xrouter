@@ -1,5 +1,10 @@
 # v0.0.4 (2026-10-26)
 
+- **Fix Gemini Web Cookie Modal Saving & Validation Timeout**:
+  - Prevented saving hang on `gemini-web` cookie modal by making save flow fast-path and adding abort controller on validation.
+  - Wired `connectionProxyPoolId` & `proxyPoolId` resolution seamlessly in `resolveConnectionProxyConfig`.
+- **Harden Z.ai GLM Coding API Key Auto-Minting**:
+  - Routed Z.ai business token exchange through `proxyAwareFetch` with timeout bounds, preventing `fetch failed` errors during coding plan resolution.
 - **Editable HSB & RGB Numeric Controls in Custom Palette**:
   - Replaced static text labels for HSB (H, S, B) and RGB (R, G, B) with live editable numeric input controls.
   - Added bi-directional real-time color syncing across HSB, RGB, HEX, rainbow slider, and 2D spectrum canvas.
