@@ -201,8 +201,8 @@ export async function fetchSessionParams(cookie, proxyOptions = null) {
   }, proxyOptions);
   if (!res || !res.ok) return null;
   const html = await res.text();
-  const atMatch = html.match(/"SNlM0e":"([^"]+)"/);
-  const blMatch = html.match(/"cfb2h":"([^"]+)"/);
+  const atMatch = html.match(/"SNlM0e":"([^"]+)"/) || html.match(/\["SNlM0e","([^"]+)"\]/);
+  const blMatch = html.match(/"cfb2h":"([^"]+)"/) || html.match(/\["cfb2h","([^"]+)"\]/);
   if (!atMatch || !blMatch) return null;
   
   const params = { at: atMatch[1], bl: blMatch[1] };

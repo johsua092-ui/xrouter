@@ -18,7 +18,6 @@ import { getWritableDataDir } from "../utils/writableDataDir.js";
 // Keep in sync with package.json devDependencies.
 const LAZY_DEP_VERSIONS = {
   "playwright-core": "^1.62.1",
-  "wreq-js": "^3.2.0",
 };
 
 function getRuntimeDir() {

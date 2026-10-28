@@ -1,5 +1,10 @@
 # v0.0.4 (2026-10-26)
 
+- **GLM Auto-Redeem Reset Card on Quota Depleted (Error 1113)**:
+  - Integrated runtime hook in `open-sse/handlers/chatCore.js` that automatically fetches available 5-hour/weekly reset cards from Z.ai and redeems them on-the-fly when receiving HTTP 429 `code 1113` ("Insufficient balance or no resource package"), immediately retrying inference seamlessly without dropping the stream.
+- **Fix Gemini Web Session Parameter Parsing**:
+  - Expanded regex pattern in `open-sse/executors/gemini-web.js` to match both key-value format and array-wrapped format (`["SNlM0e", "..."]` and `["cfb2h", "..."]`), preventing session initialization failures.
+  - Removed flawed `browserTlsClient.js` dependency that threw `Cannot read properties of undefined (reading 'resolve')`.
 - **Fix PageHeading Text Clipping**:
   - Adjusted line height from `leading-none` to `leading-normal` with vertical padding in `PageHeading.js` and `micro-label`, preventing letter descenders (like 'g' and 'y' in "Usage & Analytics") from being clipped by overflow boundaries.
 - **Fix wreq-js Webpack Server External Packaging**:

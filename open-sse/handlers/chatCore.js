@@ -481,7 +481,6 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     // honored on the Cursor AgentService h2 path and in proxyFetch (#4333).
     proxyPoolId: credentials?.providerSpecificData?.connectionProxyPoolId || null,
     strictProxy: credentials?.providerSpecificData?.strictProxy === true,
-    isWebCookie: isWebCookieProvider,
   };
 
   if (proxyOptions.vercelRelayUrl) {
@@ -616,6 +615,51 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   if (!providerResponse.ok) {
     const firstFailure = await parseUpstreamError(providerResponse, executor);
     let toolFallbackRecovered = false;
+
+    // GLM Auto-Redeem Reset Card on 429 Insufficient Balance (code 1113)
+    if (provider === "glm" && firstFailure.statusCode === 429 && String(firstFailure.message || "").includes("1113")) {
+      try {
+        const { getGlmResetCards, redeemGlmResetCard } = await import("../services/usage/glm.js");
+        const keyForReset = credentials?.apiKey || credentials?.accessToken;
+        if (keyForReset) {
+          log?.info?.("GLM-RESET", `Attempting auto-redeem reset card for ${model} after error 1113...`);
+          const inventory = await getGlmResetCards(keyForReset, proxyOptions);
+          if (inventory && Array.isArray(inventory.cards) && inventory.cards.length > 0) {
+            const cardToUse = inventory.cards[0];
+            const redeemRes = await redeemGlmResetCard(keyForReset, cardToUse, proxyOptions);
+            if (redeemRes?.ok) {
+              log?.info?.("GLM-RESET", `Successfully redeemed reset card ${cardToUse.type}:${cardToUse.recordId}, retrying inference...`);
+              const retryAfterReset = await executor.execute({
+                model,
+                body: translatedBody,
+                stream,
+                credentials,
+                providerSessionId: sessionSeed,
+                clientTool,
+                signal: streamController.signal,
+                log,
+                proxyOptions,
+                providerOverrides,
+              });
+              if (retryAfterReset?.response?.ok) {
+                providerResponse = retryAfterReset.response;
+                providerUrl = retryAfterReset.url;
+                providerHeaders = retryAfterReset.headers;
+                finalBody = retryAfterReset.transformedBody;
+                providerResponseFormat = retryAfterReset.responseFormat || targetFormat;
+                toolFallbackRecovered = true;
+              }
+            } else {
+              log?.warn?.("GLM-RESET", `Failed to redeem card: ${redeemRes?.message || "unknown"}`);
+            }
+          } else {
+            log?.warn?.("GLM-RESET", "No reset cards available in user inventory.");
+          }
+        }
+      } catch (glmErr) {
+        log?.warn?.("GLM-RESET", `Auto-redeem card threw error: ${glmErr?.message || glmErr}`);
+      }
+    }
 
     // Tool fallback: a provider that refuses the tool payload outright would
     // otherwise hand the caller a tool error, and inside a combo it would spend

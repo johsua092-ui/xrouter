@@ -38,9 +38,9 @@ export class OpencodeTlsUnavailableError extends Error {
 
 async function getWreqModule() {
   try {
-    return await import(/* webpackIgnore: true */ "wreq-js");
-  } catch (_) {
-    return await loadRuntimeDep("wreq-js");
+    return await import("wreq-js");
+  } catch (error) {
+    throw new Error(`wreq-js import failed: ${error?.message || error}`);
   }
 }
 
