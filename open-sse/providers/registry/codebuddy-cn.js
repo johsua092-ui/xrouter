@@ -37,6 +37,7 @@ export default {
       combined: true,
       header: "Authorization",
       scheme: "bearer",
+      hooks: ["codebuddyHeaders"],
     },
     // Quota endpoint differs from the chat gateway: POST returns nested Tencent
     // billing payload (data.Response.Data.Accounts[]). See services/usage/codebuddy-cn.js.

@@ -41,6 +41,14 @@ function applyAuth(headers, desc, credentials) {
 
 // Provider-specific header quirks kept as small hooks (not pure auth).
 const HEADER_HOOKS = {
+  // CodeBuddy: attach official plugin channel headers so requests pass upstream channel verification.
+  codebuddyHeaders: (h) => {
+    const requestId = randomUUID();
+    h["X-Request-ID"] = requestId;
+    h["X-Conversation-ID"] = randomUUID();
+    h["X-Conversation-Request-ID"] = requestId;
+    h["X-Conversation-Message-ID"] = requestId;
+  },
   // Stable device_id from OAuth connection (CLIProxyAPI KimiTokenStorage.DeviceID)
   kimiHeaders: (h, c) => Object.assign(h, buildKimiHeaders(c?.providerSpecificData?.deviceId)),
   minimaxHeaders: (h) => {

@@ -1,6 +1,9 @@
 # v0.0.4 (2026-10-26)
 
-## Releases & New Features
+- **CodeBuddy Headers Injection (#5271)**:
+  - Injected official CodeBuddy plugin channel headers (`X-Request-ID`, `X-Conversation-ID`, `X-Conversation-Request-ID`, `X-Conversation-Message-ID`) into `open-sse/executors/default.js` and registered `codebuddyHeaders` hook in `codebuddy-intl` and `codebuddy-cn` registries, resolving `HTTP 400 code 11128 request illegal` channel verification failures.
+- **GLM Reset Cards Integration (#5269)**:
+  - Added GLM international 5-hour and weekly reset cards endpoints in `open-sse/services/usage/glm.js` and `/api/usage/[connectionId]/glm-reset-cards/route.js`.
 - **Fix Kimi & Official Provider Metadata Override Bug**:
   - Scoped MoonshotAI Compatible labeling and custom SVG overrides strictly to custom compatible endpoints (`isCompatible`), preventing official OAuth providers like Kimi from falsely displaying "MoonshotAI Compatible".
   - Removed false positive top hairline accent from inactive providers; hairline accent now strictly requires `connected > 0`.
