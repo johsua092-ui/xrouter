@@ -81,13 +81,13 @@ export default function PageHeading({
             )}
           </div>
 
-          <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex min-w-0 items-center gap-2.5 py-0.5">
             {resolvedIcon && (
               <span className="material-symbols-outlined shrink-0 text-[22px] leading-none text-primary">
                 {resolvedIcon}
               </span>
             )}
-            <h1 className="truncate text-[20px] font-semibold leading-none tracking-tight text-text-main lg:text-[22px]">
+            <h1 className="truncate text-[20px] font-semibold leading-normal tracking-tight text-text-main lg:text-[22px] py-0.5">
               {translate(resolvedTitle)}
             </h1>
           </div>

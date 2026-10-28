@@ -826,6 +826,7 @@ button:disabled,
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--color-text-subtle);
+  line-height: 1.3;
 }
 
 /* Field: the single form-control treatment (inputs, selects, textareas).
