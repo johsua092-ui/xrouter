@@ -921,10 +921,12 @@ function ProviderCard({
   const isCompatible = isCompatibleOverride ?? providerId.startsWith(OPENAI_COMPATIBLE_PREFIX);
   const isAnthropicCompatible = isAnthropicCompatibleOverride ?? providerId.startsWith(ANTHROPIC_COMPATIBLE_PREFIX);
 
+  // Only Custom Compatible nodes can be Moonshot Compatible
   const isMoonshot =
-    provider.brand === "moonshot" ||
-    providerId.startsWith("moonshot-") ||
-    /moonshot|kimi/i.test(provider.name || "");
+    isCompatible &&
+    (provider.brand === "moonshot" ||
+      providerId.startsWith("moonshot-") ||
+      /moonshot|kimi/i.test(provider.name || ""));
 
   const getIconPath = () => {
     const customLogo = getCustomLogo(provider);
@@ -965,7 +967,7 @@ function ProviderCard({
         <span
           className={cn(
             "absolute top-0 inset-x-0 h-[2px] transition-colors",
-            (connected > 0 || isCompatible || isAnthropicCompatible || isMoonshot)
+            connected > 0
               ? "bg-primary shadow-[0_0_8px_rgba(var(--color-primary-rgb,229,106,74),0.6)]"
               : "bg-transparent group-hover:bg-border"
           )}
@@ -978,10 +980,10 @@ function ProviderCard({
             <div
               className="size-11 sm:size-12 shrink-0 rounded-[6px] border bg-surface-2 dark:bg-[#1a1a20] flex items-center justify-center p-1.5 transition-all duration-200 group-hover:scale-105 shadow-xs"
               style={{
-                borderColor: (isCompatible || isAnthropicCompatible || isMoonshot)
+                borderColor: (isCompatible || isAnthropicCompatible)
                   ? "var(--color-primary, #E56A4A)"
                   : provider.color ? `${provider.color}55` : undefined,
-                boxShadow: (isCompatible || isAnthropicCompatible || isMoonshot)
+                boxShadow: (isCompatible || isAnthropicCompatible)
                   ? "0 0 14px color-mix(in srgb, var(--color-primary, #E56A4A) 25%, transparent)"
                   : provider.color ? `0 0 14px ${provider.color}25` : undefined,
               }}

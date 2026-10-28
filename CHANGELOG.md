@@ -1,6 +1,9 @@
 # v0.0.4 (2026-10-26)
 
 ## Releases & New Features
+- **Fix Kimi & Official Provider Metadata Override Bug**:
+  - Scoped MoonshotAI Compatible labeling and custom SVG overrides strictly to custom compatible endpoints (`isCompatible`), preventing official OAuth providers like Kimi from falsely displaying "MoonshotAI Compatible".
+  - Removed false positive top hairline accent from inactive providers; hairline accent now strictly requires `connected > 0`.
 - **Adaptive SVG & Palette Tinting for Custom Compatible Providers**:
   - Replaced static <img> file references with `CustomCompatibleIcon` component that directly inherits active theme variables.
   - In light mode: clean white background (`#ffffff`) with crisp black squircle border outline (`stroke="black"`).

@@ -1458,9 +1458,10 @@ export default function ProviderDetailPage() {
   }
 
   const isMoonshot =
+    isOpenAICompatible &&
     (providerInfo.brand === "moonshot" ||
-    providerId.startsWith("moonshot-") ||
-    /moonshot|kimi/i.test(providerInfo.name || ""));
+      providerId.startsWith("moonshot-") ||
+      /moonshot|kimi/i.test(providerInfo.name || ""));
 
   // Determine icon path: OpenAI Compatible providers use specialized icons
   const getHeaderIconPath = () => {
