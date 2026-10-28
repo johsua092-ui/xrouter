@@ -417,6 +417,19 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
   const envProxyUrl = connectionProxyUrl ? null : normalizeProxyUrl(getEnvProxyUrl(targetUrl));
   const proxyUrl = connectionProxyUrl || envProxyUrl;
 
+  // PR #5297: Route free-tier TLS fetch through connection proxies via directFetchProxy
+  if (options.directFetch) {
+    if (!proxyUrl) return await options.directFetch(url, options);
+    if (options.directFetchProxy) {
+      try {
+        return await options.directFetch(url, options, { proxyUrl });
+      } catch (err) {
+        if (err?.name !== "OpencodeTlsUnavailableError") throw err;
+        console.warn(`[ProxyFetch] directFetch unavailable (${err.message}); failing open to native proxied fetch`);
+      }
+    }
+  }
+
   // MITM DNS bypass: for known MITM-intercepted hosts, resolve real IP to avoid DNS spoof
   if (shouldBypassMitmDns(targetUrl)) {
     if (proxyUrl) {

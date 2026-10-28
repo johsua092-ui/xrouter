@@ -584,15 +584,16 @@ export class OpenCodeExecutor extends BaseExecutor {
       ...args,
       credentials: prepared,
       proxyOptions,
-      directFetch: (url, options, proxyOpts) => {
-        const p = proxyOpts || proxyOptions;
-        const proxyUrl = p?.url || p?.httpProxy || p?.httpsProxy || "";
+      directFetch: (url, options, { proxyUrl } = {}) => {
+        const p = proxyOptions;
+        const pUrl = proxyUrl || p?.url || p?.connectionProxyUrl || p?.httpProxy || p?.httpsProxy || "";
         return opencodeTlsFetch(url, {
           method: options.method,
           headers: options.headers,
           body: options.body,
-        }, { signal: options.signal, proxy: proxyUrl });
+        }, { signal: options.signal, proxy: pUrl, proxyUrl: pUrl });
       },
+      directFetchProxy: true,
     });
 
     if (!result?.response || result.response.status !== 429) return result;
@@ -652,15 +653,16 @@ export class OpenCodeExecutor extends BaseExecutor {
       body: retryBody || args.body,
       credentials: retryCredentials,
       proxyOptions: retryProxyOptions,
-      directFetch: (url, options, proxyOpts) => {
-        const p = proxyOpts || retryProxyOptions;
-        const proxyUrl = p?.url || p?.httpProxy || p?.httpsProxy || "";
+      directFetch: (url, options, { proxyUrl } = {}) => {
+        const p = retryProxyOptions;
+        const pUrl = proxyUrl || p?.url || p?.connectionProxyUrl || p?.httpProxy || p?.httpsProxy || "";
         return opencodeTlsFetch(url, {
           method: options.method,
           headers: options.headers,
           body: options.body,
-        }, { signal: options.signal, proxy: proxyUrl });
+        }, { signal: options.signal, proxy: pUrl, proxyUrl: pUrl });
       },
+      directFetchProxy: true,
     });
 
     if (retryResult?.response?.status === 429) {

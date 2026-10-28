@@ -1,5 +1,8 @@
 # v0.0.4 (2026-10-26)
 
+- **Route OpenCode Free-Tier TLS Fetch Through Connection Proxies (PR #5297)**:
+  - Backported upstream PR #5297 (`b630c92d`): wired `directFetchProxy` across `BaseExecutor`, `OpenCodeExecutor`, and `proxyAwareFetch`.
+  - Impersonating TLS fetch (`wreq-js`) now rides on the connection proxy pool instead of falling back to native Node TLS on proxied paths, eliminating 429 `FreeUsageLimitError` rejections when using proxy pools with OpenCode free tier.
 - **Complete GLM Reset Cards PR #5269 Port**:
   - Embedded `resetCards` inventory directly inside `getGlmUsage` response (`open-sse/services/usage/glm.js`), so cards populate automatically in `ProviderLimits` Quota Tracker.
   - Fully integrated PR #5269 UI components with `ConfirmModal` child support, recovery info persistence, and GLM reset card redemption modal.
