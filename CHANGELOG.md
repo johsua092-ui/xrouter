@@ -1,5 +1,11 @@
 # v0.0.4 (2026-10-26)
 
+- **Complete GLM Reset Cards PR #5269 Port**:
+  - Embedded `resetCards` inventory directly inside `getGlmUsage` response (`open-sse/services/usage/glm.js`), so cards populate automatically in `ProviderLimits` Quota Tracker.
+  - Fully integrated PR #5269 UI components with `ConfirmModal` child support, recovery info persistence, and GLM reset card redemption modal.
+- **Gemini Web Model Switching & Side-Channel Header (`x-goog-ext-525001261-jspb`)**:
+  - Implemented Gemini Web reverse protocol side-channel headers (`x-goog-ext-525001261-jspb`, `x-goog-ext-73010989-jspb`, `x-goog-ext-73010990-jspb`) with model hash and mode mapping (`gemini-4-argon`: mode 8 / `95a4c0abcba24364`, `gemini-3.8-flash`: mode 1 / `56fdd199312815e2`, `gemini-3.1-pro`: mode 3 / `e6fa609c3fa255c0`).
+  - Fixed `UND_ERR_HEADERS_OVERFLOW` (fetch failed) by setting `maxHeaderSize: 64KB` across direct and proxy dispatchers.
 - **Fix GLM Usage Empty Card & Quota Normalization**:
   - Added `case "glm"` and `case "glm-cn"` in `parseQuotaData` (`ProviderLimits/utils.js`) to properly map GLM rate-limit windows.
   - Handled Z.ai upstream `code 500` ("当前用户不存在coding plan") and empty quota responses in `open-sse/services/usage/glm.js`, surfacing a clear message instead of an empty box.

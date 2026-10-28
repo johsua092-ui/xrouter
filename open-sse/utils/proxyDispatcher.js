@@ -43,6 +43,7 @@ export async function createProxyDispatcher(options) {
     ...options,
     connect: { timeout: 3500 },
     headersTimeout: 6000,
+    maxHeaderSize: 64 * 1024,
   };
   if (modes[0] !== "local") return new ProxyAgent(agentOptions);
 

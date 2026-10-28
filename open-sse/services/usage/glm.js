@@ -182,7 +182,15 @@ export async function getGlmUsage(apiKey, provider, proxyOptions = null) {
 
     const json = await response.json();
     const { plan, quotas, message } = parseGlmQuotaResponse(json);
-    return { plan, quotas, message };
+
+    let resetCards = null;
+    if (provider === "glm") {
+      try {
+        resetCards = await getGlmResetCards(apiKey, proxyOptions);
+      } catch {}
+    }
+
+    return { plan, quotas, message, resetCards };
   } catch (error) {
     return { message: `GLM error: ${error.message}` };
   }

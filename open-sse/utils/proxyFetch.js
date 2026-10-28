@@ -483,9 +483,21 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
     }
   }
 
-  // got-scraping disabled — use native fetch directly
-  // (Re-enable per-host by wrapping with tryGotScrapingFetch when needed)
-  return originalFetch(url, options);
+let directDispatcher = null;
+async function getDirectDispatcher() {
+  if (!directDispatcher) {
+    const { Agent } = await import("undici");
+    directDispatcher = new Agent({
+      maxHeaderSize: 64 * 1024,
+    });
+  }
+  return directDispatcher;
+}
+
+  // got-scraping disabled — use native fetch with enlarged maxHeaderSize (64KB)
+  // to avoid UND_ERR_HEADERS_OVERFLOW from Google / Cloudflare responses with massive Set-Cookie headers.
+  const dispatcher = options.dispatcher || (await getDirectDispatcher().catch(() => null));
+  return originalFetch(url, dispatcher ? { ...options, dispatcher } : options);
 }
 
 /**

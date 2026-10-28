@@ -1,4 +1,5 @@
 import { BaseExecutor } from "./base.js";
+import crypto from "node:crypto";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import {
   prepareToolMessages,
@@ -70,9 +71,26 @@ const GEMINI_BROWSER_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-// In-memory cache for session parameters (at/bl) to prevent hammering gemini.google.com/app on every request
-// Key: cookie string hash -> { at, bl, expiresAt }
-const sessionCache = new Map();
+// Gemini Web model hashes and modes (from official web reverse contract)
+const GEMINI_WEB_MODELS = {
+  "gemini-4-argon": { hash: "95a4c0abcba24364", mode: 8, thinking: 1 },
+  "gemini-4-argon-thinking": { hash: "95a4c0abcba24364", mode: 8, thinking: 2 },
+  "gemini-3.8-flash": { hash: "56fdd199312815e2", mode: 1, thinking: 1 },
+  "gemini-3.5-flash-lite": { hash: "cf41b0e0dd7d53e5", mode: 6, thinking: 1 },
+  "gemini-3.1-pro": { hash: "e6fa609c3fa255c0", mode: 3, thinking: 1 },
+  "gemini-3.1-pro-preview": { hash: "e6fa609c3fa255c0", mode: 3, thinking: 1 },
+  "gemini-2.5-pro": { hash: "e6fa609c3fa255c0", mode: 3, thinking: 1 },
+  "gemini-2.5-flash": { hash: "56fdd199312815e2", mode: 1, thinking: 1 },
+  "gemini-2.5-flash-lite": { hash: "cf41b0e0dd7d53e5", mode: 6, thinking: 1 },
+};
+
+function getModelConfig(modelId) {
+  const norm = String(modelId || "").toLowerCase();
+  for (const [key, cfg] of Object.entries(GEMINI_WEB_MODELS)) {
+    if (norm.includes(key)) return cfg;
+  }
+  return GEMINI_WEB_MODELS["gemini-3.8-flash"];
+}
 const SESSION_CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutes validity
 
 export function normalizeGeminiCookieInput(raw, cookieName = "__Secure-1PSID") {
@@ -302,6 +320,27 @@ export class GeminiWebExecutor extends BaseExecutor {
       rt: "c",
     });
 
+    const mCfg = getModelConfig(modelId);
+    const jspbHeader = JSON.stringify([
+      1,
+      null,
+      null,
+      null,
+      mCfg.hash,
+      null,
+      null,
+      1,
+      [4, 5, 6, 8],
+      null,
+      null,
+      2,
+      null,
+      null,
+      mCfg.mode,
+      mCfg.thinking,
+      crypto.randomUUID ? crypto.randomUUID().toUpperCase() : "B49464E6-4170-4708-815E-C3C14E8D5E85",
+    ]);
+
     let upstream;
     try {
       upstream = await proxyAwareFetch(
@@ -312,6 +351,9 @@ export class GeminiWebExecutor extends BaseExecutor {
             "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
             Cookie: cookie,
             ...GEMINI_BROWSER_HEADERS,
+            "x-goog-ext-525001261-jspb": jspbHeader,
+            "x-goog-ext-73010989-jspb": "[0]",
+            "x-goog-ext-73010990-jspb": "[0,0,0]",
           },
           body: `f.req=${encodeURIComponent(`[[["SnzQ9e",${JSON.stringify(rpcBody)},null,"generic"]]]`)}&at=${encodeURIComponent(session.at)}&`,
           signal: signal ?? undefined,
