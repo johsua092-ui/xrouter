@@ -1,4 +1,5 @@
 import { BaseExecutor } from "./base.js";
+import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import {
   prepareToolMessages,
   parseToolCallReply,
@@ -204,11 +205,11 @@ function errorResult(status, message, body) {
   };
 }
 
-async function exchangeRefreshToken(refreshToken) {
+async function exchangeRefreshToken(refreshToken, proxyOptions = null) {
   const clean = String(refreshToken ?? "").trim();
   if (!clean) return { success: false };
   try {
-    const resp = await fetch(REFRESH_URL, {
+    const resp = await proxyAwareFetch(REFRESH_URL, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${clean}`,
@@ -217,7 +218,7 @@ async function exchangeRefreshToken(refreshToken) {
         Referer: `${BASE_URL}/`,
         "User-Agent": USER_AGENT,
       },
-    });
+    }, proxyOptions);
     if (!resp.ok) return { success: false };
     const data = await resp.json().catch(() => null);
     const access = data?.access_token;
@@ -273,7 +274,7 @@ export class KimiWebExecutor extends BaseExecutor {
     });
   }
 
-  async execute({ model, body, stream, credentials, signal, log }) {
+  async execute({ model, body, stream, credentials, signal, log, proxyOptions = null }) {
     const bodyObj = body || {};
     const rawCreds = credentials || {};
     const rawCredential = String(rawCreds.accessToken || rawCreds.apiKey || "").trim();
@@ -311,12 +312,12 @@ export class KimiWebExecutor extends BaseExecutor {
 
     let upstream;
     try {
-      upstream = await fetch(CHAT_URL, {
+      upstream = await proxyAwareFetch(CHAT_URL, {
         method: "POST",
         headers: this.buildKimiHeaders(accessToken),
         body: framedBody,
         signal: signal ?? undefined,
-      });
+      }, proxyOptions);
     } catch (err) {
       return errorResult(502, `Kimi fetch failed: ${err instanceof Error ? err.message : "unknown"}`, body);
     }
@@ -327,16 +328,16 @@ export class KimiWebExecutor extends BaseExecutor {
         rawCreds.refreshToken ||
         rawCreds.providerSpecificData?.refreshToken;
       if (refreshToken && typeof refreshToken === "string") {
-        const refreshed = await exchangeRefreshToken(refreshToken);
+        const refreshed = await exchangeRefreshToken(refreshToken, proxyOptions);
         if (refreshed.success && refreshed.accessToken) {
           accessToken = refreshed.accessToken;
           try {
-            upstream = await fetch(CHAT_URL, {
+            upstream = await proxyAwareFetch(CHAT_URL, {
               method: "POST",
               headers: this.buildKimiHeaders(accessToken),
               body: frameConnectMessage(reqBody),
               signal: signal ?? undefined,
-            });
+            }, proxyOptions);
           } catch {}
         }
       }

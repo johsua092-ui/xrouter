@@ -11,6 +11,8 @@ import {
   isNousApiKeyAccepted,
 } from "open-sse/services/nous.js";
 import { normalizeProviderId } from "@/lib/providerNormalization";
+import { proxyAwareFetch } from "open-sse/utils/proxyFetch.js";
+import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 
 // Probe a webSearch/webFetch provider using its searchConfig/fetchConfig.
 // Returns true if API key is accepted (status !== 401 && !== 403).
@@ -527,18 +529,23 @@ export async function POST(request) {
             break;
           }
 
-          const res = await fetch("https://chat.deepseek.com/api/v0/users/current", {
+          let effectiveProxy = null;
+          try {
+            effectiveProxy = await resolveConnectionProxyConfig(providerSpecificData);
+          } catch {}
+
+          const res = await proxyAwareFetch("https://chat.deepseek.com/api/v0/users/current", {
             method: "GET",
             headers: {
               Authorization: `Bearer ${token}`,
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
               Origin: "https://chat.deepseek.com",
               Referer: "https://chat.deepseek.com/",
               "x-app-version": "20241129.0",
               "x-client-platform": "web",
             },
-            signal: AbortSignal.timeout(8000),
-          }).catch(() => null);
+            signal: AbortSignal.timeout(12000),
+          }, effectiveProxy).catch(() => null);
 
           if (!res || !res.ok) {
             isValid = false;
@@ -654,7 +661,7 @@ export async function POST(request) {
               if (access && typeof access === "string") token = access.trim();
             } catch {}
           }
-          const bearer = token.match(/^(?:authorization:\s*)?bearer\s+([^;\s]+)/i);
+          const bearer = token.match(/^(?:authorization:\s*)?bearer\s+(.+)$/i);
           if (bearer) token = bearer[1];
           for (const key of ["access_token", "kimi-auth"]) {
             const m = token.match(new RegExp(`(?:^|[\\s;])${key}=([^;\\s]+)`));
@@ -666,7 +673,12 @@ export async function POST(request) {
             break;
           }
 
-          const res = await fetch("https://www.kimi.ai/apiv2/kimi.gateway.user.v1.UserService/GetUserInfo", {
+          let effectiveProxy = null;
+          try {
+            effectiveProxy = await resolveConnectionProxyConfig(providerSpecificData);
+          } catch {}
+
+          const res = await proxyAwareFetch("https://www.kimi.ai/apiv2/kimi.gateway.user.v1.UserService/GetUserInfo", {
             method: "POST",
             headers: {
               "Content-Type": "application/connect+json",
@@ -675,11 +687,11 @@ export async function POST(request) {
               Origin: "https://www.kimi.ai",
               Referer: "https://www.kimi.ai/",
               "connect-protocol-version": "1",
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
             },
             body: "\x00\x00\x00\x00\x00",
-            signal: AbortSignal.timeout(8000),
-          }).catch(() => null);
+            signal: AbortSignal.timeout(12000),
+          }, effectiveProxy).catch(() => null);
 
           if (!res || !res.ok) {
             isValid = false;

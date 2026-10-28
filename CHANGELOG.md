@@ -1,5 +1,14 @@
 # v0.0.4 (2026-10-26)
 
+- **Antigravity Spoofing & Wire Optimization (via chaos-03x/dsh-agy)**:
+  - Injected official internal Google bypass sentinel `skip_thought_signature_validator` for Antigravity functionCall parts without cached signatures.
+  - Aligned `ClientMetadata` body payload to exact protobuf enum strings (`ideType: "ANTIGRAVITY"`, `ideVersion: "1.2.10"`, `platform: "DARWIN_ARM64"`) and stripped fake `Client-Metadata` HTTP header.
+  - Implemented 4-stage load-bearing endpoint fallback in transport baseUrls: `daily -> prod -> daily-sandbox -> autopush` for automatic 429/capacity failover.
+  - Added Claude model family output token clamp (64,000) and automatic headroom adjustment when `thinkingBudget` is active (`maxOutputTokens > thinkingBudget`).
+- **Full-Spectrum Web-Cookie Impersonation via wreq-js**:
+  - Armored all web-cookie providers (`gemini-web`, `deepseek-web`, `kimi-web`, `arena-ai`, `grok-web`, `chatgpt-web`, `claude-web`, `copilot-web`, `zai-web`, `duckduckgo-web`, `yuanbao-web`, `notion-web`) with `wreq-js` Chrome 133 BoringSSL ClientHello and Post-Quantum TLS 1.3 fingerprinting.
+  - Routed all web-cookie domain requests in `proxyAwareFetch` through `browserTlsFetch` with proxy pool awareness and session pooling.
+  - Replaced direct `fetch` in `deepseek-web`, `kimi-web`, and `arena-ai` executors with `proxyAwareFetch` to defeat WAF and bot-challenge gates.
 - **Fix Zai GLM Coding OAuth Polling & Callback**:
   - Wrapped Z.ai coding-plan API key resolution in a safe fallback to OAuth access token when automatic plan key minting fails upstream, avoiding stuck authorization state.
   - Hardened OAuth modal polling error handling to catch and surface non-pending errors instead of polling indefinitely.

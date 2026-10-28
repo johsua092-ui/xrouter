@@ -1,4 +1,5 @@
 import { BaseExecutor } from "./base.js";
+import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import crypto from "node:crypto";
 
 const ARENA_BASE_URL = "https://arena.ai";
@@ -63,7 +64,7 @@ export class ArenaAIExecutor extends BaseExecutor {
     super("arena-ai", { baseUrl: ARENA_BASE_URL });
   }
 
-  async execute({ model, body, stream, credentials, signal }) {
+  async execute({ model, body, stream, credentials, signal, log, proxyOptions = null }) {
     const bodyObj = body || {};
     const rawCreds = credentials || {};
     const userToken = extractUserToken(rawCreds.apiKey || rawCreds.token);
@@ -129,12 +130,12 @@ export class ArenaAIExecutor extends BaseExecutor {
 
     let upstreamRes;
     try {
-      upstreamRes = await fetch(EVAL_STREAM_URL, {
+      upstreamRes = await proxyAwareFetch(EVAL_STREAM_URL, {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
         signal,
-      });
+      }, proxyOptions);
     } catch (err) {
       return {
         response: errorResponse(502, `Failed to connect to Arena AI: ${err.message}`),

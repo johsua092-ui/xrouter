@@ -1,5 +1,6 @@
 import { BaseExecutor } from "./base.js";
 import { PROVIDERS } from "../config/providers.js";
+import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { solveDeepSeekPowAsync } from "../lib/deepseek-pow-worker.js";
 import {
   hasTools,
@@ -591,20 +592,20 @@ export function messagesToPrompt(messages, historyWindow = 0) {
   return parts.join("\n\n").replace(/!\[.*?\]\(.*?\)/g, "");
 }
 
-async function acquireAccessToken(userToken, signal, log) {
+async function acquireAccessToken(userToken, signal, log, proxyOptions = null) {
   const cached = tokenCache.get(userToken);
   if (cached && cached.expiresAt > Math.floor(Date.now() / 1000)) {
     return cached.accessToken;
   }
 
   log?.info?.("DEEPSEEK-WEB", "Acquiring access token from /users/current...");
-  const resp = await fetch(`${DEEPSEEK_API_BASE}/v0/users/current`, {
+  const resp = await proxyAwareFetch(`${DEEPSEEK_API_BASE}/v0/users/current`, {
     headers: {
       Authorization: `Bearer ${userToken}`,
       ...FAKE_HEADERS,
     },
     signal: signal ?? undefined,
-  });
+  }, proxyOptions);
 
   if (resp.status === 401 || resp.status === 403) {
     throw new Error("Token invalid or expired. Get a new userToken from DeepSeek localStorage");
@@ -646,8 +647,8 @@ function parseDeepSeekErrorPayload(payload) {
   return null;
 }
 
-async function createSession(accessToken, signal) {
-  const resp = await fetch(`${DEEPSEEK_API_BASE}/v0/chat_session/create`, {
+async function createSession(accessToken, signal, proxyOptions = null) {
+  const resp = await proxyAwareFetch(`${DEEPSEEK_API_BASE}/v0/chat_session/create`, {
     method: "POST",
     headers: {
       ...FAKE_HEADERS,
@@ -657,7 +658,7 @@ async function createSession(accessToken, signal) {
     },
     body: JSON.stringify({}),
     signal: signal ?? undefined,
-  });
+  }, proxyOptions);
 
   if (!resp.ok) throw new Error(`chat_session/create HTTP ${resp.status}`);
   const json = await resp.json();
@@ -667,9 +668,9 @@ async function createSession(accessToken, signal) {
   return id;
 }
 
-async function deleteSessionOnDeepSeek(accessToken, sessionId) {
+async function deleteSessionOnDeepSeek(accessToken, sessionId, proxyOptions = null) {
   try {
-    await fetch(`${DEEPSEEK_API_BASE}/v0/chat_session/delete`, {
+    await proxyAwareFetch(`${DEEPSEEK_API_BASE}/v0/chat_session/delete`, {
       method: "POST",
       headers: {
         ...FAKE_HEADERS,
@@ -677,7 +678,7 @@ async function deleteSessionOnDeepSeek(accessToken, sessionId) {
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({ chat_session_id: sessionId }),
-    });
+    }, proxyOptions);
   } catch {}
 }
 
@@ -700,8 +701,8 @@ function wrapStreamWithCleanup(responseStream, cleanup) {
   });
 }
 
-async function getPowChallenge(accessToken, signal) {
-  const resp = await fetch(`${DEEPSEEK_API_BASE}/v0/chat/create_pow_challenge`, {
+async function getPowChallenge(accessToken, signal, proxyOptions = null) {
+  const resp = await proxyAwareFetch(`${DEEPSEEK_API_BASE}/v0/chat/create_pow_challenge`, {
     method: "POST",
     headers: {
       ...FAKE_HEADERS,
@@ -710,7 +711,7 @@ async function getPowChallenge(accessToken, signal) {
     },
     body: JSON.stringify({ target_path: "/api/v0/chat/completion" }),
     signal: signal ?? undefined,
-  });
+  }, proxyOptions);
   if (!resp.ok) throw new Error(`create_pow_challenge HTTP ${resp.status}`);
   const json = await resp.json();
   const bizData = json?.data?.biz_data || json?.biz_data;
@@ -723,7 +724,7 @@ export class DeepSeekWebExecutor extends BaseExecutor {
     super("deepseek-web", { baseUrl: DEEPSEEK_WEB_BASE });
   }
 
-  async execute({ model, body, stream, credentials, signal, log }) {
+  async execute({ model, body, stream, credentials, signal, log, proxyOptions = null }) {
     const bodyObj = body || {};
     const messages = Array.isArray(bodyObj.messages) ? bodyObj.messages : [];
     const rawCreds = credentials || {};
@@ -747,7 +748,7 @@ export class DeepSeekWebExecutor extends BaseExecutor {
     const historyWindow = typeof psd.historyWindow === "number" && psd.historyWindow > 0 ? psd.historyWindow : 0;
 
     try {
-      const accessToken = await acquireAccessToken(userToken, signal, log);
+      const accessToken = await acquireAccessToken(userToken, signal, log, proxyOptions);
       const toolMode = hasTools(bodyObj);
       const toolPrompt = toolMode ? buildToolSystemPrompt(bodyObj.tools) : "";
 
@@ -768,7 +769,7 @@ export class DeepSeekWebExecutor extends BaseExecutor {
       const refFileIds = Array.isArray(bodyObj.ref_file_ids) ? bodyObj.ref_file_ids : [];
 
       const performCompletion = async (sid) => {
-        const powChallenge = await getPowChallenge(accessToken, signal);
+        const powChallenge = await getPowChallenge(accessToken, signal, proxyOptions);
         const powAnswer = await solvePow(powChallenge, signal);
         const reqHeaders = {
           ...FAKE_HEADERS,
@@ -788,12 +789,12 @@ export class DeepSeekWebExecutor extends BaseExecutor {
           search_enabled: searchEnabled,
           preempt: false,
         };
-        const resp = await fetch(COMPLETION_URL, {
+        const resp = await proxyAwareFetch(COMPLETION_URL, {
           method: "POST",
           headers: reqHeaders,
           body: JSON.stringify(requestPayload),
           signal: signal ?? undefined,
-        });
+        }, proxyOptions);
         return { resp, reqHeaders, requestPayload };
       };
 
@@ -801,12 +802,12 @@ export class DeepSeekWebExecutor extends BaseExecutor {
         if (persistSession) {
           const cached = sessionCache.get(userToken);
           if (cached) return { sessionId: cached.sessionId, reused: true };
-          const created = await createSession(accessToken, signal);
+          const created = await createSession(accessToken, signal, proxyOptions);
           evictOldest(sessionCache);
           sessionCache.set(userToken, { sessionId: created, createdAt: Date.now() });
           return { sessionId: created, reused: false };
         }
-        return { sessionId: await createSession(accessToken, signal), reused: false };
+        return { sessionId: await createSession(accessToken, signal, proxyOptions), reused: false };
       };
 
       let { sessionId, reused: reusedSession } = await acquireSession();
@@ -816,7 +817,7 @@ export class DeepSeekWebExecutor extends BaseExecutor {
       if (!resp.ok && persistSession && reusedSession) {
         log?.warn?.("DEEPSEEK-WEB", "Reused session failed, retrying with fresh session");
         sessionCache.delete(userToken);
-        sessionId = await createSession(accessToken, signal);
+        sessionId = await createSession(accessToken, signal, proxyOptions);
         evictOldest(sessionCache);
         sessionCache.set(userToken, { sessionId, createdAt: Date.now() });
         reusedSession = false;

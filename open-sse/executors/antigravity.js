@@ -308,12 +308,14 @@ export class AntigravityExecutor extends BaseExecutor {
       }
     }
 
+    const isClaude = String(model || "").toLowerCase().includes("claude");
     const generationConfig = { ...(requestWithoutTools.generationConfig || {}) };
-    if (generationConfig.maxOutputTokens > MAX_ANTIGRAVITY_OUTPUT_TOKENS) {
-      generationConfig.maxOutputTokens = MAX_ANTIGRAVITY_OUTPUT_TOKENS;
+    const maxTokensCap = isClaude ? 64000 : 65536;
+    if (!generationConfig.maxOutputTokens || generationConfig.maxOutputTokens > maxTokensCap) {
+      generationConfig.maxOutputTokens = maxTokensCap;
     }
 
-    // Antigravity reasoning effort mapping: translate client reasoning_effort to thinkingConfig budget (Commit 82aeb90)
+    // Antigravity reasoning effort mapping: translate client reasoning_effort to thinkingConfig budget
     const rawEffort = body.reasoning_effort || body.request?.reasoning_effort;
     if (rawEffort && typeof rawEffort === "string") {
       const budgetMap = { low: 1024, medium: 4096, high: 16384 };
@@ -321,6 +323,14 @@ export class AntigravityExecutor extends BaseExecutor {
       generationConfig.thinkingConfig = {
         thinkingBudget: budget
       };
+    }
+
+    // Claude path: ensure maxOutputTokens is strictly greater than thinkingBudget
+    if (isClaude && generationConfig.thinkingConfig?.thinkingBudget > 0) {
+      const budget = generationConfig.thinkingConfig.thinkingBudget;
+      if (generationConfig.maxOutputTokens <= budget) {
+        generationConfig.maxOutputTokens = Math.min(64000, budget + 2048);
+      }
     }
 
     const transformedRequest = {

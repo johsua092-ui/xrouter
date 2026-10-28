@@ -2,6 +2,7 @@ import { Readable } from "stream";
 import { MEMORY_CONFIG, ALLOW_INSECURE_TLS_FALLBACK } from "../config/runtimeConfig.js";
 import { dbg } from "./debugLog.js";
 import { createProxyDispatcher } from "./proxyDispatcher.js";
+import { isWebCookieTarget, browserTlsFetch } from "../services/browserTlsClient.js";
 
 const originalFetch = globalThis.fetch;
 const proxyDispatchers = new Map();
@@ -416,6 +417,22 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
   const connectionProxyUrl = resolveConnectionProxyUrl(targetUrl, proxyOptions);
   const envProxyUrl = connectionProxyUrl ? null : normalizeProxyUrl(getEnvProxyUrl(targetUrl));
   const proxyUrl = connectionProxyUrl || envProxyUrl;
+
+  // Browser TLS fingerprinting via wreq-js (Chrome 133 BoringSSL ClientHello)
+  // for all Web-Cookie providers and target sites.
+  const isWebCookie = proxyOptions?.isWebCookie === true || proxyOptions?.browserTls === true || isWebCookieTarget(targetUrl);
+  if (isWebCookie) {
+    try {
+      return await browserTlsFetch(url, options, {
+        connectionProxyUrl: proxyUrl,
+        timeoutMs: proxyOptions?.timeoutMs,
+        strictProxy: proxyOptions?.strictProxy,
+      });
+    } catch (browserTlsErr) {
+      if (proxyOptions?.strictProxy === true) throw browserTlsErr;
+      console.warn(`[ProxyFetch] browserTlsFetch failed (${browserTlsErr?.message}), falling back to standard pipeline`);
+    }
+  }
 
   // MITM DNS bypass: for known MITM-intercepted hosts, resolve real IP to avoid DNS spoof
   if (shouldBypassMitmDns(targetUrl)) {
