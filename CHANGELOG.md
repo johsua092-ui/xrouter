@@ -1,5 +1,8 @@
 # v0.0.4 (2026-10-26)
 
+- **Editable HSB & RGB Numeric Controls in Custom Palette**:
+  - Replaced static text labels for HSB (H, S, B) and RGB (R, G, B) with live editable numeric input controls.
+  - Added bi-directional real-time color syncing across HSB, RGB, HEX, rainbow slider, and 2D spectrum canvas.
 - **Antigravity Spoofing & Wire Optimization (via chaos-03x/dsh-agy)**:
   - Injected official internal Google bypass sentinel `skip_thought_signature_validator` for Antigravity functionCall parts without cached signatures.
   - Aligned `ClientMetadata` body payload to exact protobuf enum strings (`ideType: "ANTIGRAVITY"`, `ideVersion: "1.2.10"`, `platform: "DARWIN_ARM64"`) and stripped fake `Client-Metadata` HTTP header.

@@ -118,14 +118,34 @@ function PhotoshopColorPicker({ color, onChange, onApply, isActive }) {
   }, [color]);
 
   const updateFromHsb = (newH, newS, newB) => {
-    setHue(newH);
-    setSat(newS);
-    setBri(newB);
-    const newRgb = hsbToRgb(newH, newS, newB);
+    const h = Math.max(0, Math.min(360, Math.round(newH)));
+    const s = Math.max(0, Math.min(100, Math.round(newS)));
+    const b = Math.max(0, Math.min(100, Math.round(newB)));
+    setHue(h);
+    setSat(s);
+    setBri(b);
+    const newRgb = hsbToRgb(h, s, b);
     const newHex = rgbToHex(newRgb.r, newRgb.g, newRgb.b);
     setInternalHex(newHex);
 
     // Throttle parent state update with requestAnimationFrame
+    if (rafId.current) cancelAnimationFrame(rafId.current);
+    rafId.current = requestAnimationFrame(() => {
+      onChange(newHex);
+    });
+  };
+
+  const updateFromRgb = (newR, newG, newB) => {
+    const r = Math.max(0, Math.min(255, Math.round(newR)));
+    const g = Math.max(0, Math.min(255, Math.round(newG)));
+    const b = Math.max(0, Math.min(255, Math.round(newB)));
+    const newHex = rgbToHex(r, g, b);
+    const newHsb = rgbToHsb(r, g, b);
+    setHue(newHsb.h);
+    setSat(newHsb.s);
+    setBri(newHsb.b);
+    setInternalHex(newHex);
+
     if (rafId.current) cancelAnimationFrame(rafId.current);
     rafId.current = requestAnimationFrame(() => {
       onChange(newHex);
@@ -249,31 +269,111 @@ function PhotoshopColorPicker({ color, onChange, onApply, isActive }) {
             </div>
           </div>
 
-          {/* HSB & RGB Grid Inputs */}
+          {/* HSB & RGB Grid Inputs (Photoshop-style editable controls) */}
           <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
-            <div className="flex items-center justify-between">
-              <span className="text-text-muted">H:</span>
-              <span className="text-text-main font-medium">{hue}°</span>
+            {/* H */}
+            <div className="flex items-center gap-1">
+              <span className="text-text-muted w-3 text-left font-semibold">H:</span>
+              <div className="relative flex-1 min-w-0">
+                <input
+                  type="number"
+                  min="0"
+                  max="360"
+                  value={hue}
+                  onChange={(e) => {
+                    const val = e.target.value === "" ? 0 : Number(e.target.value);
+                    updateFromHsb(Math.max(0, Math.min(360, val)), sat, bri);
+                  }}
+                  className="w-full px-1 py-0.5 pr-3.5 rounded-[3px] border border-border bg-surface-2 text-[11px] font-mono text-text-main text-right focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-text-muted pointer-events-none">°</span>
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-text-muted">R:</span>
-              <span className="text-text-main font-medium">{rgb.r}</span>
+
+            {/* R */}
+            <div className="flex items-center gap-1">
+              <span className="text-text-muted w-3 text-left font-semibold">R:</span>
+              <input
+                type="number"
+                min="0"
+                max="255"
+                value={rgb.r}
+                onChange={(e) => {
+                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                  updateFromRgb(Math.max(0, Math.min(255, val)), rgb.g, rgb.b);
+                }}
+                className="w-full px-1 py-0.5 rounded-[3px] border border-border bg-surface-2 text-[11px] font-mono text-text-main text-right focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-text-muted">S:</span>
-              <span className="text-text-main font-medium">{sat}%</span>
+
+            {/* S */}
+            <div className="flex items-center gap-1">
+              <span className="text-text-muted w-3 text-left font-semibold">S:</span>
+              <div className="relative flex-1 min-w-0">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={sat}
+                  onChange={(e) => {
+                    const val = e.target.value === "" ? 0 : Number(e.target.value);
+                    updateFromHsb(hue, Math.max(0, Math.min(100, val)), bri);
+                  }}
+                  className="w-full px-1 py-0.5 pr-3.5 rounded-[3px] border border-border bg-surface-2 text-[11px] font-mono text-text-main text-right focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-text-muted pointer-events-none">%</span>
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-text-muted">G:</span>
-              <span className="text-text-main font-medium">{rgb.g}</span>
+
+            {/* G */}
+            <div className="flex items-center gap-1">
+              <span className="text-text-muted w-3 text-left font-semibold">G:</span>
+              <input
+                type="number"
+                min="0"
+                max="255"
+                value={rgb.g}
+                onChange={(e) => {
+                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                  updateFromRgb(rgb.r, Math.max(0, Math.min(255, val)), rgb.b);
+                }}
+                className="w-full px-1 py-0.5 rounded-[3px] border border-border bg-surface-2 text-[11px] font-mono text-text-main text-right focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-text-muted">B:</span>
-              <span className="text-text-main font-medium">{bri}%</span>
+
+            {/* B (Brightness) */}
+            <div className="flex items-center gap-1">
+              <span className="text-text-muted w-3 text-left font-semibold">B:</span>
+              <div className="relative flex-1 min-w-0">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={bri}
+                  onChange={(e) => {
+                    const val = e.target.value === "" ? 0 : Number(e.target.value);
+                    updateFromHsb(hue, sat, Math.max(0, Math.min(100, val)));
+                  }}
+                  className="w-full px-1 py-0.5 pr-3.5 rounded-[3px] border border-border bg-surface-2 text-[11px] font-mono text-text-main text-right focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-text-muted pointer-events-none">%</span>
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-text-muted">B:</span>
-              <span className="text-text-main font-medium">{rgb.b}</span>
+
+            {/* B (Blue) */}
+            <div className="flex items-center gap-1">
+              <span className="text-text-muted w-3 text-left font-semibold">B:</span>
+              <input
+                type="number"
+                min="0"
+                max="255"
+                value={rgb.b}
+                onChange={(e) => {
+                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                  updateFromRgb(rgb.r, rgb.g, Math.max(0, Math.min(255, val)));
+                }}
+                className="w-full px-1 py-0.5 rounded-[3px] border border-border bg-surface-2 text-[11px] font-mono text-text-main text-right focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
             </div>
           </div>
 
