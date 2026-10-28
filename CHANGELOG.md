@@ -1,5 +1,7 @@
 # v0.0.4 (2026-10-26)
 
+- **Fix wreq-js Webpack Server External Packaging**:
+  - Added `wreq-js` to `serverExternalPackages` and `config.externals` in `next.config.mjs`, fixing webpack bundling issue where dynamic `createRequire().resolve` was stripped to `(void 0).resolve`, preventing `[BrowserTLS] Cannot read properties of undefined (reading 'resolve')` crashes.
 - **Fix Gemini Web Cookie Modal Saving & Validation Timeout**:
   - Prevented saving hang on `gemini-web` cookie modal by making save flow fast-path and adding abort controller on validation.
   - Wired `connectionProxyPoolId` & `proxyPoolId` resolution seamlessly in `resolveConnectionProxyConfig`.

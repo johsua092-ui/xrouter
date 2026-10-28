@@ -54,9 +54,11 @@ async function load(pkg) {
     if (!isModuleMissing(error)) throw error;
   }
   // 2) Already present in the runtime dir from a previous install.
-  const runtimeRequire = createRequire(path.join(getRuntimeDir(), "package.json"));
   try {
-    return await import(pathToFileURL(runtimeRequire.resolve(pkg)).href);
+    const runtimeRequire = createRequire(path.join(getRuntimeDir(), "package.json"));
+    if (typeof runtimeRequire.resolve === "function") {
+      return await import(pathToFileURL(runtimeRequire.resolve(pkg)).href);
+    }
   } catch (error) {
     if (!isModuleMissing(error)) throw error;
   }
@@ -71,7 +73,11 @@ async function load(pkg) {
       `install it manually: cd "${dir}" && npm install ${pkg}@${version}`
     );
   }
-  return import(pathToFileURL(createRequire(path.join(dir, "package.json")).resolve(pkg)).href);
+  const postInstallReq = createRequire(path.join(dir, "package.json"));
+  if (typeof postInstallReq.resolve === "function") {
+    return import(pathToFileURL(postInstallReq.resolve(pkg)).href);
+  }
+  return import(pkg);
 }
 
 export function loadRuntimeDep(pkg) {

@@ -31,7 +31,7 @@ const tracingRoot = process.env.NEXT_TRACING_ROOT_MODE === "workspace"
   : projectRoot;
 const proxyClientMaxBodySize = process.env.NINEROUTER_PROXY_CLIENT_MAX_BODY_SIZE || "128mb";
 
-const externalPkgs = ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite", "open"];
+const externalPkgs = ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite", "open", "wreq-js"];
 const tracingExcludes = {
   "*": [
     "./gitbook/**/*",
@@ -89,6 +89,7 @@ const nextConfig = {
     if (isServer) {
       config.externals = config.externals || [];
       if (!config.externals.includes("bun:sqlite")) config.externals.push("bun:sqlite");
+      if (!config.externals.includes("wreq-js")) config.externals.push("wreq-js");
     }
     return config;
   },
