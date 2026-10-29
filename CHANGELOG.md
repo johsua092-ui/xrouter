@@ -1,5 +1,8 @@
 # v0.0.4 (2026-10-28)
 
+- **Fix Provider Connection PUT Endpoint Dropping Cookie Updates**:
+  - Fixed `src/app/api/providers/[id]/route.js` rejecting `apiKey` updates on `authType === "cookie"` connections (`existing.authType === "apikey"` check), which caused new cookies saved from Edit Connection modal to be silently discarded.
+  - Skipped OAuth token refresh loop in `open-sse/handlers/chatCore.js` for cookie-based providers (`gemini-web`, etc.), eliminating bogus `[TOKEN_REFRESH] All 3 retry attempts failed` logs on 401.
 - **Sync Edit Connection Modal with Multi-Cookie Web Providers**:
   - Brought dual-column cookie UI (`__Secure-1PSID` & `__Secure-1PSIDTS` for `gemini-web`, and `sso` & `sso-rw` for `grok-web`) with auto-split parser into `EditConnectionModal.js`, matching `AddApiKeyModal`.
   - Added Proxy Pool selector to `EditConnectionModal.js` so users can bind or re-route existing web-cookie connections to proxy pools directly from the edit modal.
