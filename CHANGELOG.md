@@ -1,5 +1,8 @@
 # v0.0.4 (2026-10-28)
 
+- **Sync Edit Connection Modal with Multi-Cookie Web Providers**:
+  - Brought dual-column cookie UI (`__Secure-1PSID` & `__Secure-1PSIDTS` for `gemini-web`, and `sso` & `sso-rw` for `grok-web`) with auto-split parser into `EditConnectionModal.js`, matching `AddApiKeyModal`.
+  - Added Proxy Pool selector to `EditConnectionModal.js` so users can bind or re-route existing web-cookie connections to proxy pools directly from the edit modal.
 - **Fix Gemini Web `sessionCache is not defined` ReferenceError**:
   - Re-instantiated in-memory `sessionCache = new Map()` in `open-sse/executors/gemini-web.js`, fixing HTTP 502 crashes during session initialization.
 - **DeepSeek Web Scraper WASM Hardware Acceleration**:
