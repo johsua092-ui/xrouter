@@ -92,6 +92,7 @@ function getModelConfig(modelId) {
   return GEMINI_WEB_MODELS["gemini-3.8-flash"];
 }
 const SESSION_CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutes validity
+const sessionCache = new Map();
 
 export function normalizeGeminiCookieInput(raw, cookieName = "__Secure-1PSID") {
   const trimmed = String(raw ?? "").trim();

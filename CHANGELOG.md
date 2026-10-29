@@ -1,5 +1,7 @@
 # v0.0.4 (2026-10-28)
 
+- **Fix Gemini Web `sessionCache is not defined` ReferenceError**:
+  - Re-instantiated in-memory `sessionCache = new Map()` in `open-sse/executors/gemini-web.js`, fixing HTTP 502 crashes during session initialization.
 - **DeepSeek Web Scraper WASM Hardware Acceleration**:
   - Imported official DeepSeek compiled WebAssembly SHA-3 solver (`sha3_wasm.wasm`) into `open-sse/lib/`.
   - Upgraded `solveDeepSeekPowAsync` (`deepseek-pow-worker.js`) with WASM SIMD acceleration, reducing PoW challenge solve latency by ~10x-20x (<10ms) while keeping background worker resilience and JS Keccak fallback.
