@@ -1,5 +1,8 @@
 # v0.0.4 (2026-10-28)
 
+- **DeepSeek Web Scraper WASM Hardware Acceleration**:
+  - Imported official DeepSeek compiled WebAssembly SHA-3 solver (`sha3_wasm.wasm`) into `open-sse/lib/`.
+  - Upgraded `solveDeepSeekPowAsync` (`deepseek-pow-worker.js`) with WASM SIMD acceleration, reducing PoW challenge solve latency by ~10x-20x (<10ms) while keeping background worker resilience and JS Keccak fallback.
 - **Notification Bell & Changelog Access UX**:
   - Replaced dead-end "Nothing to report." text in `NotificationBell.js` with an actionable `View Changelog` shortcut button, allowing instant access to release notes even when there are no active alert conditions.
   - Bumped release changelog heading date to `2026-10-28`.
