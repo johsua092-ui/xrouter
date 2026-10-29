@@ -1,5 +1,13 @@
 # v0.0.4 (2026-10-28)
 
+- **Upstream 9Router Sync (2026-10-28 Merge)**:
+  - Added `gpt-6.1-terra` to Codex registry (`open-sse/providers/registry/codex.js`), capabilities (500k context window), and pricing tables (`open-sse/providers/capabilities.js`, `pricing.js`).
+  - Applied Claude 5.5 adaptive thinking rules to Copilot dotted model IDs (`claude-opus-5.5`, `claude-sonnet-5.5`, `claude-haiku-5.5`) in `capabilities.js` and `thinkingUnified.js`.
+  - Enforced Gemini Protobuf type predicates in `cleanJSONSchemaForAntigravity` (`open-sse/translator/formats/gemini.js`), preventing `$type == Type.ARRAY` schema validation errors.
+  - Handled SSE stream errors in non-streaming responses (`open-sse/handlers/chatCore/nonStreamingHandler.js`).
+  - Preserved opaque `LLM|id|secret` token formats during bulk-import in `src/shared/utils/bulkAdd.js`.
+  - Normalized NVIDIA NIM assistant reasoning aliases (`reasoning` -> `reasoning_content`) in `open-sse/translator/concerns/paramSupport.js`.
+  - Aligned CommandCode headers (`x-command-code-version: 1.88.0`, `x-project-slug`, stable threadId session UUID).
 - **Fix Provider Connection PUT Endpoint Dropping Cookie Updates**:
   - Fixed `src/app/api/providers/[id]/route.js` rejecting `apiKey` updates on `authType === "cookie"` connections (`existing.authType === "apikey"` check), which caused new cookies saved from Edit Connection modal to be silently discarded.
   - Skipped OAuth token refresh loop in `open-sse/handlers/chatCore.js` for cookie-based providers (`gemini-web`, etc.), eliminating bogus `[TOKEN_REFRESH] All 3 retry attempts failed` logs on 401.

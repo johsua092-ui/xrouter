@@ -25,6 +25,10 @@
  */
 function parseLine(line, opts = {}) {
   const { isCloudflareAi = false } = opts;
+  const trimmed = line.trim();
+  if (!isCloudflareAi && /^LLM\|/i.test(trimmed)) {
+    return { baseName: "LLM", apiKey: trimmed };
+  }
   const parts = line.split("|");
 
   if (isCloudflareAi && parts.length >= 3) {
