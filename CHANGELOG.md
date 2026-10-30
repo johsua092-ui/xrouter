@@ -3,6 +3,9 @@
 - **Fix Antigravity & Gemini CLI Remote OAuth Redirect URI**:
   - Dynamically use `window.location.origin/callback` in `OAuthModal.js` when accessing via custom domain or remote host, instead of hardcoding `http://localhost:${port}/callback`.
   - Updated backend `/api/oauth/[provider]/[action]` fallback to resolve from request origin instead of static `localhost:8080`.
+- **Fix Antigravity 403 UberProxy Error Handling (Fast Fail + Clean Message)**:
+  - `open-sse/executors/antigravity.js`: a 403 block page from Google edge (UberProxy HTML) no longer cycles the 3 sandbox mirror hosts (~90s of doomed retries) - fallback is vetoed immediately on 403 since the block is account/edge-level and identical across mirrors.
+  - Clients now receive a clean actionable message ("Google edge blocked this account/IP (UberProxy 403)...") instead of a 14KB raw HTML blob.
 - **Optimize Bulk Add Naming (Key-Only Fast Path)**:
   - Key-only bulk lines (no `name|` prefix) now number immediately as "Key 1..N" without per-line collision scans against existing connections, keeping huge pastes (500+ keys) at O(1) per line (3ms for 500 keys vs 2000 existing) in `src/shared/utils/bulkAdd.js`.
 - **Fix README Go Core vs Node.js Runtime Inconsistency**:
