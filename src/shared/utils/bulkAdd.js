@@ -70,6 +70,7 @@ export function planBulkAdd(lines, existingNames, opts = {}) {
   const used = new Set(safeExisting.map((n) => (typeof n === "string" ? n.toLowerCase() : "")));
 
   const out = [];
+  let autoKeyIdx = 0;
   for (const raw of lines) {
     const line = typeof raw === "string" ? raw.trim() : "";
     if (!line) continue;
@@ -78,6 +79,16 @@ export function planBulkAdd(lines, existingNames, opts = {}) {
     if (!parsed || !parsed.apiKey) continue;
 
     const base = parsed.baseName;
+
+    // Key-only lines: number immediately ("Key 1", "Key 2", ...) without a
+    // collision scan — the gap-fill loop below is skipped entirely. This keeps
+    // huge pastes (500+ keys) at O(1) per line instead of O(existing) scans.
+    if (base === "Key" && !isCloudflareAi) {
+      autoKeyIdx += 1;
+      const entry = { name: `Key ${autoKeyIdx}`, apiKey: parsed.apiKey, skipped: false };
+      out.push(entry);
+      continue;
+    }
 
     // Gap-fill from 1: smallest free "<base> <n>" not in `used`.
     // O(batch * existing) — fine for bulk add (tens to low hundreds of keys).

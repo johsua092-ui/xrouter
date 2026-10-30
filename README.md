@@ -3,11 +3,12 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.26-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Golang" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-26-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" /></a>
   <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-14.2-000000?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" /></a>
   <a href="https://sqlite.org"><img src="https://img.shields.io/badge/SQLite-WAL%20Zero--CGO-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite" /></a>
-  <a href="https://github.com/johsua092-ui/xrouter"><img src="https://img.shields.io/badge/Release-v0.0.3-E56A4A?style=for-the-badge" alt="Release" /></a>
+  <a href="https://github.com/johsua092-ui/xrouter"><img src="https://img.shields.io/badge/Release-v0.0.4-E56A4A?style=for-the-badge" alt="Release" /></a>
   <a href="https://www.npmjs.com/package/xrouter-ai"><img src="https://img.shields.io/npm/v/xrouter-ai.svg?style=for-the-badge&logo=npm&logoColor=white&color=CB3837" alt="npm" /></a>
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go%20Core-Planned-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go Core (Planned)" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License" /></a>
 </p>
 
@@ -15,9 +16,9 @@
 
 ## ⚡ Overview
 
-**X Router (Go Core)** is an ultra-lightweight, high-performance AI routing gateway written in pure Go with an embedded Next.js dashboard. Migrated from Node.js, the Go Core reduces memory consumption by **~90% (from 250MB+ down to ~15MB RAM)** and achieves sub-millisecond local proxy latency (`~420µs`).
+**X Router** is an ultra-lightweight, high-performance AI routing gateway running on **Node.js 26 (ESM)** with an embedded Next.js 14.2 dashboard, currently in transition toward a planned **Hybrid Go Core** architecture (see [Migration Plan](./docs/ROADMAP_GO_MIGRATION.md)).
 
-It consolidates 40+ upstream AI providers (Claude, OpenAI, Antigravity, DeepSeek, River AI, OpenCode, Kilo, Grok, Gemini, and custom nodes) behind unified OpenAI and Anthropic-compatible wire surfaces with native Goroutine concurrency, zero-CGO SQLite WAL persistence, automated dead-account pruning, and integrated Telegram Bot Remote Control.
+It consolidates 40+ upstream AI providers (Claude, OpenAI, Antigravity, DeepSeek, River AI, OpenCode, Kilo, Grok, Gemini, and custom nodes) behind unified OpenAI and Anthropic-compatible wire surfaces with high-efficiency Node.js concurrency, zero-CGO SQLite WAL persistence, automated dead-account pruning, and integrated Telegram Bot Remote Control.
 
 ---
 

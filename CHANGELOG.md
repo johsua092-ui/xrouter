@@ -1,5 +1,12 @@
 # v0.0.4 (2026-10-28)
 
+- **Fix Antigravity & Gemini CLI Remote OAuth Redirect URI**:
+  - Dynamically use `window.location.origin/callback` in `OAuthModal.js` when accessing via custom domain or remote host, instead of hardcoding `http://localhost:${port}/callback`.
+  - Updated backend `/api/oauth/[provider]/[action]` fallback to resolve from request origin instead of static `localhost:8080`.
+- **Optimize Bulk Add Naming (Key-Only Fast Path)**:
+  - Key-only bulk lines (no `name|` prefix) now number immediately as "Key 1..N" without per-line collision scans against existing connections, keeping huge pastes (500+ keys) at O(1) per line (3ms for 500 keys vs 2000 existing) in `src/shared/utils/bulkAdd.js`.
+- **Fix README Go Core vs Node.js Runtime Inconsistency**:
+  - Overview badge + intro now state the real runtime: Node.js 26 (ESM) + Next.js 14.2, with Go Core explicitly marked as **Planned** (per docs/ROADMAP_GO_MIGRATION.md), resolving the documented README contradiction.
 - **Upstream 9Router Sync (2026-10-28 Merge)**:
   - Added `gpt-6.1-terra` to Codex registry (`open-sse/providers/registry/codex.js`), capabilities (500k context window), and pricing tables (`open-sse/providers/capabilities.js`, `pricing.js`).
   - Applied Claude 5.5 adaptive thinking rules to Copilot dotted model IDs (`claude-opus-5.5`, `claude-sonnet-5.5`, `claude-haiku-5.5`) in `capabilities.js` and `thinkingUnified.js`.

@@ -365,9 +365,15 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       } else if (provider === "xai") {
         redirectUri = "http://127.0.0.1:56121/callback";
  } else if (provider === "antigravity" || provider === "gemini-cli") {
- // Google Client ID is registered only with localhost redirect_uri
- redirectUri = `http://localhost:${appPort}/callback`;
-      } else {
+   // Antigravity & Gemini CLI: Jika di remote/domain publik, pakai origin/callback.
+   // Hanya pakai localhost jika user memang mengakses dari localhost.
+   const isLocalHost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+   if (isLocalHost) {
+     redirectUri = `http://localhost:${appPort}/callback`;
+   } else {
+     redirectUri = `${window.location.origin}/callback`;
+   }
+ } else {
         redirectUri = `${window.location.origin}/callback`;
       }
 
