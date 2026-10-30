@@ -431,12 +431,14 @@ async function collectSSEContent(deepseekStream, model) {
   let buffer = "";
   let content = "";
   let reasoningContent = "";
+  let rawContent = "";
   let currentPath = "";
   const streamModel = model || "deepseek-web";
   const thinkingModel = isThinkingModel(streamModel);
   const searchResults = [];
 
   const appendByPath = (raw) => {
+    rawContent += raw;
     const text = formatStreamContent(raw, streamModel);
     if (!text) return;
     let path = currentPath;
@@ -537,7 +539,7 @@ async function collectSSEContent(deepseekStream, model) {
   const citations = appendSearchCitations(searchResults, streamModel);
   if (citations) content += `\n\n${citations}`;
 
-  return { content, reasoningContent };
+  return { content, reasoningContent, rawContent };
 }
 
 function extractMessageText(content) {
@@ -892,8 +894,9 @@ export class DeepSeekWebExecutor extends BaseExecutor {
           // Buffer the model's full answer, then translate a detected tool
           // call into OpenAI tool_calls deltas (RAG web backend only speaks
           // text, so calls can only be classified once the answer completes).
-          const { content, reasoningContent } = await collectSSEContent(resp.body, clientModel);
-          const parsed = parseToolCallReply(content);
+          const { content, reasoningContent, rawContent } = await collectSSEContent(resp.body, clientModel);
+          // parse from RAW so DSML tags survive cleanDeepSeekToken; fall back to cleaned
+          const parsed = parseToolCallReply(rawContent || content);
           await cleanupFn();
 
           const encoder = new TextEncoder();
@@ -951,11 +954,11 @@ export class DeepSeekWebExecutor extends BaseExecutor {
         };
       }
 
-      const { content, reasoningContent } = await collectSSEContent(resp.body, clientModel);
+      const { content, reasoningContent, rawContent } = await collectSSEContent(resp.body, clientModel);
       await cleanupFn();
 
       if (toolMode) {
-        const parsed = parseToolCallReply(content);
+        const parsed = parseToolCallReply(rawContent || content);
         if (parsed.calls.length > 0) {
           return {
             response: new Response(JSON.stringify(buildToolCallResponse({

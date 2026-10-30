@@ -1,5 +1,8 @@
 # v0.0.5 (2026-10-30)
 
+- **Fix DeepSeek Web (dsw) Tool Calling Preserving DSML**: 
+  - `collectSSEContent()` now surfaces `rawContent` in addition to DSML-stripped `content`, and both stream + non-stream tool-mode paths parse tool calls from the RAW text — so `<|DSML|:tool>` tags survive `cleanDeepSeekToken` and reach `parseToolCallReply`.
+  - Reproducing case: `dsw/deepseek-v4.1-pro` (and any dsw model) returned pure text with `calls:[]` because the DSML tool-call block was stripped before parsing. Now `search_web` etc. resolve to proper `tool_calls` deltas.
 - **Add DeepSeek V5 Support**:
   - `open-sse/providers/registry/deepseek.js`: added `deepseek-v5-pro` and `deepseek-v5-flash` (API key).
   - `open-sse/providers/registry/deepseek-web.js`: added `deepseek-v5-chat` and `deepseek-v5-reasoner` (DeepSeek Web cookie).
