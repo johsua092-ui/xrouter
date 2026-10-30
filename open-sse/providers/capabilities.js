@@ -333,7 +333,9 @@ export const PROVIDER_CAPABILITIES = {
     // Using 1000000 here would let the capacity adapter budget history for a
     // window the model doesn't actually have.
     "kimi-k2.8-preview":  { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 300000, maxOutput: 131072 },
-    "deepseek-v4-pro":    { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 1000000, maxOutput: 393216 },
+    "deepseek-v5-pro":    { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 1000000, maxOutput: 393216 },
+  "deepseek-v5-flash":   { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 1000000, maxOutput: 393216 },
+  "deepseek-v4-pro":    { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 1000000, maxOutput: 393216 },
     // deepseek-v4.1-flash replaced v4-flash on the server list. The 2026-09-30
     // snapshot raised maxOutput to 393216 (matching v4-pro) and changed the
     // published efforts from low/high/xhigh to low/high/max.

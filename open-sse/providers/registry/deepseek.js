@@ -56,6 +56,8 @@ export default {
     },
   ],
   models: [
+    { id: "deepseek-v5-pro", name: "DeepSeek V5 Pro" },
+    { id: "deepseek-v5-flash", name: "DeepSeek V5 Flash" },
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" },
     { id: "deepseek-v4-pro-max", name: "DeepSeek V4 Pro Max", upstreamModelId: "deepseek-v4-pro" },
     { id: "deepseek-v4-pro-none", name: "DeepSeek V4 Pro No Thinking", upstreamModelId: "deepseek-v4-pro" },

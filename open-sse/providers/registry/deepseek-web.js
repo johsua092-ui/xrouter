@@ -26,6 +26,8 @@ export default {
     authType: "cookie",
   },
   models: [
+    { id: "deepseek-v5-chat", name: "DeepSeek V5 Chat" },
+    { id: "deepseek-v5-reasoner", name: "DeepSeek V5 Reasoner (Thinking)" },
     { id: "deepseek-chat", name: "DeepSeek V3/V4 Chat" },
     { id: "deepseek-reasoner", name: "DeepSeek R1/V4 Reasoner (Thinking)" },
     { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash" },
