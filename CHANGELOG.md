@@ -1,5 +1,10 @@
 # v0.0.5 (2026-10-30)
 
+- **Add DeepSeek V5 Support**:
+  - `open-sse/providers/registry/deepseek.js`: added `deepseek-v5-pro` and `deepseek-v5-flash` (API key).
+  - `open-sse/providers/registry/deepseek-web.js`: added `deepseek-v5-chat` and `deepseek-v5-reasoner` (DeepSeek Web cookie).
+  - `capabilities.js` + `pricing.js`: wired V5 thinking/tool-calling caps and per-token pricing (mirrors V4 rates).
+  - DeepSeek Web executor already sanitizes DSML markup (stream + non-stream) and routes `reasoner` → `reasoning_content`, so no thinking-token/cookie leak on V5.
 - **Fix Antigravity & Gemini CLI Remote OAuth Redirect URI**:
   - Dynamically use `window.location.origin/callback` in `OAuthModal.js` when accessing via custom domain or remote host, instead of hardcoding `http://localhost:${port}/callback`.
   - Updated backend `/api/oauth/[provider]/[action]` fallback to resolve from request origin instead of static `localhost:8080`.
