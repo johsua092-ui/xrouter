@@ -1,4 +1,4 @@
-# v0.0.4 (2026-10-28)
+# v0.0.5 (2026-10-30)
 
 - **Fix Antigravity & Gemini CLI Remote OAuth Redirect URI**:
   - Dynamically use `window.location.origin/callback` in `OAuthModal.js` when accessing via custom domain or remote host, instead of hardcoding `http://localhost:${port}/callback`.

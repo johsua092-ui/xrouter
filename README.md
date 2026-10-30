@@ -6,7 +6,7 @@
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-26-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" /></a>
   <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-14.2-000000?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" /></a>
   <a href="https://sqlite.org"><img src="https://img.shields.io/badge/SQLite-WAL%20Zero--CGO-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite" /></a>
-  <a href="https://github.com/johsua092-ui/xrouter"><img src="https://img.shields.io/badge/Release-v0.0.4-E56A4A?style=for-the-badge" alt="Release" /></a>
+  <a href="https://github.com/johsua092-ui/xrouter"><img src="https://img.shields.io/badge/Release-v0.0.5-E56A4A?style=for-the-badge" alt="Release" /></a>
   <a href="https://www.npmjs.com/package/xrouter-ai"><img src="https://img.shields.io/npm/v/xrouter-ai.svg?style=for-the-badge&logo=npm&logoColor=white&color=CB3837" alt="npm" /></a>
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go%20Core-Planned-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go Core (Planned)" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License" /></a>
