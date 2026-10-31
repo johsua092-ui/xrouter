@@ -120,9 +120,107 @@ async function glmResetRequest(apiKey, card, proxyOptions) {
   return { response, payload: await response.json().catch(() => null) };
 }
 
-export async function getGlmResetCards(apiKey, proxyOptions = null) {
-  if (typeof apiKey !== "string" || !apiKey.trim()) throw glmResetError("GLM API key not available.", 401);
-  const { response, payload } = await glmResetRequest(apiKey, null, proxyOptions);
+const ZCODE_PLAN_PREVIEW_URL = "https://zcode.z.ai/api/v1/zcode-plan/billing/preview";
+const ZCODE_PLAN_CLAIM_URL = "https://zcode.z.ai/api/v1/zcode-plan/billing/claim";
+const ZCODE_PLAN_BALANCE_URL = "https://zcode.z.ai/api/v1/zcode-plan/billing/balance";
+const ZCODE_RESET_STATUS_URL = "https://zcode.z.ai/api/v1/coding-plan/reset/status";
+const ZCODE_RESET_USE_URL = "https://zcode.z.ai/api/v1/coding-plan/reset/use";
+const ZCODE_APP_VERSION = "3.16.3";
+const ZCODE_PLATFORM = "linux-x64";
+
+/**
+ * Fetch active ZCode plan token balances & gift grants (e.g. 500M Weekend Build).
+ * Hits GET https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=3.16.3
+ */
+export async function getGlmBalance(token, proxyOptions = null) {
+  if (typeof token !== "string" || !token.trim()) return null;
+  const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
+  const url = new URL(ZCODE_PLAN_BALANCE_URL);
+  url.searchParams.set("app_version", ZCODE_APP_VERSION);
+
+  try {
+    const response = await proxyAwareFetch(
+      url.toString(),
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${cleanToken}`,
+          Accept: "application/json",
+          "X-ZCode-App-Version": ZCODE_APP_VERSION,
+          "X-Platform": ZCODE_PLATFORM,
+        },
+        signal: AbortSignal.timeout(12000),
+        redirect: "error",
+      },
+      proxyOptions,
+    );
+    if (!response.ok) return null;
+    const payload = await response.json().catch(() => null);
+    if (payload?.code !== 0 && payload?.code !== 200) return null;
+    return payload?.data || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getGlmResetCards(apiKey, proxyOptions = null, providerSpecificData = null) {
+  const zcodeToken = providerSpecificData?.zcodeJwtToken || apiKey;
+  if (!zcodeToken || !zcodeToken.trim()) throw glmResetError("GLM API key not available.", 401);
+
+  const cleanZcode = zcodeToken.trim().replace(/^Bearer\s+/i, "");
+  const cleanApi = (apiKey || "").trim().replace(/^Bearer\s+/i, "");
+
+  // 1. First try ZCode native reset status endpoint
+  try {
+    const res = await proxyAwareFetch(
+      ZCODE_RESET_STATUS_URL,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${cleanZcode}`,
+          ...(cleanApi ? { "X-Bigmodel-Authorization": cleanApi } : {}),
+          "Bigmodel-Target-Type": "PERSONAL",
+          Accept: "application/json",
+          "X-ZCode-App-Version": ZCODE_APP_VERSION,
+          "X-Platform": ZCODE_PLATFORM,
+        },
+        signal: AbortSignal.timeout(12000),
+        redirect: "error",
+      },
+      proxyOptions,
+    );
+
+    if (res.ok) {
+      const payload = await res.json().catch(() => null);
+      if (payload?.code === 0 && payload.data) {
+        const cards = [];
+        const fiveHour = Array.isArray(payload.data.available_five_hour_resets)
+          ? payload.data.available_five_hour_resets
+          : [];
+        const week = Array.isArray(payload.data.available_week_resets)
+          ? payload.data.available_week_resets
+          : [];
+
+        for (const item of fiveHour) {
+          const expSec = Number(item.expire_at) || 0;
+          const expiry = expSec * 1000;
+          if (expiry <= Date.now()) continue;
+          cards.push({ recordId: `FIVE_HOUR_${expSec}`, type: "FIVE_HOUR", expiresAt: new Date(expiry).toISOString() });
+        }
+        for (const item of week) {
+          const expSec = Number(item.expire_at) || 0;
+          const expiry = expSec * 1000;
+          if (expiry <= Date.now()) continue;
+          cards.push({ recordId: `WEEK_${expSec}`, type: "WEEK", expiresAt: new Date(expiry).toISOString() });
+        }
+        cards.sort((a, b) => Date.parse(a.expiresAt) - Date.parse(b.expiresAt));
+        return { availableCount: cards.length, cards };
+      }
+    }
+  } catch {}
+
+  // 2. Fallback to MAAS customer-package-reset/list
+  const { response, payload } = await glmResetRequest(apiKey || zcodeToken, null, proxyOptions);
   if (!response.ok) {
     throw glmResetError(`GLM reset card API error (${response.status}).`, response.status >= 400 && response.status < 500 ? response.status : 502);
   }
@@ -145,14 +243,53 @@ export async function getGlmResetCards(apiKey, proxyOptions = null) {
   return { availableCount: cards.length, cards };
 }
 
-export async function redeemGlmResetCard(apiKey, card, proxyOptions = null) {
+export async function redeemGlmResetCard(apiKey, card, proxyOptions = null, providerSpecificData = null) {
   const failed = (status, code, uncertain, message) => ({ ok: false, alreadyUsed: false, status, code, uncertain, message });
-  if (!card || !["FIVE_HOUR", "WEEK"].includes(card.type) || !isGlmResetCardId(card.recordId)) {
+  if (!card || !["FIVE_HOUR", "WEEK"].includes(card.type)) {
     return failed(400, "invalid_card", false, "Invalid GLM reset card.");
   }
-  if (typeof apiKey !== "string" || !apiKey.trim()) return failed(401, "unauthorized", false, "GLM API key not available.");
+
+  const zcodeToken = providerSpecificData?.zcodeJwtToken || apiKey;
+  const cleanZcode = (zcodeToken || "").trim().replace(/^Bearer\s+/i, "");
+  const cleanApi = (apiKey || "").trim().replace(/^Bearer\s+/i, "");
+
+  // 1. Try ZCode native reset use endpoint
+  if (cleanZcode) {
+    try {
+      const res = await proxyAwareFetch(
+        ZCODE_RESET_USE_URL,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${cleanZcode}`,
+            ...(cleanApi ? { "X-Bigmodel-Authorization": cleanApi } : {}),
+            "Bigmodel-Target-Type": "PERSONAL",
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "X-ZCode-App-Version": ZCODE_APP_VERSION,
+            "X-Platform": ZCODE_PLATFORM,
+          },
+          body: JSON.stringify({
+            idempotency_key: crypto.randomUUID(),
+            reset_type: card.type,
+          }),
+          signal: AbortSignal.timeout(15000),
+          redirect: "error",
+        },
+        proxyOptions,
+      );
+      if (res.ok) {
+        const payload = await res.json().catch(() => null);
+        if (payload?.code === 0) {
+          return { ok: true, alreadyUsed: false, uncertain: false, status: 200, code: "SUCCESS", message: "GLM usage reset successfully." };
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Fallback to MAAS customer-package-reset/use
   try {
-    const { response, payload } = await glmResetRequest(apiKey, card, proxyOptions);
+    const { response, payload } = await glmResetRequest(apiKey || zcodeToken, card, proxyOptions);
     if (response.ok && payload?.success === true && [0, 200].includes(payload.code)) {
       return { ok: true, alreadyUsed: false, uncertain: false, status: 200, code: "SUCCESS", message: "GLM usage reset successfully." };
     }
@@ -163,53 +300,94 @@ export async function redeemGlmResetCard(apiKey, card, proxyOptions = null) {
 /**
  * GLM Coding Plan usage (international + China regions)
  */
-export async function getGlmUsage(apiKey, provider, proxyOptions = null) {
-  if (!apiKey) {
+export async function getGlmUsage(apiKey, provider, proxyOptions = null, providerSpecificData = null) {
+  if (!apiKey && !providerSpecificData?.zcodeJwtToken) {
     return { message: "GLM API key not available." };
   }
 
   const region = provider === "glm-cn" ? "china" : "international";
   const quotaUrl = GLM_QUOTA_URLS[region];
+  const zcodeToken = providerSpecificData?.zcodeJwtToken || providerSpecificData?.zaiBusinessToken || apiKey;
 
-  try {
-    const response = await proxyAwareFetch(
-      quotaUrl,
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          Accept: "application/json",
-        },
-      },
-      proxyOptions,
-    );
+  // Run MAAS quota limit and ZCode billing balance in parallel
+  const [quotaRes, balanceData] = await Promise.all([
+    quotaUrl && apiKey
+      ? proxyAwareFetch(
+          quotaUrl,
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey.replace(/^Bearer\s+/i, "")}`,
+              Accept: "application/json",
+            },
+            signal: AbortSignal.timeout(15000),
+          },
+          proxyOptions,
+        ).catch(() => null)
+      : null,
+    zcodeToken ? getGlmBalance(zcodeToken, proxyOptions).catch(() => null) : null,
+  ]);
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        return { message: "GLM API key invalid or expired." };
-      }
-      return { message: `GLM quota API error (${response.status}).` };
+  let plan = "None";
+  let quotas = {};
+  let message = "";
+
+  if (quotaRes && quotaRes.ok) {
+    const json = await quotaRes.json().catch(() => null);
+    const parsed = parseGlmQuotaResponse(json);
+    plan = parsed.plan;
+    quotas = parsed.quotas || {};
+    message = parsed.message || "";
+  } else if (quotaRes && !quotaRes.ok) {
+    if (quotaRes.status === 401 && !balanceData) {
+      return { message: "GLM API key invalid or expired." };
     }
-
-    const json = await response.json();
-    const { plan, quotas, message } = parseGlmQuotaResponse(json);
-
-    let resetCards = null;
-    if (provider === "glm") {
-      try {
-        resetCards = await getGlmResetCards(apiKey, proxyOptions);
-      } catch {}
-    }
-
-    return { plan, quotas, message, resetCards };
-  } catch (error) {
-    return { message: `GLM error: ${error.message}` };
   }
-}
 
-const ZCODE_PLAN_PREVIEW_URL = "https://zcode.z.ai/api/v1/zcode-plan/billing/preview";
-const ZCODE_PLAN_CLAIM_URL = "https://zcode.z.ai/api/v1/zcode-plan/billing/claim";
-const ZCODE_APP_VERSION = "3.16.3";
-const ZCODE_PLATFORM = "linux-x64";
+  // Merge ZCode billing balance (gift cards, Weekend Build 500M tokens, Start Plan grants)
+  if (balanceData) {
+    if (Array.isArray(balanceData.plans) && balanceData.plans.length > 0) {
+      const activePlan = balanceData.plans.find((p) => p.status?.toLowerCase() === "active");
+      if (activePlan?.name) {
+        plan = activePlan.name;
+      }
+    }
+    if (Array.isArray(balanceData.balances) && balanceData.balances.length > 0) {
+      for (const b of balanceData.balances) {
+        const totalUnits = Number(b.total_units) || 0;
+        const usedUnits = Number(b.used_units) || 0;
+        const remainingUnits = Number(b.remaining_units) || Math.max(0, totalUnits - usedUnits);
+        if (totalUnits <= 0 && remainingUnits <= 0) continue;
+
+        const showName = b.show_name || b.entitlement_id || "Event Grant";
+        const expiryMs = Number(b.expires_at) ? b.expires_at * 1000 : null;
+        const remainingPct = totalUnits > 0 ? Math.min(100, Math.max(0, Math.round((remainingUnits / totalUnits) * 100))) : 100;
+        const usedPct = 100 - remainingPct;
+
+        const quotaKey = `${showName} (grant)`;
+        quotas[quotaKey] = {
+          used: usedPct,
+          total: 100,
+          remaining: remainingPct,
+          remainingPercentage: remainingPct,
+          resetAt: expiryMs ? new Date(expiryMs).toISOString() : null,
+          totalTokens: totalUnits,
+          usedTokens: usedUnits,
+          unit: b.unit_type || "tokens",
+          unlimited: false,
+        };
+      }
+    }
+  }
+
+  let resetCards = null;
+  if (provider === "glm") {
+    try {
+      resetCards = await getGlmResetCards(apiKey, proxyOptions, providerSpecificData);
+    } catch {}
+  }
+
+  return { plan, quotas, message, resetCards };
+}
 
 /**
  * Fetch claimable gift cards / event plans for GLM / Z.ai accounts.

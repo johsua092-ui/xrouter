@@ -6,7 +6,7 @@ vi.mock("../../open-sse/utils/proxyFetch.js", () => ({
 
 import { proxyAwareFetch } from "../../open-sse/utils/proxyFetch.js";
 import { getUsageForProvider } from "../../open-sse/services/usage.js";
-import { getGlmUsage, getGlmClaimablePlans, claimGlmPlan } from "../../open-sse/services/usage/glm.js";
+import { getGlmUsage, getGlmClaimablePlans, claimGlmPlan, getGlmBalance } from "../../open-sse/services/usage/glm.js";
 import {
   USAGE_SUPPORTED_PROVIDERS,
   USAGE_APIKEY_PROVIDERS,
@@ -287,5 +287,33 @@ describe("GLM native event gift card claim", () => {
     const result = await claimGlmPlan("mock_jwt_token", "zcode_weekend_build");
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/Plan already claimed/i);
+  });
+
+  it("fetches active ZCode plan token balance via billing/balance endpoint", async () => {
+    proxyAwareFetch.mockResolvedValueOnce(
+      jsonResponse({
+        code: 0,
+        msg: "success",
+        data: {
+          server_time: 1730336500,
+          plans: [{ plan_id: "zcode_weekend_build", name: "ZCODE WEEKEND BUILD", status: "active" }],
+          balances: [
+            {
+              show_name: "GLM-5.3-Flash",
+              plan_id: "zcode_weekend_build",
+              total_units: 500000000,
+              used_units: 0,
+              remaining_units: 500000000,
+              unit_type: "tokens",
+            },
+          ],
+        },
+      })
+    );
+
+    const balance = await getGlmBalance("mock_jwt_token");
+    expect(balance).not.toBeNull();
+    expect(balance.balances[0].total_units).toBe(500000000);
+    expect(balance.balances[0].show_name).toBe("GLM-5.3-Flash");
   });
 });

@@ -218,11 +218,32 @@ export async function fetchSessionParams(cookie, proxyOptions = null) {
     },
     signal: AbortSignal.timeout(12000),
   }, proxyOptions);
-  if (!res || !res.ok) return null;
+  if (!res) return { error: "Network timeout or connection refused fetching Gemini web" };
+  if (!res.ok) {
+    return { error: `Gemini web returned HTTP ${res.status}` };
+  }
+
   const html = await res.text();
-  const atMatch = html.match(/"SNlM0e":"([^"]+)"/) || html.match(/\["SNlM0e","([^"]+)"\]/);
-  const blMatch = html.match(/"cfb2h":"([^"]+)"/) || html.match(/\["cfb2h","([^"]+)"\]/);
-  if (!atMatch || !blMatch) return null;
+
+  if (html.includes("accounts.google.com/ServiceLogin") || html.includes("accounts.google.com/InteractiveLogin")) {
+    return { error: "Google redirected to login page. Cookie is missing __Secure-1PSIDTS or Google detected IP mismatch. Re-copy fresh cookies (__Secure-1PSID, __Secure-1PSIDTS, __Secure-1PSIDCC) or use a proxy." };
+  }
+  if (html.includes("ÜberProxy") || html.includes("unusual traffic") || html.includes("columbo403") || res.status === 403) {
+    return { error: "Google edge blocked this server IP (ÜberProxy / bot detection). Set a residential proxy for gemini-web." };
+  }
+  if (html.includes("consent.google.com")) {
+    return { error: "Google consent gate encountered. Accept cookies in browser or use a proxy." };
+  }
+
+  const atMatch =
+    html.match(/["']SNlM0e["']\s*[:=,]\s*["']([^"']+)["']/) ||
+    html.match(/\[\s*["']SNlM0e["']\s*,\s*["']([^"']+)["']/);
+  const blMatch =
+    html.match(/["']cfb2h["']\s*[:=,]\s*["']([^"']+)["']/) ||
+    html.match(/\[\s*["']cfb2h["']\s*,\s*["']([^"']+)["']/);
+  if (!atMatch || !blMatch) {
+    return { error: "Could not extract SNlM0e / cfb2h session tokens from Gemini response. Google may have updated page markup or challenged the session." };
+  }
   
   const params = { at: atMatch[1], bl: blMatch[1] };
   sessionCache.set(cookie, { ...params, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
@@ -290,12 +311,27 @@ export class GeminiWebExecutor extends BaseExecutor {
 
     const modelId = String(model || bodyObj.model || "gemini-2.5-pro");
 
-    let session;
+    let session = null;
+    let lastError = "";
     try {
-      // Check and auto-rotate cookies before executing query (GSB keepalive)
-      cookie = await autoRotateGeminiCookies(cookie, proxyOptions);
-
-      session = await fetchSessionParams(cookie, proxyOptions);
+      // 1. Direct attempt with original cookie (do not corrupt fresh cookies with auto-rotation)
+      const res = await fetchSessionParams(cookie, proxyOptions);
+      if (res?.at && res?.bl) {
+        session = res;
+      } else {
+        lastError = res?.error || "Session parameters missing";
+        // 2. Fallback to rotation only if original attempt failed
+        const rotated = await autoRotateGeminiCookies(cookie, proxyOptions);
+        if (rotated && rotated !== cookie) {
+          cookie = rotated;
+          const retryRes = await fetchSessionParams(cookie, proxyOptions);
+          if (retryRes?.at && retryRes?.bl) {
+            session = retryRes;
+          } else if (retryRes?.error) {
+            lastError = retryRes.error;
+          }
+        }
+      }
     } catch (err) {
       return {
         response: errorResponse(502, `Gemini session fetch failed: ${err instanceof Error ? err.message : "unknown"}`),
@@ -306,7 +342,7 @@ export class GeminiWebExecutor extends BaseExecutor {
     }
     if (!session) {
       return {
-        response: errorResponse(401, "Gemini cookie expired or invalid, re-copy __Secure-1PSID and __Secure-1PSIDTS from gemini.google.com cookies"),
+        response: errorResponse(401, lastError || "Gemini cookie expired or invalid, re-copy __Secure-1PSID and __Secure-1PSIDTS from gemini.google.com cookies"),
         url: GEMINI_URL,
         headers: {},
         transformedBody: body,

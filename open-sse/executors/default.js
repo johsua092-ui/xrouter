@@ -21,21 +21,28 @@ const AUTH_DESCRIPTORS = Object.fromEntries(
 
 // Apply a token to a header per scheme (matches legacy: combined always sets, even when undefined).
 function setAuth(headers, spec, token) {
+  if (!spec || !spec.header) return;
   headers[spec.header] = spec.scheme === "bearer" ? `Bearer ${token}` : token;
 }
 
 // Resolve auth onto headers from a descriptor.
 function applyAuth(headers, desc, credentials) {
+  if (!desc) return;
   const token = credentials.cookie || credentials.apiKey || credentials.accessToken;
-  if (desc.combined) {
+  if (desc.combined || desc.header) {
     // combined providers always set the header (legacy behavior, incl. noAuth → "Bearer undefined")
     setAuth(headers, desc, token);
     if (desc.anthropicVersion && !headers["anthropic-version"]) headers["anthropic-version"] = ANTHROPIC_API_VERSION;
     return;
   }
   // split apiKey/oauth: set only the matching branch (legacy: anthropic-compatible skips when both absent)
-  if (credentials.apiKey || credentials.cookie) setAuth(headers, desc.apiKey, credentials.cookie || credentials.apiKey);
-  else if (credentials.accessToken) setAuth(headers, desc.oauth, credentials.accessToken);
+  if (desc.apiKey && (credentials.apiKey || credentials.cookie)) {
+    setAuth(headers, desc.apiKey, credentials.cookie || credentials.apiKey);
+  } else if (desc.oauth && credentials.accessToken) {
+    setAuth(headers, desc.oauth, credentials.accessToken);
+  } else if (desc.header) {
+    setAuth(headers, desc, token);
+  }
   if (desc.anthropicVersion && !headers["anthropic-version"]) headers["anthropic-version"] = ANTHROPIC_API_VERSION;
 }
 
@@ -160,7 +167,7 @@ export class DefaultExecutor extends BaseExecutor {
   // Fallback descriptor for providers without an explicit entry in AUTH_DESCRIPTORS.
   resolveAuthDescriptor() {
     if (this.config?.authType === "cookie" || this.config?.auth?.header === "Cookie") {
-      return { combined: true, header: "Cookie", scheme: "raw" };
+      return { combined: true, header: this.config?.auth?.header || "Cookie", scheme: this.config?.auth?.scheme || "raw" };
     }
     if (this.provider?.startsWith?.("anthropic-compatible-")) {
       return { apiKey: { header: "x-api-key", scheme: "raw" }, oauth: { header: "Authorization", scheme: "bearer" }, anthropicVersion: true };

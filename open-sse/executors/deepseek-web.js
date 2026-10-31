@@ -77,15 +77,20 @@ function isSearchModel(model) {
 
 function cleanDeepSeekToken(text) {
   let cleaned = String(text || "").replace(/FINISHED/g, "").replace(/^(SEARCH|WEB_SEARCH|SEARCHING)\s*/i, "");
-  // Strip leaked DeepSeek markup tokens: DSML tags, tool calls, and special delimiters
+  const FW = "[｜|]+";
+  // 1. Nested calls block: <｜｜DSML｜｜ calls> ... </｜｜DSML｜｜ calls>
+  const callsRe = new RegExp(`<${FW}DSML${FW}\\s+calls>[\\s\\S]*?<\\/${FW}DSML${FW}\\s+calls>`, "gi");
+  // 2. Named tag block: <｜DSML｜:toolName> ... </｜DSML｜:toolName>
+  const namedRe = new RegExp(`<${FW}DSML${FW}:\\w+[^>]*>[\\s\\S]*?<\\/${FW}DSML${FW}:\\w+[^>]*>`, "gi");
+  // 3. Stray markup tags & tokens
+  const strayRe = new RegExp(`<\\/?${FW}DSML${FW}[^>]*>|<\\/?(?:invoke|parameter)(?:\\s+[^>]*)?>`, "gi");
+  const specialDelims = new RegExp(`<${FW}(?:begin of sentence|end of sentence|User|Assistant)${FW}>`, "gi");
+
   cleaned = cleaned
-    .replace(/<[｜|]DSML[｜|][^>]*>[\s\S]*?<\/[｜|]DSML[｜|][^>]*>/gi, "")
-    .replace(/<[｜|]DSML[｜|]:\w+[^>]*>[\s\S]*?<\/[｜|]DSML[｜|]:\w+\s*>/gi, "")
-    .replace(/<\/?(?:[｜|]DSML[｜|]|DSML)(?::\w+)?(?:\s+[^>]*)?>/gi, "")
-    .replace(/<[｜|]begin of sentence[｜|]>/gi, "")
-    .replace(/<[｜|]end of sentence[｜|]>/gi, "")
-    .replace(/<[｜|]User[｜|]>/gi, "")
-    .replace(/<[｜|]Assistant[｜|]>/gi, "");
+    .replace(callsRe, "")
+    .replace(namedRe, "")
+    .replace(strayRe, "")
+    .replace(specialDelims, "");
   return cleaned;
 }
 
@@ -245,23 +250,32 @@ function transformSSE(deepseekStream, model) {
         const { scheduleFinishAfterDrain, clearFinishedDrain, isDrainPending } =
           createFinishedDrainScheduler(finishStream);
 
-        let dsmlFilterState = { buffer: "", inDsml: false };
+        let dsmlFilterState = { buffer: "", inDsml: false, dsmlClosePattern: null };
         const filterDsmlStream = (str) => {
           if (!str) return "";
           dsmlFilterState.buffer += str;
 
           // Check if we entered a DSML block
           if (!dsmlFilterState.inDsml) {
-            const openIdx = dsmlFilterState.buffer.search(/<[｜|]DSML[｜|]/i);
-            if (openIdx !== -1) {
+            const openMatch = dsmlFilterState.buffer.match(/<([｜|]+)DSML\1(?::(\w+)|\s+(\w+))?[^>]*>/i);
+            if (openMatch) {
               dsmlFilterState.inDsml = true;
+              const openIdx = openMatch.index;
+              const subType = openMatch[2] || openMatch[3];
+              if (subType === "calls") {
+                dsmlFilterState.dsmlClosePattern = /<\/[｜|]+DSML[｜|]+\s+calls\s*>/i;
+              } else if (openMatch[2]) {
+                dsmlFilterState.dsmlClosePattern = new RegExp(`</[｜|]+DSML[｜|]+:${openMatch[2]}\\s*>`, "i");
+              } else {
+                dsmlFilterState.dsmlClosePattern = /<\/[｜|]+DSML[｜|]+[^>]*>/i;
+              }
               const safePrefix = dsmlFilterState.buffer.slice(0, openIdx);
               dsmlFilterState.buffer = dsmlFilterState.buffer.slice(openIdx);
               return safePrefix;
             }
-            // Check if trailing string might be a partial start of <｜DSML｜
-            const partialMatch = dsmlFilterState.buffer.match(/(<[｜|]?[D]?[S]?[M]?[L]?[｜|]?)$/i);
-            if (partialMatch && partialMatch[1].length < 8) {
+            // Check if trailing string might be a partial start of <｜DSML｜ or <｜｜DSML｜｜
+            const partialMatch = dsmlFilterState.buffer.match(/(<[｜|]{0,2}[D]?[S]?[M]?[L]?[｜|]{0,2}[^<]*)$/i);
+            if (partialMatch && partialMatch[1].length < 16) {
               const emitPart = dsmlFilterState.buffer.slice(0, -partialMatch[1].length);
               dsmlFilterState.buffer = partialMatch[1];
               return emitPart;
@@ -272,9 +286,11 @@ function transformSSE(deepseekStream, model) {
           }
 
           // We are inside DSML: search for closing tag
-          const closeMatch = dsmlFilterState.buffer.match(/<\/[｜|]DSML[｜|](?::\w+)?\s*>/i);
+          const closePattern = dsmlFilterState.dsmlClosePattern || /<\/[｜|]+DSML[｜|]+[^>]*>/i;
+          const closeMatch = dsmlFilterState.buffer.match(closePattern);
           if (closeMatch) {
             dsmlFilterState.inDsml = false;
+            dsmlFilterState.dsmlClosePattern = null;
             dsmlFilterState.buffer = dsmlFilterState.buffer.slice(closeMatch.index + closeMatch[0].length);
             return filterDsmlStream("");
           }

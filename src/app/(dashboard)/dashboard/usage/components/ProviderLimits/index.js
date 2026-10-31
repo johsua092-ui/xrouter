@@ -521,6 +521,8 @@ export default function ProviderLimits() {
       setGlmClaimModal({
         connection,
         plans: json.plans || [],
+        activeBalances: json.activeBalances || [],
+        activePlans: json.activePlans || [],
         loading: false,
         claiming: false,
         error: null,
@@ -1969,6 +1971,31 @@ export default function ProviderLimits() {
               {glmClaimModal.success && (
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-600 dark:text-emerald-400">
                   {glmClaimModal.success}
+                </div>
+              )}
+
+              {glmClaimModal.activeBalances && glmClaimModal.activeBalances.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-text-muted">Active Grants on Account</div>
+                  {glmClaimModal.activeBalances.map((bal, idx) => (
+                    <div
+                      key={bal.bucket_id || idx}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-sm text-text-primary truncate">
+                          {bal.show_name || "Token Grant"}
+                        </div>
+                        <div className="text-xs text-text-muted mt-0.5">
+                          {Number(bal.remaining_units || 0).toLocaleString()} / {Number(bal.total_units || 0).toLocaleString()} {bal.unit_type || "tokens"}
+                          {bal.expires_at && ` · Expires ${new Date(bal.expires_at * 1000).toLocaleDateString()}`}
+                        </div>
+                      </div>
+                      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                        Active
+                      </span>
+                    </div>
+                  ))}
                 </div>
               )}
 

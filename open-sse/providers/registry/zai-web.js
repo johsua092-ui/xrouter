@@ -21,7 +21,7 @@ export default {
     baseUrl: "https://chat.z.ai/api",
     format: "openai",
     authType: "cookie",
-    auth: { header: "Authorization", scheme: "bearer" },
+    auth: { combined: true, header: "Authorization", scheme: "bearer" },
   },
   models: [
     { id: "glm-5.3-flash", name: "GLM-5.3 Flash (web)" },

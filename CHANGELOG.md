@@ -1,11 +1,27 @@
 # v0.0.5 (2026-10-31)
 
-- **Native GLM / ZCode Event Gift Card Claiming (Zero App Download)**:
-  - Reversed ZCode v3.16.3 Electron client via leanrea (`manualClaimPlan` in `BigModelCodingPlanSubscriptionProvider`): discovered preview endpoint `GET /api/v1/zcode-plan/billing/preview` and claim endpoint `POST /api/v1/zcode-plan/billing/claim`.
-  - Added `getGlmClaimablePlans` and `claimGlmPlan` services in `open-sse/services/usage/glm.js` with client headers (`X-ZCode-App-Version: 3.16.3`, `X-Platform: linux-x64`).
+- **Fix DeepSeek Web (dsw) DSML Tool Calls Leak (`<｜｜DSML｜｜ calls>` dialect)**:
+  - DeepSeek V3/V4 web models emit tool calls using a nested block dialect (`<｜｜DSML｜｜ calls>` containing `<｜｜DSML｜｜ invoke name="...">` and `<｜｜DSML｜｜ parameter name="...">`) with double fullwidth pipes (`｜｜`).
+  - Previously, `cleanDeepSeekToken` and `filterDsmlStream` only checked for single pipes (`[｜|]`), and non-greedy regex prematurely stopped at parameter closing tags, leaking the outer tags into chat outputs.
+  - Upgraded `parseDsmlToolCalls` in `open-sse/utils/dsmlToolCalls.js` to parse both the nested `<... calls>` dialect and direct `<...:toolName>` format into standard tool call objects.
+  - Upgraded `cleanDeepSeekToken` and `filterDsmlStream` in `open-sse/executors/deepseek-web.js` to suppress the full calls block during streaming and strip all nested tags without leaking.
+- **Fix Zhipu Z.ai Web (zw) 503 / 502 Auth Crash (`reading 'header'`)**:
+  - `open-sse/providers/registry/zai-web.js`: added `combined: true` to `transport.auth` so cookie-authenticated web sessions apply the `Authorization: Bearer <token>` header properly.
+  - `open-sse/executors/default.js`: made `applyAuth` and `setAuth` resilient against missing/split descriptors to prevent `TypeError: Cannot read properties of undefined (reading 'header')`.
+  - `open-sse/executors/default.js`: `resolveAuthDescriptor` now respects `transport.auth.header` instead of assuming `Cookie` for all `authType: "cookie"` providers.
+- **Fix Gemini Web 401 Cookie Freshness & Session Extraction**:
+  - `open-sse/executors/gemini-web.js`: stopped auto-rotating fresh cookies before initial use — `autoRotateGeminiCookies` calls Google's sentinel endpoint with dummy payloads, which was corrupting freshly pasted cookies on datacenter IPs before `fetchSessionParams` ran.
+  - `fetchSessionParams` now attempts session extraction directly with the user's cookie first, falling back to rotation only if extraction fails.
+  - Enhanced `SNlM0e` and `cfb2h` regex to tolerate arbitrary whitespace variations across Google page markup.
+  - Diagnostic error reporting: now explicitly identifies Google login redirects, consent gates, and ÜberProxy IP blocks rather than emitting a generic "cookie expired" error.
+- **Native GLM / ZCode Event Gift Card Claiming & Auto-Detection (Zero App Download)**:
+  - Reversed ZCode v3.16.3 Electron client via leanrea (`BigModelCodingPlanSubscriptionProvider` & `BigModelUsageQuotaProvider`): uncovered `GET /api/v1/zcode-plan/billing/preview` (campaign preview), `POST /api/v1/zcode-plan/billing/claim` (plan claim), `GET /api/v1/zcode-plan/billing/balance` (active grant token balances e.g. 500M Weekend Build), and `GET /api/v1/coding-plan/reset/status` (native ZCode reset cards).
+  - Added `getGlmBalance`, `getGlmClaimablePlans`, and `claimGlmPlan` services in `open-sse/services/usage/glm.js` with client headers (`X-ZCode-App-Version: 3.16.3`, `X-Platform: linux-x64`).
+  - Wired `getGlmUsage` to simultaneously probe both MAAS developer quota limits (`monitor/usage/quota/limit`) and ZCode plan balances (`billing/balance`), ensuring active 500M token grants are automatically merged and surfaced as grant quota rows.
+  - Upgraded GLM reset cards resolver to check both ZCode native status (`coding-plan/reset/status`) and MAAS fallback (`customer-package-reset/list`).
   - Added API route `src/app/api/usage/[connectionId]/glm-claim/route.js` supporting both stored OAuth `zcodeJwtToken` and explicit overrides.
-  - Added dashboard UI action in `ProviderLimits` with a dedicated gift claim modal displaying dynamic plan entitlements (e.g. ZCODE Weekend Build 500M tokens) and one-click native claim without downloading the 166MB ZCode desktop client.
-  - Zero emoji design convention preserved using Material Symbols font icons.
+  - Added dashboard UI action in `ProviderLimits` with a dedicated gift claim modal displaying dynamic plan entitlements (e.g. ZCODE Weekend Build 500M tokens), currently active token grants, and one-click native claim without downloading the 166MB ZCode desktop client.
+  - Zero emoji design convention strictly preserved using Material Symbols font icons.
 - **Fix GLM Quota Surface Absolute Token Grants (500M gift card visible)**:
   - `parseGlmQuotaResponse` now reads absolute token amounts (`totalTokens`/`usedTokens`/`total`/`used` in tokens) from Z.ai's monitor, exposed as a distinct `Tokens (grant)` quota row.
   - `QuotaTable` renders grant rows as compact token counts (`500M tok` / `0 / 500M`) with a full `0 / 500,000,000 tokens` tooltip — the ZCODE Weekend Build 500M gift is now visible instead of an empty-looking percentage bar.

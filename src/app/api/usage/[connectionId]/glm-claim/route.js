@@ -1,6 +1,6 @@
 import "open-sse/index.js";
 import { getProviderConnectionById } from "@/lib/db/index.js";
-import { getGlmClaimablePlans, claimGlmPlan } from "open-sse/services/usage.js";
+import { getGlmClaimablePlans, claimGlmPlan, getGlmBalance } from "open-sse/services/usage.js";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { refreshAndUpdateCredentials } from "../route.js";
 
@@ -111,8 +111,18 @@ export async function GET(request, { params }) {
   while (attempts < 2) {
     attempts++;
     try {
-      const data = await getGlmClaimablePlans(resolved.token, resolved.proxyOptions);
-      return Response.json({ ok: true, ...data });
+      const [plansData, balanceData] = await Promise.all([
+        getGlmClaimablePlans(resolved.token, resolved.proxyOptions).catch((e) => ({ plans: [], error: e.message })),
+        getGlmBalance(resolved.token, resolved.proxyOptions).catch(() => null),
+      ]);
+      return Response.json({
+        ok: true,
+        plans: plansData?.plans || [],
+        count: plansData?.plans?.length || 0,
+        activeBalances: balanceData?.balances || [],
+        activePlans: balanceData?.plans || [],
+        serverTime: plansData?.serverTime || balanceData?.server_time,
+      });
     } catch (err) {
       if (err.status === 401 && attempts === 1) {
         connection = await refresh(connection, true, resolved.proxyOptions);

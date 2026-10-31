@@ -56,7 +56,7 @@ export async function GET(request, { params }) {
   while (attempts < 2) {
     attempts++;
     try {
-      const data = await getGlmResetCards(credential(connection), resolved.proxyOptions);
+      const data = await getGlmResetCards(credential(connection), resolved.proxyOptions, connection.providerSpecificData);
       return Response.json(data);
     } catch (err) {
       if (err.status === 401 && attempts === 1) {
@@ -92,7 +92,7 @@ export async function POST(request, { params }) {
     let connection = resolved.connection;
     let result;
     try {
-      result = await redeemGlmResetCard(credential(connection), card, resolved.proxyOptions);
+      result = await redeemGlmResetCard(credential(connection), card, resolved.proxyOptions, connection.providerSpecificData);
     } catch (err) {
       return failure("redemption_failed", err.message || "Failed to redeem GLM reset card.", 502, true);
     }
