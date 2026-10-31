@@ -1,4 +1,4 @@
-import { getProviderConnectionById } from "@/lib/db/index.js";
+import { getProviderConnectionById, getProviderConnections } from "@/lib/db/index.js";
 
 function sanitizeHtml(str) {
   return String(str || "")
@@ -11,7 +11,20 @@ function sanitizeHtml(str) {
 
 export async function GET(request, { params }) {
   const { connectionId } = params;
-  const connection = await getProviderConnectionById(connectionId);
+  let connection = null;
+
+  if (connectionId && connectionId !== "undefined") {
+    connection = await getProviderConnectionById(connectionId);
+  }
+
+  // Graceful fallback: If connectionId is 'undefined' or not found, resolve first GLM connection with ZCode token
+  if (!connection) {
+    const glmConns = await getProviderConnections({ provider: "glm" });
+    connection =
+      glmConns.find((c) => c.providerSpecificData?.zcodeJwtToken) ||
+      glmConns[0] ||
+      null;
+  }
 
   if (!connection) {
     return new Response(
