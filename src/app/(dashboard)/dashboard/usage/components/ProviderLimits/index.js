@@ -2072,6 +2072,37 @@ export default function ProviderLimits() {
                   No active claimable event gift card found for this account right now.
                 </div>
               )}
+
+              <div className="pt-2 border-t border-border-subtle/50">
+                <div className="text-[11px] font-medium text-text-muted mb-1.5">Direct Plan ID Claim</div>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const input = e.currentTarget.elements.planIdInput;
+                    const val = input?.value?.trim();
+                    if (val) {
+                      handleExecuteGlmClaim(val);
+                      input.value = "";
+                    }
+                  }}
+                  className="flex gap-1.5"
+                >
+                  <input
+                    name="planIdInput"
+                    type="text"
+                    placeholder="e.g. zcode-v3-start-plan-1016-wk"
+                    disabled={glmClaimModal.claiming}
+                    className="flex-1 rounded-lg border border-border-subtle bg-surface px-2.5 py-1 text-xs text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <button
+                    type="submit"
+                    disabled={glmClaimModal.claiming}
+                    className="rounded-lg bg-surface-2 px-3 py-1 text-xs font-medium text-text-primary hover:bg-surface-3 transition-colors border border-border-subtle disabled:opacity-50"
+                  >
+                    Claim ID
+                  </button>
+                </form>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 border-t border-black/10 bg-black/[0.02] px-4 py-2.5 dark:border-white/10 dark:bg-white/[0.02]">

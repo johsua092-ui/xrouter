@@ -18,13 +18,10 @@
   - Diagnostic error reporting: now explicitly identifies Google login redirects, consent gates, and ÜberProxy IP blocks rather than emitting a generic "cookie expired" error.
 - **Upgraded ZCode Gift Card & Reward Discovery Engine (Zero App Download)**:
   - Deep-reversed ZCode's entire incentive and rewards architecture (`/api/v1/incentive/referral/summary`, `/api/v1/marketing/touch`, and `/api/v1/zcode-plan/billing/preview`).
-  - Discovered that ZCode distributes gifts across three separate pipelines:
-    1. Direct promotional plans via `billing/preview` (e.g. general campaigns)
-    2. Event task rewards via `incentive/referral/summary` (e.g. Weekend Build 300M tokens, Global Build 100M tokens, Weekly Reset Cards)
-    3. Campaign push popups/banners via `marketing/touch`
-  - Re-architected `getGlmClaimablePlans` to query all three endpoints simultaneously using the account's device context (`X-Device-Mid`, `X-Client-Language`), aggregate benefits, and surface both ready-to-claim event cards and active reward tasks directly on X Router's dashboard.
+  - Universal multi-source pipeline: automatically probes active campaigns, referral tasks (Weekend Build, Global Build), marketing banners, and candidate event IDs.
+  - Added Direct Plan ID claiming support in `ProviderLimits` modal for immediate one-click redemption without waiting for upstream banner push.
   - Attached `X-Device-Mid` to `claimGlmPlan` execution so claims don't fail with parameter error.
-  - Upgraded dashboard claim modal to clearly render task progress, token allocations, and active state without requiring users to install or open the ZCode desktop app.
+  - Zero emoji design convention strictly preserved using Material Symbols font icons.
 - **Fix GLM Quota Surface Absolute Token Grants (500M gift card visible)**:
   - `parseGlmQuotaResponse` now reads absolute token amounts (`totalTokens`/`usedTokens`/`total`/`used` in tokens) from Z.ai's monitor, exposed as a distinct `Tokens (grant)` quota row.
   - `QuotaTable` renders grant rows as compact token counts (`500M tok` / `0 / 500M`) with a full `0 / 500,000,000 tokens` tooltip — the ZCODE Weekend Build 500M gift is now visible instead of an empty-looking percentage bar.
