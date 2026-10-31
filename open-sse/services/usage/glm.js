@@ -205,3 +205,148 @@ export async function getGlmUsage(apiKey, provider, proxyOptions = null) {
     return { message: `GLM error: ${error.message}` };
   }
 }
+
+const ZCODE_PLAN_PREVIEW_URL = "https://zcode.z.ai/api/v1/zcode-plan/billing/preview";
+const ZCODE_PLAN_CLAIM_URL = "https://zcode.z.ai/api/v1/zcode-plan/billing/claim";
+const ZCODE_APP_VERSION = "3.16.3";
+const ZCODE_PLATFORM = "linux-x64";
+
+/**
+ * Fetch claimable gift cards / event plans for GLM / Z.ai accounts.
+ * Hits GET https://zcode.z.ai/api/v1/zcode-plan/billing/preview
+ */
+export async function getGlmClaimablePlans(token, proxyOptions = null) {
+  if (typeof token !== "string" || !token.trim()) {
+    throw glmResetError("GLM authentication token not available.", 401);
+  }
+  const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
+  const url = new URL(ZCODE_PLAN_PREVIEW_URL);
+  url.searchParams.set("app_version", ZCODE_APP_VERSION);
+  url.searchParams.set("platform", ZCODE_PLATFORM);
+
+  let response;
+  try {
+    response = await proxyAwareFetch(
+      url.toString(),
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${cleanToken}`,
+          Accept: "application/json",
+          "X-ZCode-App-Version": ZCODE_APP_VERSION,
+          "X-Platform": ZCODE_PLATFORM,
+        },
+        signal: AbortSignal.timeout(15000),
+        redirect: "error",
+      },
+      proxyOptions,
+    );
+  } catch (err) {
+    throw glmResetError(`GLM plan preview network error: ${err?.message || err}`, 502);
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw glmResetError(payload?.msg || payload?.message || `GLM preview HTTP error (${response.status})`, response.status >= 400 && response.status < 500 ? response.status : 502);
+  }
+
+  if (payload?.code !== 0 && payload?.code !== 200) {
+    throw glmResetError(payload?.msg || payload?.message || `GLM preview rejected (code ${payload?.code})`, 400);
+  }
+
+  const plans = (payload?.data?.plans || []).map((p) => ({
+    planId: p.plan_id || p.planId || "",
+    name: p.name || p.plan_id || "Event Plan",
+    description: p.description || "",
+    priority: p.priority ?? 0,
+    entitlements: (p.entitlements || []).map((e) => ({
+      entitlementId: e.entitlement_id || e.entitlementId || "",
+      showName: e.show_name || e.showName || "",
+      meter: e.meter || "",
+      unitType: e.unit_type || e.unitType || "tokens",
+      grantUnits: Number(e.grant_units ?? e.grantUnits) || 0,
+      period: e.period || "",
+      effectiveAt: e.effective_at || e.effectiveAt || null,
+    })),
+  })).filter((p) => Boolean(p.planId));
+
+  return {
+    serverTime: payload?.data?.server_time,
+    plans,
+    count: plans.length,
+  };
+}
+
+/**
+ * Claim an event plan / giftcard natively for a GLM / Z.ai account.
+ * Hits POST https://zcode.z.ai/api/v1/zcode-plan/billing/claim
+ */
+export async function claimGlmPlan(token, planId, proxyOptions = null, captcha = null) {
+  if (typeof token !== "string" || !token.trim()) {
+    return { ok: false, status: 401, code: "unauthorized", message: "GLM authentication token not available." };
+  }
+  if (!planId || typeof planId !== "string" || !planId.trim()) {
+    return { ok: false, status: 400, code: "invalid_plan_id", message: "Plan ID is required." };
+  }
+
+  const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
+  const headers = {
+    Authorization: `Bearer ${cleanToken}`,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "X-ZCode-App-Version": ZCODE_APP_VERSION,
+    "X-Platform": ZCODE_PLATFORM,
+  };
+
+  if (captcha?.captchaVerifyParam) {
+    headers["X-Aliyun-Captcha-Verify-Param"] = captcha.captchaVerifyParam;
+  }
+  if (captcha?.captchaRegion) {
+    headers["X-Aliyun-Captcha-Verify-Region"] = captcha.captchaRegion;
+  }
+
+  let response;
+  try {
+    response = await proxyAwareFetch(
+      ZCODE_PLAN_CLAIM_URL,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ plan_id: planId.trim() }),
+        signal: AbortSignal.timeout(20000),
+        redirect: "error",
+      },
+      proxyOptions,
+    );
+  } catch (err) {
+    return { ok: false, status: 502, code: "network_error", message: `GLM claim request failed: ${err?.message || err}` };
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: response.status,
+      code: payload?.code || "http_error",
+      message: payload?.msg || payload?.message || `GLM claim failed (HTTP ${response.status})`,
+    };
+  }
+
+  if (payload?.code === 0 || payload?.code === 200) {
+    return {
+      ok: true,
+      status: 200,
+      code: "SUCCESS",
+      message: payload?.msg || "Plan claimed successfully.",
+      plan: payload?.data?.plan || null,
+      serverTime: payload?.data?.server_time,
+    };
+  }
+
+  return {
+    ok: false,
+    status: 400,
+    code: payload?.code || "claim_rejected",
+    message: payload?.msg || payload?.data?.message || payload?.message || "GLM plan claim was rejected by server.",
+  };
+}

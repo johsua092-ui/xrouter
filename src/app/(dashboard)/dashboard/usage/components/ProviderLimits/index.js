@@ -188,6 +188,7 @@ export default function ProviderLimits() {
   const [glmResets, setGlmResets] = useState({});
   const [glmResetNow, setGlmResetNow] = useState(Date.now);
   const glmResetInFlightRef = useRef(false);
+  const [glmClaimModal, setGlmClaimModal] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState(null);
   const [proxyPools, setProxyPools] = useState([]);
@@ -508,6 +509,59 @@ export default function ProviderLimits() {
   const handleViewClaudeResets = useCallback((connection, resetCredits) => {
     setResetCreditsState({ connection, loading: false, error: null, data: { kind: "claude", ...resetCredits } });
   }, []);
+
+  const openGlmClaim = useCallback(async (connection) => {
+    setGlmClaimModal({ connection, plans: [], loading: true, claiming: false, error: null, success: null });
+    try {
+      const res = await fetch(`/api/usage/${connection.id}/glm-claim`, { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.message || json?.error || "Gagal memuat event gift card");
+      }
+      setGlmClaimModal({
+        connection,
+        plans: json.plans || [],
+        loading: false,
+        claiming: false,
+        error: null,
+        success: null,
+      });
+    } catch (err) {
+      setGlmClaimModal({
+        connection,
+        plans: [],
+        loading: false,
+        claiming: false,
+        error: err.message || "Gagal memuat event gift card",
+        success: null,
+      });
+    }
+  }, []);
+
+  const handleExecuteGlmClaim = useCallback(async (planId) => {
+    if (!glmClaimModal?.connection || !planId) return;
+    setGlmClaimModal((prev) => ({ ...prev, claiming: true, error: null }));
+    try {
+      const res = await fetch(`/api/usage/${glmClaimModal.connection.id}/glm-claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.message || json?.error || "Gagal mengklaim plan");
+      }
+      setGlmClaimModal((prev) => ({
+        ...prev,
+        claiming: false,
+        success: json.message || "Berhasil mengklaim plan!",
+        plans: prev.plans.filter((p) => p.planId !== planId),
+      }));
+      await fetchQuota(glmClaimModal.connection.id, glmClaimModal.connection.provider, { force: true });
+    } catch (err) {
+      setGlmClaimModal((prev) => ({ ...prev, claiming: false, error: err.message || "Gagal mengklaim plan" }));
+    }
+  }, [glmClaimModal, fetchQuota]);
 
   const handleViewCodexResetCredits = useCallback(async (connection) => {
     if (connection.provider === "glm") {
@@ -1395,6 +1449,20 @@ export default function ProviderLimits() {
                         </Tooltip>
                       </>
                     )}
+                    {isGlm && (
+                      <Tooltip text="Claim ZCode event gift card">
+                        <button
+                          type="button"
+                          onClick={() => openGlmClaim(conn)}
+                          disabled={isLoading || rowBusy}
+                          aria-label="Claim ZCode event gift card"
+                          className="flex h-8 items-center justify-center gap-1 rounded-lg border border-primary/30 bg-primary/5 px-2 text-[11px] font-medium text-primary hover:bg-primary/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">redeem</span>
+                          <span>Gift</span>
+                        </button>
+                      </Tooltip>
+                    )}
                     {AUTO_PING_SETTINGS_KEYS[conn.provider] && conn.authType === "oauth" && (() => {
                       const cfg = autoPingConfigs[conn.provider] || {};
                       const isReactive = cfg.connections?.[conn.id] === true;
@@ -1864,6 +1932,119 @@ export default function ProviderLimits() {
           setSelectedConnection(null);
         }}
       />
+
+      {glmClaimModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-black/15 bg-white shadow-2xl ring-1 ring-black/10 dark:border-white/15 dark:bg-neutral-950 dark:ring-white/10">
+            <div className="flex items-start justify-between gap-3 border-b border-black/10 bg-black/[0.03] px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="material-symbols-outlined text-primary text-[20px]">redeem</span>
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-text-primary">
+                    Claim ZCode Event Gift
+                  </h3>
+                  <p className="mt-0.5 truncate text-xs text-text-muted">
+                    {getConnectionLabel(glmClaimModal.connection) || "GLM account"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGlmClaimModal(null)}
+                disabled={glmClaimModal.claiming}
+                className="rounded-lg p-1 text-text-muted hover:bg-black/5 hover:text-text-primary dark:hover:bg-white/5"
+                aria-label="Close modal"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {glmClaimModal.error && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
+                  {glmClaimModal.error}
+                </div>
+              )}
+
+              {glmClaimModal.success && (
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-600 dark:text-emerald-400">
+                  {glmClaimModal.success}
+                </div>
+              )}
+
+              {glmClaimModal.loading ? (
+                <div className="flex flex-col items-center justify-center py-8 gap-2 text-text-muted">
+                  <span className="material-symbols-outlined animate-spin text-[24px]">progress_activity</span>
+                  <span className="text-xs">Checking active ZCode event gift cards...</span>
+                </div>
+              ) : glmClaimModal.plans && glmClaimModal.plans.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-text-muted">Available Event Plans</div>
+                  {glmClaimModal.plans.map((plan) => (
+                    <div
+                      key={plan.planId}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface-2/40 p-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-sm text-text-primary truncate">
+                            {plan.name}
+                          </span>
+                        </div>
+                        {plan.description && (
+                          <p className="text-xs text-text-muted mt-0.5 truncate">{plan.description}</p>
+                        )}
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {(plan.entitlements || []).map((ent, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+                            >
+                              <span>{ent.showName || "Tokens"}</span>
+                              {ent.grantUnits > 0 && (
+                                <span className="tabular-nums">
+                                  {ent.grantUnits >= 1e6 ? `${(ent.grantUnits / 1e6).toFixed(0)}M` : ent.grantUnits.toLocaleString()}
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleExecuteGlmClaim(plan.planId)}
+                        disabled={glmClaimModal.claiming}
+                        className="inline-flex items-center gap-1 shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {glmClaimModal.claiming && (
+                          <span className="material-symbols-outlined animate-spin text-[14px]">progress_activity</span>
+                        )}
+                        <span>Claim</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-black/10 bg-black/[0.02] px-3 py-8 text-center text-xs text-text-muted dark:border-white/10 dark:bg-white/[0.03]">
+                  No active claimable event gift card found for this account right now.
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-black/10 bg-black/[0.02] px-4 py-2.5 dark:border-white/10 dark:bg-white/[0.02]">
+              <button
+                type="button"
+                onClick={() => setGlmClaimModal(null)}
+                disabled={glmClaimModal.claiming}
+                className="rounded-lg border border-border-subtle bg-surface px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-surface-2 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {scheduleConnection && (
         <AutoPingScheduleModal

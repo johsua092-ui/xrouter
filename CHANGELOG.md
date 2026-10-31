@@ -1,5 +1,11 @@
-# v0.0.5 (2026-10-30)
+# v0.0.5 (2026-10-31)
 
+- **Native GLM / ZCode Event Gift Card Claiming (Zero App Download)**:
+  - Reversed ZCode v3.16.3 Electron client via leanrea (`manualClaimPlan` in `BigModelCodingPlanSubscriptionProvider`): discovered preview endpoint `GET /api/v1/zcode-plan/billing/preview` and claim endpoint `POST /api/v1/zcode-plan/billing/claim`.
+  - Added `getGlmClaimablePlans` and `claimGlmPlan` services in `open-sse/services/usage/glm.js` with client headers (`X-ZCode-App-Version: 3.16.3`, `X-Platform: linux-x64`).
+  - Added API route `src/app/api/usage/[connectionId]/glm-claim/route.js` supporting both stored OAuth `zcodeJwtToken` and explicit overrides.
+  - Added dashboard UI action in `ProviderLimits` with a dedicated gift claim modal displaying dynamic plan entitlements (e.g. ZCODE Weekend Build 500M tokens) and one-click native claim without downloading the 166MB ZCode desktop client.
+  - Zero emoji design convention preserved using Material Symbols font icons.
 - **Fix GLM Quota Surface Absolute Token Grants (500M gift card visible)**:
   - `parseGlmQuotaResponse` now reads absolute token amounts (`totalTokens`/`usedTokens`/`total`/`used` in tokens) from Z.ai's monitor, exposed as a distinct `Tokens (grant)` quota row.
   - `QuotaTable` renders grant rows as compact token counts (`500M tok` / `0 / 500M`) with a full `0 / 500,000,000 tokens` tooltip — the ZCODE Weekend Build 500M gift is now visible instead of an empty-looking percentage bar.
