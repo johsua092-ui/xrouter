@@ -13,16 +13,17 @@ export async function GET(request, { params }) {
   const { connectionId } = params;
   let connection = null;
 
-  if (connectionId && connectionId !== "undefined") {
+  if (connectionId && connectionId !== "undefined" && connectionId !== "null" && connectionId !== "default") {
     connection = await getProviderConnectionById(connectionId);
   }
 
   // Graceful fallback: If connectionId is 'undefined' or not found, resolve first GLM connection with ZCode token
   if (!connection) {
-    const glmConns = await getProviderConnections({ provider: "glm" });
+    const allConns = await getProviderConnections();
     connection =
-      glmConns.find((c) => c.providerSpecificData?.zcodeJwtToken) ||
-      glmConns[0] ||
+      allConns.find((c) => (c.provider === "glm" || c.provider === "zai-web") && c.providerSpecificData?.zcodeJwtToken) ||
+      allConns.find((c) => c.provider === "glm") ||
+      allConns.find((c) => c.provider === "zai-web") ||
       null;
   }
 

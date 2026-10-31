@@ -70,6 +70,9 @@ const READ_METHODS = ["GET", "HEAD"];
 
 const API_PERMISSION_RULES = [
   { prefix: "/api/keys", permissions: ["manageApiKeys"] },
+  { prefix: "/api/oauth", permissions: ["manageProviders"] },
+  { prefix: "/api/settings", permissions: ["manageProviders", "manageModels", "manageAdvanced", "manageTools", "manageApiKeys"], methods: READ_METHODS },
+  { prefix: "/api/proxy-pools", permissions: ["manageAdvanced", "manageProviders"], methods: READ_METHODS },
   // The provider page needs the model catalog to render a connection, so reading it
   // is shared with manageProviders while every write stays on manageModels. Reading is
   // also shared with manageApiKeys because the key forms pick allowed models from it.

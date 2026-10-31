@@ -16,6 +16,13 @@
   - `fetchSessionParams` now attempts session extraction directly with the user's cookie first, falling back to rotation only if extraction fails.
   - Enhanced `SNlM0e` and `cfb2h` regex to tolerate arbitrary whitespace variations across Google page markup.
   - Diagnostic error reporting: now explicitly identifies Google login redirects, consent gates, and ÜberProxy IP blocks rather than emitting a generic "cookie expired" error.
+- **Super-Fast Key Bulk Operations & Atomic Deletion**:
+  - Replaced sequential per-key fetch loop in `handleBulkApply` with a single atomic `PATCH /api/keys/bulk` request.
+  - Added native `DELETE /api/keys/bulk` endpoint with single-transaction SQLite deletion (`DELETE FROM apiKeys WHERE id IN (...)`) for sub-millisecond execution.
+  - Added 1-click "Bulk Delete" button to Endpoint API Keys interface when keys are selected.
+- **Fix Custom Key Provider Management Permissions**:
+  - Updated `permissionPaths.js` to allow API keys with `manageProviders` permission to access `/api/oauth` endpoints for adding OAuth providers (Google Antigravity, Claude, Codex, GitHub, Qoder, etc.).
+  - Added read-access permissions for `/api/settings` and `/api/proxy-pools` so restricted provider manager sessions can load provider configs and proxy bindings without 403 Forbidden.
 - **ZCode Web Claim Launcher (1-Click Bridge without Electron)**:
   - Created standalone web launcher route at `/api/usage/[connectionId]/zcode-bridge`.
   - Injects stored `zcodejwttoken`, `oauth:zai:access_token`, and active provider into client session to open official ZCode Rewards & Coding Plan pages (`https://zcode.z.ai/en/rewards`) directly in any desktop/mobile browser.

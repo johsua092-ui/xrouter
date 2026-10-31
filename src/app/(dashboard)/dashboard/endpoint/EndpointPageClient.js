@@ -1123,23 +1123,50 @@ const scopedModelPatterns =
   const handleBulkApply = async (patch) => {
     const ids = [...selectedKeyIds];
     if (ids.length === 0) return;
-    let ok = 0;
-    let failed = 0;
-    for (const id of ids) {
-      try {
-        const res = await fetch(`/api/keys/${id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patch),
-        });
-        if (res.ok) ok += 1;
-        else failed += 1;
-      } catch {
-        failed += 1;
+    try {
+      const res = await fetch("/api/keys/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, patch }),
+      });
+      if (res.ok) {
+        setKeys((prev) =>
+          prev.map((k) => (selectedKeyIds.has(k.id) ? { ...k, ...patch } : k))
+        );
       }
+    } catch (err) {
+      console.error("Error bulk applying:", err);
     }
     await fetchData();
     setSelectedKeyIds(new Set());
+  };
+
+  const handleBulkDelete = () => {
+    const ids = [...selectedKeyIds];
+    if (ids.length === 0) return;
+    setConfirmState({
+      title: `Delete ${ids.length} API Keys`,
+      message: `Delete ${ids.length} selected API keys? This action cannot be undone.`,
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const res = await fetch("/api/keys/bulk", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids }),
+          });
+          if (res.ok) {
+            setKeys((prev) => prev.filter((k) => !selectedKeyIds.has(k.id)));
+            setSelectedKeyIds(new Set());
+          } else {
+            const err = await res.json().catch(() => null);
+            alert(err?.error || "Bulk delete failed");
+          }
+        } catch (error) {
+          console.error("Error bulk deleting keys:", error);
+        }
+      },
+    });
   };
 
   const getCodeSnippet = (lang) => {
@@ -1567,9 +1594,14 @@ console.log(res.choices[0].message.content);`;
             </div>
 
             {selectedKeyIds.size > 0 && (
-              <Button size="sm" variant="secondary" icon="edit" onClick={() => setShowBulkEdit(true)}>
-                Bulk Edit ({selectedKeyIds.size})
-              </Button>
+              <>
+                <Button size="sm" variant="secondary" icon="edit" onClick={() => setShowBulkEdit(true)}>
+                  Bulk Edit ({selectedKeyIds.size})
+                </Button>
+                <Button size="sm" variant="danger" icon="delete" onClick={handleBulkDelete}>
+                  Bulk Delete ({selectedKeyIds.size})
+                </Button>
+              </>
             )}
 
             <Button size="sm" icon="add" onClick={() => setShowAddModal(true)}>

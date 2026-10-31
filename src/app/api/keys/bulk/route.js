@@ -104,3 +104,39 @@ export async function PATCH(request) {
     return NextResponse.json({ error: "Failed to bulk update keys" }, { status: 500 });
   }
 }
+
+export async function DELETE(request) {
+  try {
+    const cookieStore = await cookies();
+    const session = await getDashboardAuthSession(cookieStore.get("auth_token")?.value);
+    if (!session || session.role === "apikey") {
+      return NextResponse.json({ error: "Only a password sign-in can bulk delete keys" }, { status: 403 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const ids = Array.isArray(body.ids) ? body.ids.map(String).filter(Boolean) : [];
+    if (!ids.length) {
+      return NextResponse.json({ error: "No keys selected" }, { status: 400 });
+    }
+
+    const { getAdapter } = await import("@/lib/db/driver.js");
+    const db = await getAdapter();
+    
+    // Fast path: bulk delete in single query inside transaction
+    let deletedCount = 0;
+    db.transaction(() => {
+      const placeholders = ids.map(() => "?").join(",");
+      const res = db.run(`DELETE FROM apiKeys WHERE id IN (${placeholders})`, ids);
+      deletedCount = res?.changes ?? 0;
+    });
+
+    return NextResponse.json({
+      success: true,
+      deleted: deletedCount,
+      requested: ids.length,
+    });
+  } catch (error) {
+    console.log("Error bulk-deleting keys:", error);
+    return NextResponse.json({ error: "Failed to bulk delete keys" }, { status: 500 });
+  }
+}
