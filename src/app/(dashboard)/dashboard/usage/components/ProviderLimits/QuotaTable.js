@@ -93,6 +93,20 @@ export default function QuotaTable({
 }) {
   const [page, setPage] = useState(1);
 
+  // Compact absolute token amounts for grant rows (e.g. 500,000,000 -> "500M").
+  // Inline here to avoid threading a helper import through every quota table.
+  const compactToken = (value) => {
+    const n = Number(value) || 0;
+    if (n >= 1e9) return `${trimFuel(n / 1e9)}B`;
+    if (n >= 1e6) return `${trimFuel(n / 1e6)}M`;
+    if (n >= 1e3) return `${trimFuel(n / 1e3)}K`;
+    return `${n}`;
+  };
+  const trimFuel = (x) => {
+    const v = Math.round(x * 10) / 10;
+    return `${v}`.replace(/\.0$/, "");
+  };
+
   const normalizedQuotas = useMemo(
     () => quotas.map((quota, index) => ({
       ...quota,
@@ -229,14 +243,18 @@ export default function QuotaTable({
                   <span
                     className="truncate text-[11px] text-text-muted"
                     title={
-                      isUnlimited
+                      quota.totalTokens > 0
+                        ? `${quota.usedTokens.toLocaleString()} / ${quota.totalTokens.toLocaleString()} tokens`
+                        : isUnlimited
                         ? `${quota.used.toLocaleString()} used · Unlimited`
                         : isCreditBalance
                         ? `Credit balance: ${quota.total.toFixed(2)} ${quota.currency || ""}`
                         : `${quota.used.toLocaleString()} / ${quota.total > 0 ? quota.total.toLocaleString() : "∞"}`
                     }
                   >
-                    {isUnlimited
+                    {quota.totalTokens > 0
+                      ? `${compactToken(quota.usedTokens)} / ${compactToken(quota.totalTokens)} tok`
+                      : isUnlimited
                       ? `${quota.used.toLocaleString()} used · Unlimited`
                       : isCreditBalance
                       ? `Credit: ${quota.total.toFixed(2)} ${quota.currency || ""}`

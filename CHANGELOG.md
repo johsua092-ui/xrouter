@@ -1,5 +1,9 @@
 # v0.0.5 (2026-10-30)
 
+- **Fix GLM Quota Surface Absolute Token Grants (500M gift card visible)**:
+  - `parseGlmQuotaResponse` now reads absolute token amounts (`totalTokens`/`usedTokens`/`total`/`used` in tokens) from Z.ai's monitor, exposed as a distinct `Tokens (grant)` quota row.
+  - `QuotaTable` renders grant rows as compact token counts (`500M tok` / `0 / 500M`) with a full `0 / 500,000,000 tokens` tooltip — the ZCODE Weekend Build 500M gift is now visible instead of an empty-looking percentage bar.
+  - Root cause note: reset cards (`FIVE_HOUR`/`WEEK`) are a separate category from token gift cards; the reset-card inventory being empty is expected when no resets exist, while the token grant now shows up in the quota monitor.
 - **Fix DeepSeek Web (dsw) Tool Calling Preserving DSML**: 
   - `collectSSEContent()` now surfaces `rawContent` in addition to DSML-stripped `content`, and both stream + non-stream tool-mode paths parse tool calls from the RAW text — so `<|DSML|:tool>` tags survive `cleanDeepSeekToken` and reach `parseToolCallReply`.
   - Reproducing case: `dsw/deepseek-v4.1-pro` (and any dsw model) returned pure text with `calls:[]` because the DSML tool-call block was stripped before parsing. Now `search_web` etc. resolve to proper `tool_calls` deltas.

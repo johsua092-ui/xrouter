@@ -35,6 +35,10 @@ export function parseGlmQuotaResponse(json) {
     const usedPercent = Number(limit.percentage) || 0;
     const resetMs = Number(limit.nextResetTime) || 0;
     const remaining = Math.max(0, 100 - usedPercent);
+    // Absolute token amounts, when Z.ai returns them (gift/top-up grants like
+    // "ZCODE Weekend Build" surface totalTokens/usedTokens / total/used in tokens).
+    const absUsed = Number(limit.used ?? limit.usedTokens ?? limit.usedTokensAmount) || 0;
+    const absTotal = Number(limit.total ?? limit.totalTokens ?? limit.totalTokensAmount) || 0;
 
     // 2. Map key dynamically based on type and period (unit) to avoid overwriting
     let key = "session";
@@ -47,12 +51,18 @@ export function parseGlmQuotaResponse(json) {
     } else {
       key = `Limit (${limit.number})`;
     }
+    // Distinct key for an absolute-token grant so it doesn't clobber the %-window row.
+    if (limit.type === "TOKENS_LIMIT" && absTotal > 0 && key === "Tokens") {
+      key = "Tokens (grant)";
+    }
 
     quotas[key] = {
       used: usedPercent,
       total: 100,
       remaining,
       remainingPercentage: remaining,
+      usedTokens: absUsed,
+      totalTokens: absTotal,
       resetAt: resetMs > 0 ? new Date(resetMs).toISOString() : null,
       unlimited: false,
     };
