@@ -53,6 +53,6 @@ func Load() *Config {
 		DBPath:          dbPath,
 		InitialPassword: initialPassword,
 		PublicBaseUrl:   publicBaseUrl,
-		Version:         "0.0.3",
+		Version:         "0.0.5",
 	}
 }

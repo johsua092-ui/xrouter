@@ -1,4 +1,4 @@
-# v0.6.231 (2026-10-31)
+# v0.0.5 (2026-10-31)
 
 - **Fix DeepSeek Web (dsw) DSML Tool Calls Leak (`<｜｜DSML｜｜ calls>` dialect)**:
   - DeepSeek V3/V4 web models emit tool calls using a nested block dialect (`<｜｜DSML｜｜ calls>` containing `<｜｜DSML｜｜ invoke name="...">` and `<｜｜DSML｜｜ parameter name="...">`) with double fullwidth pipes (`｜｜`).
@@ -9,6 +9,8 @@
   - `open-sse/providers/registry/zai-web.js`: added `combined: true` to `transport.auth` so cookie-authenticated web sessions apply the `Authorization: Bearer <token>` header properly.
   - `open-sse/executors/default.js`: made `applyAuth` and `setAuth` resilient against missing/split descriptors to prevent `TypeError: Cannot read properties of undefined (reading 'header')`.
   - `open-sse/executors/default.js`: `resolveAuthDescriptor` now respects `transport.auth.header` instead of assuming `Cookie` for all `authType: "cookie"` providers.
+  - Fixed endpoint 404: updated `baseUrl` from `https://chat.z.ai/api` to `https://chat.z.ai/openai/chat/completions` as verified from reverse-engineering the production web client bundle.
+  - Added connection test in `testUtils.js` querying `https://chat.z.ai/api/v1/users/user` to eliminate "Provider test not supported" error in dashboard.
 - **Fix Gemini Web 401 Cookie Freshness & Session Extraction**:
   - `open-sse/executors/gemini-web.js`: stopped auto-rotating fresh cookies before initial use — `autoRotateGeminiCookies` calls Google's sentinel endpoint with dummy payloads, which was corrupting freshly pasted cookies on datacenter IPs before `fetchSessionParams` ran.
   - `fetchSessionParams` now attempts session extraction directly with the user's cookie first, falling back to rotation only if extraction fails.
@@ -26,6 +28,9 @@
   - `parseGlmQuotaResponse` now reads absolute token amounts (`totalTokens`/`usedTokens`/`total`/`used` in tokens) from Z.ai's monitor, exposed as a distinct `Tokens (grant)` quota row.
   - `QuotaTable` renders grant rows as compact token counts (`500M tok` / `0 / 500M`) with a full `0 / 500,000,000 tokens` tooltip — the ZCODE Weekend Build 500M gift is now visible instead of an empty-looking percentage bar.
   - Root cause note: reset cards (`FIVE_HOUR`/`WEEK`) are a separate category from token gift cards; the reset-card inventory being empty is expected when no resets exist, while the token grant now shows up in the quota monitor.
+
+# v0.0.4 (2026-10-30)
+
 - **Fix DeepSeek Web (dsw) Tool Calling Preserving DSML**: 
   - `collectSSEContent()` now surfaces `rawContent` in addition to DSML-stripped `content`, and both stream + non-stream tool-mode paths parse tool calls from the RAW text — so `<|DSML|:tool>` tags survive `cleanDeepSeekToken` and reach `parseToolCallReply`.
   - Reproducing case: `dsw/deepseek-v4.1-pro` (and any dsw model) returned pure text with `calls:[]` because the DSML tool-call block was stripped before parsing. Now `search_web` etc. resolve to proper `tool_calls` deltas.
