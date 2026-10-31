@@ -16,14 +16,15 @@
   - `fetchSessionParams` now attempts session extraction directly with the user's cookie first, falling back to rotation only if extraction fails.
   - Enhanced `SNlM0e` and `cfb2h` regex to tolerate arbitrary whitespace variations across Google page markup.
   - Diagnostic error reporting: now explicitly identifies Google login redirects, consent gates, and ÜberProxy IP blocks rather than emitting a generic "cookie expired" error.
-- **Native GLM / ZCode Event Gift Card Claiming & Auto-Detection (Zero App Download)**:
-  - Reversed ZCode v3.16.3 Electron client via leanrea (`BigModelCodingPlanSubscriptionProvider` & `BigModelUsageQuotaProvider`): uncovered `GET /api/v1/zcode-plan/billing/preview` (campaign preview), `POST /api/v1/zcode-plan/billing/claim` (plan claim), `GET /api/v1/zcode-plan/billing/balance` (active grant token balances e.g. 500M Weekend Build), and `GET /api/v1/coding-plan/reset/status` (native ZCode reset cards).
-  - Added `getGlmBalance`, `getGlmClaimablePlans`, and `claimGlmPlan` services in `open-sse/services/usage/glm.js` with client headers (`X-ZCode-App-Version: 3.16.3`, `X-Platform: linux-x64`).
-  - Wired `getGlmUsage` to simultaneously probe both MAAS developer quota limits (`monitor/usage/quota/limit`) and ZCode plan balances (`billing/balance`), ensuring active 500M token grants are automatically merged and surfaced as grant quota rows.
-  - Upgraded GLM reset cards resolver to check both ZCode native status (`coding-plan/reset/status`) and MAAS fallback (`customer-package-reset/list`).
-  - Added API route `src/app/api/usage/[connectionId]/glm-claim/route.js` supporting both stored OAuth `zcodeJwtToken` and explicit overrides.
-  - Added dashboard UI action in `ProviderLimits` with a dedicated gift claim modal displaying dynamic plan entitlements (e.g. ZCODE Weekend Build 500M tokens), currently active token grants, and one-click native claim without downloading the 166MB ZCode desktop client.
-  - Zero emoji design convention strictly preserved using Material Symbols font icons.
+- **Upgraded ZCode Gift Card & Reward Discovery Engine (Zero App Download)**:
+  - Deep-reversed ZCode's entire incentive and rewards architecture (`/api/v1/incentive/referral/summary`, `/api/v1/marketing/touch`, and `/api/v1/zcode-plan/billing/preview`).
+  - Discovered that ZCode distributes gifts across three separate pipelines:
+    1. Direct promotional plans via `billing/preview` (e.g. general campaigns)
+    2. Event task rewards via `incentive/referral/summary` (e.g. Weekend Build 300M tokens, Global Build 100M tokens, Weekly Reset Cards)
+    3. Campaign push popups/banners via `marketing/touch`
+  - Re-architected `getGlmClaimablePlans` to query all three endpoints simultaneously using the account's device context (`X-Device-Mid`, `X-Client-Language`), aggregate benefits, and surface both ready-to-claim event cards and active reward tasks directly on X Router's dashboard.
+  - Attached `X-Device-Mid` to `claimGlmPlan` execution so claims don't fail with parameter error.
+  - Upgraded dashboard claim modal to clearly render task progress, token allocations, and active state without requiring users to install or open the ZCode desktop app.
 - **Fix GLM Quota Surface Absolute Token Grants (500M gift card visible)**:
   - `parseGlmQuotaResponse` now reads absolute token amounts (`totalTokens`/`usedTokens`/`total`/`used` in tokens) from Z.ai's monitor, exposed as a distinct `Tokens (grant)` quota row.
   - `QuotaTable` renders grant rows as compact token counts (`500M tok` / `0 / 500M`) with a full `0 / 500,000,000 tokens` tooltip — the ZCODE Weekend Build 500M gift is now visible instead of an empty-looking percentage bar.

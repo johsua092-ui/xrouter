@@ -2006,7 +2006,7 @@ export default function ProviderLimits() {
                 </div>
               ) : glmClaimModal.plans && glmClaimModal.plans.length > 0 ? (
                 <div className="space-y-2">
-                  <div className="text-xs font-medium text-text-muted">Available Event Plans</div>
+                  <div className="text-xs font-medium text-text-muted">Available Event Plans & Reward Tasks</div>
                   {glmClaimModal.plans.map((plan) => (
                     <div
                       key={plan.planId}
@@ -2017,9 +2017,20 @@ export default function ProviderLimits() {
                           <span className="font-semibold text-sm text-text-primary truncate">
                             {plan.name}
                           </span>
+                          {plan.source === "incentive_reward" && (
+                            <span className="inline-flex items-center rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                              Task
+                            </span>
+                          )}
                         </div>
                         {plan.description && (
-                          <p className="text-xs text-text-muted mt-0.5 truncate">{plan.description}</p>
+                          <p className="text-xs text-text-muted mt-0.5">{plan.description}</p>
+                        )}
+                        {plan.progress && (
+                          <div className="flex items-center gap-2 mt-1.5 text-xs text-text-muted">
+                            <span className="tabular-nums">Progress: {plan.progress.current} / {plan.progress.target}</span>
+                            {plan.state && <span className="capitalize text-[11px] opacity-75">({plan.state.replace("_", " ")})</span>}
+                          </div>
                         )}
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {(plan.entitlements || []).map((ent, idx) => (
@@ -2041,13 +2052,17 @@ export default function ProviderLimits() {
                       <button
                         type="button"
                         onClick={() => handleExecuteGlmClaim(plan.planId)}
-                        disabled={glmClaimModal.claiming}
-                        className="inline-flex items-center gap-1 shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={glmClaimModal.claiming || !plan.claimable}
+                        className={`inline-flex items-center gap-1 shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                          plan.claimable
+                            ? "bg-primary text-white hover:bg-primary/90"
+                            : "bg-surface-3 text-text-muted border border-border-subtle opacity-70 cursor-not-allowed"
+                        }`}
                       >
                         {glmClaimModal.claiming && (
                           <span className="material-symbols-outlined animate-spin text-[14px]">progress_activity</span>
                         )}
-                        <span>Claim</span>
+                        <span>{plan.claimable ? "Claim" : "In Progress"}</span>
                       </button>
                     </div>
                   ))}

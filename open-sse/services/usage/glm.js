@@ -125,6 +125,8 @@ const ZCODE_PLAN_CLAIM_URL = "https://zcode.z.ai/api/v1/zcode-plan/billing/claim
 const ZCODE_PLAN_BALANCE_URL = "https://zcode.z.ai/api/v1/zcode-plan/billing/balance";
 const ZCODE_RESET_STATUS_URL = "https://zcode.z.ai/api/v1/coding-plan/reset/status";
 const ZCODE_RESET_USE_URL = "https://zcode.z.ai/api/v1/coding-plan/reset/use";
+const ZCODE_INCENTIVE_SUMMARY_URL = "https://zcode.z.ai/api/v1/incentive/referral/summary";
+const ZCODE_MARKETING_TOUCH_URL = "https://zcode.z.ai/api/v1/marketing/touch";
 const ZCODE_APP_VERSION = "3.16.3";
 const ZCODE_PLATFORM = "linux-x64";
 
@@ -393,63 +395,120 @@ export async function getGlmUsage(apiKey, provider, proxyOptions = null, provide
  * Fetch claimable gift cards / event plans for GLM / Z.ai accounts.
  * Hits GET https://zcode.z.ai/api/v1/zcode-plan/billing/preview
  */
-export async function getGlmClaimablePlans(token, proxyOptions = null) {
+export async function getGlmClaimablePlans(token, proxyOptions = null, options = {}) {
   if (typeof token !== "string" || !token.trim()) {
     throw glmResetError("GLM authentication token not available.", 401);
   }
   const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
+  const deviceMid = options?.deviceMid || options?.userId || "9ac46470-9bda-419a-baf9-924143aa6a04";
   const url = new URL(ZCODE_PLAN_PREVIEW_URL);
   url.searchParams.set("app_version", ZCODE_APP_VERSION);
   url.searchParams.set("platform", ZCODE_PLATFORM);
 
-  let response;
-  try {
-    response = await proxyAwareFetch(
-      url.toString(),
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${cleanToken}`,
-          Accept: "application/json",
-          "X-ZCode-App-Version": ZCODE_APP_VERSION,
-          "X-Platform": ZCODE_PLATFORM,
-        },
-        signal: AbortSignal.timeout(15000),
-        redirect: "error",
-      },
-      proxyOptions,
-    );
-  } catch (err) {
-    throw glmResetError(`GLM plan preview network error: ${err?.message || err}`, 502);
+  const zcodeHeaders = {
+    Authorization: `Bearer ${cleanToken}`,
+    Accept: "application/json",
+    "X-ZCode-App-Version": ZCODE_APP_VERSION,
+    "X-Platform": ZCODE_PLATFORM,
+    "X-Device-Mid": deviceMid,
+    "X-Client-Language": "en-US",
+  };
+
+  const [previewRes, incentiveRes, touchRes] = await Promise.all([
+    proxyAwareFetch(url.toString(), { method: "GET", headers: zcodeHeaders, signal: AbortSignal.timeout(12000), redirect: "error" }, proxyOptions).catch(() => null),
+    proxyAwareFetch(ZCODE_INCENTIVE_SUMMARY_URL, { method: "GET", headers: zcodeHeaders, signal: AbortSignal.timeout(12000), redirect: "error" }, proxyOptions).catch(() => null),
+    proxyAwareFetch(`${ZCODE_MARKETING_TOUCH_URL}?seq=1`, { method: "GET", headers: zcodeHeaders, signal: AbortSignal.timeout(12000), redirect: "error" }, proxyOptions).catch(() => null),
+  ]);
+
+  const plansMap = new Map();
+  let serverTime = null;
+
+  // 1. ZCode Billing Preview plans
+  if (previewRes && previewRes.ok) {
+    const payload = await previewRes.json().catch(() => null);
+    serverTime = payload?.data?.server_time || serverTime;
+    for (const p of payload?.data?.plans || []) {
+      const planId = p.plan_id || p.planId;
+      if (!planId) continue;
+      plansMap.set(planId, {
+        planId,
+        name: p.name || p.plan_id || "Event Plan",
+        description: p.description || "",
+        source: "billing_preview",
+        claimable: true,
+        priority: p.priority ?? 0,
+        endsAt: p.ends_at || p.endsAt || null,
+        entitlements: (p.entitlements || []).map((e) => ({
+          entitlementId: e.entitlement_id || e.entitlementId || "",
+          showName: e.show_name || e.showName || "",
+          meter: e.meter || "",
+          unitType: e.unit_type || e.unitType || "tokens",
+          grantUnits: Number(e.grant_units ?? e.grantUnits) || 0,
+          period: e.period || "",
+          effectiveAt: e.effective_at || e.effectiveAt || null,
+        })),
+      });
+    }
   }
 
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw glmResetError(payload?.msg || payload?.message || `GLM preview HTTP error (${response.status})`, response.status >= 400 && response.status < 500 ? response.status : 502);
+  // 2. ZCode Incentive & Referral Rewards (Weekend Build, Global Build)
+  if (incentiveRes && incentiveRes.ok) {
+    const payload = await incentiveRes.json().catch(() => null);
+    serverTime = payload?.data?.server_time || serverTime;
+    const inviter = payload?.data?.inviter;
+    for (const r of inviter?.rewards || []) {
+      const p = r.plan;
+      const planId = p?.plan_id || p?.planId || `incentive_${r.reward_type}`;
+      if (plansMap.has(planId)) continue;
+      const progressCurrent = Number(r.current) || 0;
+      const progressTarget = Number(r.target) || 0;
+      const isEligible = progressCurrent >= progressTarget && progressTarget > 0;
+      plansMap.set(planId, {
+        planId: p?.plan_id || p?.planId || planId,
+        name: r.title || p?.name || "ZCode Reward Task",
+        description: r.description || "",
+        source: "incentive_reward",
+        rewardType: r.reward_type,
+        state: r.state || "in_progress",
+        progress: { current: progressCurrent, target: progressTarget },
+        claimable: isEligible || r.state === "completed",
+        inviteCode: inviter?.invite_code || "",
+        entitlements: (p?.entitlements || []).map((e) => ({
+          showName: e.show_name || e.showName || "GLM Tokens",
+          unitType: e.unit_type || "tokens",
+          grantUnits: Number(e.grant_units ?? e.grantUnits) || 0,
+        })),
+      });
+    }
   }
 
-  if (payload?.code !== 0 && payload?.code !== 200) {
-    throw glmResetError(payload?.msg || payload?.message || `GLM preview rejected (code ${payload?.code})`, 400);
+  // 3. Marketing Touch Popups / Banners
+  if (touchRes && touchRes.ok) {
+    const payload = await touchRes.json().catch(() => null);
+    serverTime = payload?.data?.server_time || serverTime;
+    for (const d of payload?.data?.deliveries || []) {
+      const buttons = [...(d.banner?.buttons || []), ...(d.popup?.buttons || [])];
+      for (const btn of buttons) {
+        if (btn?.action?.type === "claim_zcode_plan" && btn.action.args?.plan_id) {
+          const planId = btn.action.args.plan_id;
+          if (!plansMap.has(planId)) {
+            plansMap.set(planId, {
+              planId,
+              name: d.banner?.title || d.popup?.title || d.campaign_id || "Campaign Event Gift",
+              description: d.banner?.description || d.popup?.description || "",
+              source: "marketing_touch",
+              claimable: true,
+              entitlements: [],
+            });
+          }
+        }
+      }
+    }
   }
 
-  const plans = (payload?.data?.plans || []).map((p) => ({
-    planId: p.plan_id || p.planId || "",
-    name: p.name || p.plan_id || "Event Plan",
-    description: p.description || "",
-    priority: p.priority ?? 0,
-    entitlements: (p.entitlements || []).map((e) => ({
-      entitlementId: e.entitlement_id || e.entitlementId || "",
-      showName: e.show_name || e.showName || "",
-      meter: e.meter || "",
-      unitType: e.unit_type || e.unitType || "tokens",
-      grantUnits: Number(e.grant_units ?? e.grantUnits) || 0,
-      period: e.period || "",
-      effectiveAt: e.effective_at || e.effectiveAt || null,
-    })),
-  })).filter((p) => Boolean(p.planId));
-
+  const plans = Array.from(plansMap.values());
   return {
-    serverTime: payload?.data?.server_time,
+    serverTime,
     plans,
     count: plans.length,
   };
@@ -474,6 +533,7 @@ export async function claimGlmPlan(token, planId, proxyOptions = null, captcha =
     Accept: "application/json",
     "X-ZCode-App-Version": ZCODE_APP_VERSION,
     "X-Platform": ZCODE_PLATFORM,
+    "X-Device-Mid": captcha?.deviceMid || "9ac46470-9bda-419a-baf9-924143aa6a04",
   };
 
   if (captcha?.captchaVerifyParam) {

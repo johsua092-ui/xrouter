@@ -112,7 +112,9 @@ export async function GET(request, { params }) {
     attempts++;
     try {
       const [plansData, balanceData] = await Promise.all([
-        getGlmClaimablePlans(resolved.token, resolved.proxyOptions).catch((e) => ({ plans: [], error: e.message })),
+        getGlmClaimablePlans(resolved.token, resolved.proxyOptions, {
+          deviceMid: connection?.providerSpecificData?.userId || "9ac46470-9bda-419a-baf9-924143aa6a04",
+        }).catch((e) => ({ plans: [], error: e.message })),
         getGlmBalance(resolved.token, resolved.proxyOptions).catch(() => null),
       ]);
       return Response.json({
@@ -172,6 +174,7 @@ export async function POST(request, { params }) {
     const captcha = body.captcha || {
       captchaVerifyParam: body.captchaVerifyParam,
       captchaRegion: body.captchaRegion,
+      deviceMid: resolved.connection?.providerSpecificData?.userId || "9ac46470-9bda-419a-baf9-924143aa6a04",
     };
 
     let result = await claimGlmPlan(resolved.token, planId, resolved.proxyOptions, captcha);
