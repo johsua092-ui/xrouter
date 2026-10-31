@@ -2030,6 +2030,11 @@ export default function ProviderLimits() {
                           <div className="flex items-center gap-2 mt-1.5 text-xs text-text-muted">
                             <span className="tabular-nums">Progress: {plan.progress.current} / {plan.progress.target}</span>
                             {plan.state && <span className="capitalize text-[11px] opacity-75">({plan.state.replace("_", " ")})</span>}
+                            {plan.inviteCode && (
+                              <span className="text-[11px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                Code: {plan.inviteCode}
+                              </span>
+                            )}
                           </div>
                         )}
                         <div className="flex flex-wrap gap-1.5 mt-2">

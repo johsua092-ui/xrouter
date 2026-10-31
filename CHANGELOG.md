@@ -16,10 +16,11 @@
   - `fetchSessionParams` now attempts session extraction directly with the user's cookie first, falling back to rotation only if extraction fails.
   - Enhanced `SNlM0e` and `cfb2h` regex to tolerate arbitrary whitespace variations across Google page markup.
   - Diagnostic error reporting: now explicitly identifies Google login redirects, consent gates, and ÜberProxy IP blocks rather than emitting a generic "cookie expired" error.
-- **Clean Up GLM Gift Card Modal**:
+- **Clean Up GLM Gift Card Modal & Task Logic**:
   - Removed confusing manual "Direct Plan ID Claim" input box to keep UI clean and intuitive.
   - Automatically filter out already-active plans to prevent "target not found" errors on duplicate claims.
-  - Clear explanations for ongoing referral & weekend tasks directly in dashboard.
+  - Surfaced referral code directly on reward task cards (`Code: 7KAJNBVR`) so users immediately know their bind code for task progression.
+  - Enhanced error handling on in-progress referral tasks with actionable instructions instead of raw server error codes.
   - Zero emoji design convention strictly preserved using Material Symbols font icons.
 - **Fix GLM Quota Surface Absolute Token Grants (500M gift card visible)**:
   - `parseGlmQuotaResponse` now reads absolute token amounts (`totalTokens`/`usedTokens`/`total`/`used` in tokens) from Z.ai's monitor, exposed as a distinct `Tokens (grant)` quota row.

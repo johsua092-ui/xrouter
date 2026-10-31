@@ -126,6 +126,7 @@ const ZCODE_PLAN_BALANCE_URL = "https://zcode.z.ai/api/v1/zcode-plan/billing/bal
 const ZCODE_RESET_STATUS_URL = "https://zcode.z.ai/api/v1/coding-plan/reset/status";
 const ZCODE_RESET_USE_URL = "https://zcode.z.ai/api/v1/coding-plan/reset/use";
 const ZCODE_INCENTIVE_SUMMARY_URL = "https://zcode.z.ai/api/v1/incentive/referral/summary";
+const ZCODE_INCENTIVE_BIND_CODE_URL = "https://zcode.z.ai/api/v1/incentive/referral/bind-code";
 const ZCODE_MARKETING_TOUCH_URL = "https://zcode.z.ai/api/v1/marketing/touch";
 const ZCODE_APP_VERSION = "3.16.3";
 const ZCODE_PLATFORM = "linux-x64";
@@ -527,13 +528,54 @@ export async function claimGlmPlan(token, planId, proxyOptions = null, captcha =
   }
 
   const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
+  const deviceMid = captcha?.deviceMid || "9ac46470-9bda-419a-baf9-924143aa6a04";
+
+  // Auto-Resolution: Handle Referral / Weekend Task Auto-Unlock
+  if (planId.startsWith("incentive_") || planId.includes("referral") || planId.includes("-wk")) {
+    try {
+      const summaryRes = await proxyAwareFetch(
+        ZCODE_INCENTIVE_SUMMARY_URL,
+        {
+          headers: {
+            Authorization: `Bearer ${cleanToken}`,
+            "X-Device-Mid": deviceMid,
+            "X-Client-Language": "en-US",
+            Accept: "application/json",
+          },
+          signal: AbortSignal.timeout(10000),
+        },
+        proxyOptions,
+      );
+      if (summaryRes.ok) {
+        const sumData = await summaryRes.json().catch(() => null);
+        const inviter = sumData?.data?.inviter;
+        const matchingReward = (inviter?.rewards || []).find(
+          (r) => r.plan?.plan_id === planId || `incentive_${r.reward_type}` === planId,
+        );
+
+        if (matchingReward && matchingReward.state === "in_progress") {
+          const current = Number(matchingReward.current) || 0;
+          const target = Number(matchingReward.target) || 0;
+          return {
+            ok: false,
+            status: 400,
+            code: "task_in_progress",
+            message: `Syarat belum tercapai (${current}/${target}). Gunakan referral code [${inviter.invite_code}] di akun referral untuk auto-unlock.`,
+            inviteCode: inviter.invite_code,
+            progress: { current, target },
+          };
+        }
+      }
+    } catch {}
+  }
+
   const headers = {
     Authorization: `Bearer ${cleanToken}`,
     "Content-Type": "application/json",
     Accept: "application/json",
     "X-ZCode-App-Version": ZCODE_APP_VERSION,
     "X-Platform": ZCODE_PLATFORM,
-    "X-Device-Mid": captcha?.deviceMid || "9ac46470-9bda-419a-baf9-924143aa6a04",
+    "X-Device-Mid": deviceMid,
   };
 
   if (captcha?.captchaVerifyParam) {
@@ -575,16 +617,16 @@ export async function claimGlmPlan(token, planId, proxyOptions = null, captcha =
       ok: true,
       status: 200,
       code: "SUCCESS",
-      message: payload?.msg || "Plan claimed successfully.",
       plan: payload?.data?.plan || null,
-      serverTime: payload?.data?.server_time,
+      message: "Event plan claimed successfully.",
     };
   }
 
   return {
     ok: false,
     status: 400,
-    code: payload?.code || "claim_rejected",
-    message: payload?.msg || payload?.data?.message || payload?.message || "GLM plan claim was rejected by server.",
+    code: payload?.code ? String(payload.code) : "claim_rejected",
+    message: payload?.data?.message || payload?.msg || payload?.message || "Plan claim was rejected.",
+    data: payload?.data,
   };
 }
