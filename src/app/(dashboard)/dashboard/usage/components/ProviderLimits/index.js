@@ -2079,7 +2079,16 @@ export default function ProviderLimits() {
               )}
             </div>
 
-            <div className="flex justify-end gap-2 border-t border-black/10 bg-black/[0.02] px-4 py-2.5 dark:border-white/10 dark:bg-white/[0.02]">
+            <div className="flex justify-between items-center gap-2 border-t border-black/10 bg-black/[0.02] px-4 py-2.5 dark:border-white/10 dark:bg-white/[0.02]">
+              <a
+                href={`/api/usage/${glmClaimModal.connectionId}/zcode-bridge`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+              >
+                <span className="material-symbols-outlined text-[15px]">open_in_new</span>
+                <span>Buka ZCode Web Claim</span>
+              </a>
               <button
                 type="button"
                 onClick={() => setGlmClaimModal(null)}

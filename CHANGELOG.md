@@ -16,6 +16,11 @@
   - `fetchSessionParams` now attempts session extraction directly with the user's cookie first, falling back to rotation only if extraction fails.
   - Enhanced `SNlM0e` and `cfb2h` regex to tolerate arbitrary whitespace variations across Google page markup.
   - Diagnostic error reporting: now explicitly identifies Google login redirects, consent gates, and ÜberProxy IP blocks rather than emitting a generic "cookie expired" error.
+- **ZCode Web Claim Launcher (1-Click Bridge without Electron)**:
+  - Created standalone web launcher route at `/api/usage/[connectionId]/zcode-bridge`.
+  - Injects stored `zcodejwttoken`, `oauth:zai:access_token`, and active provider into client session to open official ZCode Rewards & Coding Plan pages (`https://zcode.z.ai/en/rewards`) directly in any desktop/mobile browser.
+  - Added "Buka ZCode Web Claim" action button in `ProviderLimits` modal for immediate browser access.
+  - Ultra-lightweight (~2KB HTML), zero external deps, full dark mode, and zero emoji.
 - **Clean Up GLM Gift Card Modal & Task Logic**:
   - Removed confusing manual "Direct Plan ID Claim" input box to keep UI clean and intuitive.
   - Automatically filter out already-active plans to prevent "target not found" errors on duplicate claims.
