@@ -506,50 +506,6 @@ export async function getGlmClaimablePlans(token, proxyOptions = null, options =
     }
   }
 
-  // 4. Fallback Known Active Event Candidates (Weekend Build 500M, etc.)
-  // When upstream servers suppress banners for specific accounts, candidate IDs let users claim directly.
-  const KNOWN_EVENT_CANDIDATES = [
-    {
-      planId: "zcode-v3-start-plan-1016-wk",
-      name: "ZCode Weekend Build (500M Tokens)",
-      description: "GLM-5.3-Flash promotional weekend grant.",
-      source: "event_candidate",
-      claimable: true,
-      entitlements: [
-        {
-          showName: "GLM-5.3-Flash",
-          unitType: "tokens",
-          grantUnits: 500000000,
-        },
-      ],
-    },
-    {
-      planId: "zcode-v3-start-plan",
-      name: "ZCode Start Plan",
-      description: "Trial grant for GLM-5.3 and GLM-5.3-Flash models.",
-      source: "event_candidate",
-      claimable: true,
-      entitlements: [
-        {
-          showName: "GLM-5.3",
-          unitType: "tokens",
-          grantUnits: 3000000,
-        },
-        {
-          showName: "GLM-5.3-Flash",
-          unitType: "tokens",
-          grantUnits: 5000000,
-        },
-      ],
-    },
-  ];
-
-  for (const c of KNOWN_EVENT_CANDIDATES) {
-    if (!plansMap.has(c.planId)) {
-      plansMap.set(c.planId, c);
-    }
-  }
-
   const plans = Array.from(plansMap.values());
   return {
     serverTime,

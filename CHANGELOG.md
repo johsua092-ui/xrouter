@@ -16,11 +16,10 @@
   - `fetchSessionParams` now attempts session extraction directly with the user's cookie first, falling back to rotation only if extraction fails.
   - Enhanced `SNlM0e` and `cfb2h` regex to tolerate arbitrary whitespace variations across Google page markup.
   - Diagnostic error reporting: now explicitly identifies Google login redirects, consent gates, and ÜberProxy IP blocks rather than emitting a generic "cookie expired" error.
-- **Upgraded ZCode Gift Card & Reward Discovery Engine (Zero App Download)**:
-  - Deep-reversed ZCode's entire incentive and rewards architecture (`/api/v1/incentive/referral/summary`, `/api/v1/marketing/touch`, and `/api/v1/zcode-plan/billing/preview`).
-  - Universal multi-source pipeline: automatically probes active campaigns, referral tasks (Weekend Build, Global Build), marketing banners, and candidate event IDs.
-  - Added Direct Plan ID claiming support in `ProviderLimits` modal for immediate one-click redemption without waiting for upstream banner push.
-  - Attached `X-Device-Mid` to `claimGlmPlan` execution so claims don't fail with parameter error.
+- **Clean Up GLM Gift Card Modal**:
+  - Removed confusing manual "Direct Plan ID Claim" input box to keep UI clean and intuitive.
+  - Automatically filter out already-active plans to prevent "target not found" errors on duplicate claims.
+  - Clear explanations for ongoing referral & weekend tasks directly in dashboard.
   - Zero emoji design convention strictly preserved using Material Symbols font icons.
 - **Fix GLM Quota Surface Absolute Token Grants (500M gift card visible)**:
   - `parseGlmQuotaResponse` now reads absolute token amounts (`totalTokens`/`usedTokens`/`total`/`used` in tokens) from Z.ai's monitor, exposed as a distinct `Tokens (grant)` quota row.
