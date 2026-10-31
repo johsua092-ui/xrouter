@@ -226,56 +226,39 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
   const handleBulkSubmit = async () => {
     const lines = bulkText.split("\n");
     if (!lines.length) return;
-    // Plan collision-free names against existing connections so a generated
-    // "Key N" never matches a saved name (which the backend would upsert /
-    // overwrite instead of inserting). See bulkAdd.js for the full rationale.
     const plan = planBulkAdd(lines, existingNames, { isCloudflareAi });
     if (!plan.length) return;
     setSaving(true);
     setBulkResult(null);
     setBulkProgress({ done: 0, total: plan.length });
-    let success = 0;
-    let failed = 0;
-    for (const entry of plan) {
-      try {
-        // Validate each key before saving so bulk-added connections get a
-        // real status (active/unknown) like single adds, instead of a
-        // hardcoded "unknown" that never flips until a manual test.
-        let isValid = false;
-        try {
-          const vres = await fetch("/api/providers/validate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ provider, apiKey: entry.apiKey }),
-          });
-          const vdata = await vres.json().catch(() => ({}));
-          isValid = !!vdata.valid;
-        } catch {
-          isValid = false;
-        }
-        const res = await fetch("/api/providers", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider,
+
+    try {
+      const res = await fetch("/api/providers/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          keys: plan.map((entry) => ({
             apiKey: entry.apiKey,
             name: entry.name,
-            priority: 1,
-            testStatus: isValid ? "active" : "unknown",
-            ...(entry.providerSpecificData ? { providerSpecificData: entry.providerSpecificData } : {}),
-          }),
-        });
-        if (res.ok) success++;
-        else failed++;
-      } catch {
-        failed++;
+            providerSpecificData: entry.providerSpecificData,
+          })),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setBulkProgress({ done: plan.length, total: plan.length });
+        setBulkResult({ success: data.count || plan.length, failed: data.failed || 0 });
+      } else {
+        setBulkResult({ success: 0, failed: plan.length });
       }
-      setBulkProgress((prev) => (prev ? { done: Math.min(prev.total, prev.done + 1), total: prev.total } : prev));
+    } catch {
+      setBulkResult({ success: 0, failed: plan.length });
+    } finally {
+      setSaving(false);
+      setBulkProgress(null);
+      if (onBulkDone) onBulkDone();
     }
-    setSaving(false);
-    setBulkProgress(null);
-    setBulkResult({ success, failed });
-    if (success > 0 && onBulkDone) onBulkDone();
   };
 
   if (!provider) return null;
