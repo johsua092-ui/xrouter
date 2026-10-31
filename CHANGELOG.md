@@ -1,4 +1,4 @@
-# v0.0.5 (2026-10-31)
+# v0.6.231 (2026-10-31)
 
 - **Fix DeepSeek Web (dsw) DSML Tool Calls Leak (`<｜｜DSML｜｜ calls>` dialect)**:
   - DeepSeek V3/V4 web models emit tool calls using a nested block dialect (`<｜｜DSML｜｜ calls>` containing `<｜｜DSML｜｜ invoke name="...">` and `<｜｜DSML｜｜ parameter name="...">`) with double fullwidth pipes (`｜｜`).

@@ -18,7 +18,7 @@ export default {
   authType: "cookie",
   authHint: "Paste your token from chat.z.ai (DevTools -> Application -> Local Storage -> token)",
   transport: {
-    baseUrl: "https://chat.z.ai/api",
+    baseUrl: "https://chat.z.ai/openai/chat/completions",
     format: "openai",
     authType: "cookie",
     auth: { combined: true, header: "Authorization", scheme: "bearer" },

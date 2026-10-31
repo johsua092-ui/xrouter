@@ -996,6 +996,28 @@ case "llm7": {
 
         return { valid: res && res.ok, error: res && res.ok ? null : "Grok cookie invalid or connection blocked" };
       }
+      case "zai-web": {
+        const token = (connection.apiKey || connection.accessToken || "").trim().replace(/^Bearer\s+/i, "");
+        if (!token) return { valid: false, error: "Missing Z.ai token (from chat.z.ai localStorage)" };
+
+        const res = await fetchWithConnectionProxy("https://chat.z.ai/api/v1/users/user", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+          },
+          signal: AbortSignal.timeout(10000),
+        }, effectiveProxy).catch(() => null);
+
+        if (res && res.ok) {
+          return { valid: true, error: null };
+        }
+        if (res && (res.status === 401 || res.status === 403)) {
+          return { valid: false, error: "Token chat.z.ai tidak valid atau kedaluwarsa. Copy ulang token dari localStorage chat.z.ai." };
+        }
+        return { valid: false, error: res ? `Z.ai test failed (HTTP ${res.status})` : "Connection to chat.z.ai failed or timed out" };
+      }
       default:
         return { valid: false, error: "Provider test not supported" };
     }
