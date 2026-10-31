@@ -45,15 +45,6 @@ export async function GET(request, { params }) {
     connection.providerSpecificData?.zaiBusinessToken ||
     "";
 
-  if (!zcodeJwtToken) {
-    return new Response(
-      `<!DOCTYPE html><html><body style="background:#0b0f17;color:#fff;font-family:sans-serif;padding:40px;text-align:center;"><h2>ZCode Token Missing</h2><p>Connection has no stored ZCode session token. Please re-authenticate via OAuth or add ZCode token.</p></body></html>`,
-      { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } },
-    );
-  }
-
-  const jsSnippet = `javascript:(function(){localStorage.setItem('zcodejwttoken','${zcodeJwtToken}');localStorage.setItem('oauth:zai:access_token','${accessToken}');localStorage.setItem('oauth:active_provider','zai');location.href='https://zcode.z.ai/en/rewards?embedded=app&theme=zai-dark';})();`;
-
   const consoleSnippet = `localStorage.setItem('zcodejwttoken', '${zcodeJwtToken}');\nlocalStorage.setItem('oauth:zai:access_token', '${accessToken}');\nlocalStorage.setItem('oauth:active_provider', 'zai');\nlocation.reload();`;
 
   const html = `<!DOCTYPE html>
@@ -73,11 +64,11 @@ export async function GET(request, { params }) {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 24px 16px;
+      padding: 20px 16px;
     }
     .card {
       width: 100%;
-      max-width: 520px;
+      max-width: 500px;
       background: #151D2C;
       border: 1px solid #233045;
       border-radius: 16px;
@@ -85,10 +76,7 @@ export async function GET(request, { params }) {
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
     }
     .header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 20px;
+      margin-bottom: 18px;
     }
     .badge {
       display: inline-block;
@@ -108,17 +96,17 @@ export async function GET(request, { params }) {
       color: #F8FAFC;
     }
     .account {
-      font-size: 13px;
+      font-size: 12px;
       color: #94A3B8;
       margin-top: 2px;
       font-family: monospace;
     }
-    .desc {
-      font-size: 13px;
-      color: #94A3B8;
+    .alert-box {
+      font-size: 12px;
+      color: #CBD5E1;
       line-height: 1.5;
-      margin-bottom: 20px;
-      background: rgba(0,0,0,0.2);
+      margin-bottom: 18px;
+      background: rgba(59, 130, 246, 0.08);
       border-left: 3px solid #3B82F6;
       padding: 10px 12px;
       border-radius: 4px;
@@ -126,36 +114,45 @@ export async function GET(request, { params }) {
     .step-box {
       background: #0F1622;
       border: 1px solid #233045;
-      border-radius: 10px;
+      border-radius: 12px;
       padding: 14px;
       margin-bottom: 14px;
     }
-    .step-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #CBD5E1;
-      margin-bottom: 6px;
+    .step-header {
       display: flex;
       align-items: center;
       gap: 8px;
+      margin-bottom: 8px;
     }
     .step-num {
-      width: 20px;
-      height: 20px;
+      width: 22px;
+      height: 22px;
       border-radius: 50%;
-      background: #3B82F6;
+      background: #2563EB;
       color: #FFF;
-      font-size: 11px;
+      font-size: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: bold;
+      shrink: 0;
+    }
+    .step-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #F1F5F9;
+    }
+    .step-desc {
+      font-size: 12px;
+      color: #94A3B8;
+      line-height: 1.4;
+      margin-bottom: 10px;
     }
     .btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 6px;
       width: 100%;
       padding: 10px 16px;
       border-radius: 8px;
@@ -173,101 +170,102 @@ export async function GET(request, { params }) {
     .btn-primary:hover {
       background: #1D4ED8;
     }
+    .btn-green {
+      background: #059669;
+      color: #FFF;
+    }
+    .btn-green:hover {
+      background: #047857;
+    }
     .btn-secondary {
       background: #1E293B;
       color: #E2E8F0;
       border: 1px solid #334155;
-      margin-top: 8px;
     }
     .btn-secondary:hover {
       background: #334155;
     }
-    .code-preview {
-      background: #070A0F;
-      border: 1px solid #1E293B;
-      border-radius: 6px;
-      padding: 8px 10px;
-      font-family: monospace;
+    .divider {
+      text-align: center;
       font-size: 11px;
-      color: #94A3B8;
-      overflow-x: auto;
-      white-space: pre-wrap;
-      word-break: break-all;
-      margin: 8px 0;
-      max-height: 70px;
+      color: #64748B;
+      margin: 16px 0 12px;
+      position: relative;
     }
+    .divider::before, .divider::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      width: 38%;
+      height: 1px;
+      background: #233045;
+    }
+    .divider::before { left: 0; }
+    .divider::after { right: 0; }
     .toast {
       font-size: 11px;
       color: #10B981;
       text-align: center;
       margin-top: 6px;
-      height: 16px;
+      min-height: 16px;
     }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="header">
-      <div>
-        <span class="badge">ZCode Web Launcher</span>
-        <h1>Klaim Voucher ZCode Langsung di Web</h1>
-        <div class="account">${email}</div>
-      </div>
+      <span class="badge">ZCode Web Claim</span>
+      <h1>Klaim Voucher ZCode di Browser</h1>
+      <div class="account">${email}</div>
     </div>
 
-    <div class="desc">
-      Aplikasi desktop ZCode dibangun di atas web Next.js. Kamu bisa membuka halaman reward dan klaim voucher 500M langsung di browser tanpa perlu install aplikasi Electron.
+    <div class="alert-box">
+      Halaman Rewards ZCode memerlukan sesi login di browser kamu. Ikuti 2 langkah mudah di bawah untuk membukanya langsung:
     </div>
 
     <!-- Step 1 -->
     <div class="step-box">
-      <div class="step-title">
+      <div class="step-header">
         <span class="step-num">1</span>
-        <span>Buka Halaman Rewards ZCode</span>
+        <span class="step-title">Login ke ZCode (Satu Kali)</span>
       </div>
-      <p style="font-size:12px;color:#94A3B8;margin-bottom:10px;">
-        Klik tombol di bawah untuk membuka tab resmi ZCode Rewards:
+      <p class="step-desc">
+        Buka halaman login ZCode di bawah, lalu klik tombol <b>"Continue with Z.ai"</b> menggunakan akun yang sama:
       </p>
-      <a href="https://zcode.z.ai/en/rewards?embedded=app&theme=zai-dark" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
-        Buka ZCode Rewards Web
+      <a href="https://zcode.z.ai/en/login" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+        Buka Login ZCode Web
       </a>
     </div>
 
     <!-- Step 2 -->
     <div class="step-box">
-      <div class="step-title">
+      <div class="step-header">
         <span class="step-num">2</span>
-        <span>Auto-Login Session Akun Kamu</span>
+        <span class="step-title">Buka Halaman Rewards & Voucher</span>
       </div>
-      <p style="font-size:12px;color:#94A3B8;margin-bottom:8px;">
-        Saat halaman ZCode di atas sudah terbuka di browser kamu, jalankan script auto-login ini sekali agar akun kamu langsung terotentikasi:
+      <p class="step-desc">
+        Setelah login di Langkah 1 selesai, buka halaman Rewards. Popup tiket 500M / reward task akan langsung muncul dan siap diklaim:
       </p>
-      <button type="button" class="btn btn-secondary" onclick="copyJsSnippet()">
-        Salin Script Auto-Login (Bookmarklet)
-      </button>
+      <a href="https://zcode.z.ai/en/rewards?embedded=app&theme=zai-dark" target="_blank" rel="noopener noreferrer" class="btn btn-green">
+        Buka Halaman Rewards & Voucher 500M
+      </a>
+    </div>
+
+    <div class="divider">PENGGUNA PC / LAPTOP</div>
+
+    <div style="background:#0F1622;border:1px solid #233045;border-radius:10px;padding:12px;">
+      <p style="font-size:11px;color:#94A3B8;margin-bottom:8px;">
+        Jika di PC/Laptop, kamu bisa langsung bypass login dengan paste script token di Console (F12):
+      </p>
       <button type="button" class="btn btn-secondary" onclick="copyConsoleSnippet()">
         Salin Script Console (F12)
       </button>
-      <div class="code-preview" id="snippetPreview">${sanitizeHtml(consoleSnippet)}</div>
       <div class="toast" id="toastMsg"></div>
-    </div>
-
-    <div style="font-size:11px;color:#64748B;text-align:center;line-height:1.4;">
-      Setelah login di tab ZCode, seluruh voucher & reward 500M akan langsung tampil dan bisa diklik Got It / Claim. Saldo otomatis masuk ke akun kamu.
     </div>
   </div>
 
   <script>
-    const jsSnippet = ${JSON.stringify(jsSnippet)};
     const consoleSnippet = ${JSON.stringify(consoleSnippet)};
-
-    function copyJsSnippet() {
-      navigator.clipboard.writeText(jsSnippet).then(() => {
-        showToast("Script Bookmarklet disalin! Paste di address bar tab ZCode.");
-      }).catch(() => {
-        fallbackCopy(jsSnippet);
-      });
-    }
 
     function copyConsoleSnippet() {
       navigator.clipboard.writeText(consoleSnippet).then(() => {
