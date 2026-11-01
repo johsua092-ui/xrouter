@@ -11,6 +11,7 @@ import Select from "@/shared/components/Select";
 
 export default function EditConnectionModal({ isOpen, connection, proxyPools, onSave, onClose }) {
   const NONE_PROXY_POOL_VALUE = "__none__";
+  const provider = connection?.provider || "";
   const [formData, setFormData] = useState({
     name: "",
     priority: 1,

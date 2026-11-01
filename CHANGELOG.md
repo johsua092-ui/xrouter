@@ -1,6 +1,7 @@
 # v0.0.5 (2026-10-31)
 
-- **Fix Client-Side Error on Quota & ZCode Provider Pages**:
+- **Fix ReferenceError: provider is not defined in EditConnectionModal**:
+  - Bound `const provider = connection?.provider || ""` inside `EditConnectionModal.js` to prevent React client-side exception when mounting the provider settings page.
   - Added `zcode` / `zc` provider parser case in `ProviderLimits/utils.js` so quotas render cleanly without null property crash.
   - Added safety fallback for missing `quota.remaining` percentage calculation in `QuotaTable.js`.
   - Added `zcode` icon alias to `providerIcon.js` and fallback text in `ProviderIcon.js`.
