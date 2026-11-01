@@ -1,6 +1,7 @@
 # v0.0.5 (2026-10-31)
 
-- **Port Seren's Native Gemini Web Reverse-Engineering (gemini-web2api-go standard)**:
+- **Tunnel Dynamic Port Resolution (PR #5354 Port)**:
+  - Fixed Cloudflare and Tailscale Funnel tunnels to target `getAppPort()` instead of hardcoded 20128 so funnels work dynamically under custom ports and dev servers.
   - Switched from fragile BardFrontendService to Seren's battle-tested `gemini-web.js` with `batchexecute?rpcids=otAQ7b` payload structure.
   - Added `webCookieToolBridge.js` for native OpenAI tool calling support on browser sessions.
   - Added SAPISID authentication hashing (`SAPISIDHASH`) and inner slot payload formatting with full Gemini 4 Argon support (hex `95a4c0abcba24364`, mode 8).

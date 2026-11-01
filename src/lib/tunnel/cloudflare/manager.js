@@ -4,6 +4,7 @@ import { clearPid } from "./pid.js";
 import { waitForHealth, probeUrlAlive } from "./healthCheck.js";
 import { WORKER_URL } from "./config.js";
 import { getSettings, updateSettings } from "@/lib/localDb";
+import { getAppPort } from "@/shared/constants/config";
 
 const svc = {
   cancelToken: { cancelled: false },
@@ -44,7 +45,7 @@ function throwIfCancelled(token) {
   if (token.cancelled) throw new Error("tunnel cancelled");
 }
 
-export async function enableTunnel(localPort = 20128) {
+export async function enableTunnel(localPort = getAppPort()) {
   // Serialize concurrent calls: if an enable is already in-flight, wait for it
   if (svc.enablePromise) {
     console.log("[Tunnel] enable already in progress, waiting...");
