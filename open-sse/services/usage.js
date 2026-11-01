@@ -22,6 +22,7 @@ import { getZedUsage } from "./usage/zed.js";
 import { getXiaomiMimoUsage } from "./usage/xiaomi-mimo.js";
 import { getCursorUsage } from "./usage/cursor.js";
 import { resolveQoderCredentials } from "./qoderModels.js";
+import { getZcodeUsage } from "./usage/zcode.js";
 import { getGlmUsage, getGlmResetCards, redeemGlmResetCard, getGlmClaimablePlans, claimGlmPlan, getGlmBalance } from "./usage/glm.js";
 import { getCommandCodeUsage } from "./usage/commandcode.js";
 import {
@@ -49,8 +50,22 @@ const USAGE_HANDLERS = {
   iflow: (c) => getIflowUsage(c.accessToken),
   ollama: (c) => getOllamaUsage(c.apiKey, c.providerSpecificData, c.proxyOptions),
   // OAuth connections store the coding-plan key on accessToken (no apiKey)
-  glm: (c) => getGlmUsage(c.apiKey || c.accessToken, c.provider, c.proxyOptions, c.providerSpecificData),
-  "glm-cn": (c) => getGlmUsage(c.apiKey || c.accessToken, c.provider, c.proxyOptions, c.providerSpecificData),
+  glm: async (c) => {
+    if (c.providerSpecificData?.zcodeJwtToken) {
+      const zc = await getZcodeUsage({ id: c.connectionId, providerSpecificData: c.providerSpecificData }, c.proxyOptions);
+      if (zc && zc.quotas && Object.keys(zc.quotas).length > 0) return zc;
+    }
+    return getGlmUsage(c.apiKey || c.accessToken, c.provider, c.proxyOptions, c.providerSpecificData);
+  },
+  "glm-cn": async (c) => {
+    if (c.providerSpecificData?.zcodeJwtToken) {
+      const zc = await getZcodeUsage({ id: c.connectionId, providerSpecificData: c.providerSpecificData }, c.proxyOptions);
+      if (zc && zc.quotas && Object.keys(zc.quotas).length > 0) return zc;
+    }
+    return getGlmUsage(c.apiKey || c.accessToken, c.provider, c.proxyOptions, c.providerSpecificData);
+  },
+  // ZCode Start Plan: billing/balance via the zcode JWT stored on the connection.
+  zcode: (c) => getZcodeUsage({ id: c.connectionId, providerSpecificData: c.providerSpecificData }, c.proxyOptions),
   minimax: (c) => getMiniMaxUsage(c.apiKey, c.provider, c.proxyOptions),
   "minimax-cn": (c) => getMiniMaxUsage(c.apiKey, c.provider, c.proxyOptions),
   // MiniMax Code (mcode) credits lane — signed account API + plan windows
@@ -90,6 +105,7 @@ export async function getUsageForProvider(connection, proxyOptions = null, optio
   if (!handler) return { message: `Usage API not implemented for ${provider}` };
   return await handler({
     provider,
+    connectionId: connection.id,
     accessToken,
     apiKey,
     providerSpecificData,

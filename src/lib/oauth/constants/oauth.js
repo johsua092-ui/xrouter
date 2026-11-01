@@ -131,6 +131,12 @@ export const GROK_CLI_CONFIG = { ...PROVIDER_OAUTH["grok-cli"] };
 // (Meta rejects refresh_token grants; the minted Model API key never expires).
 export const MUSE_CONFIG = { ...PROVIDER_OAUTH["muse"] };
 
+export const ZCODE_CONFIG = {
+  ...PROVIDER_OAUTH["zcode"],
+  businessLoginUrl: "https://api.z.ai/api/auth/z/login",
+  clientVersion: "3.17.1",
+};
+
 // Trae (ByteDance marscode) OAuth - authorization_code flow with local callback.
 //   1) POST GetLoginGuidance {loginTraceID} → {Result.LoginHost}
 //   2) Browser opens ${loginHost}/authorization?client_id=...&login_trace_id=...&auth_callback_url=${cb}

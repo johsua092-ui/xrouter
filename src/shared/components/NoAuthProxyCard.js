@@ -5,6 +5,7 @@ import PropTypes from "prop-types";
 import Card from "./Card";
 import Select from "./Select";
 import Badge from "./Badge";
+import Toggle from "./Toggle";
 
 const NONE_PROXY_POOL_VALUE = "__none__";
 const STRATEGIES = [
@@ -17,25 +18,41 @@ export default function NoAuthProxyCard({ providerId }) {
   const [proxyPools, setProxyPools] = useState([]);
   const [proxyPoolId, setProxyPoolId] = useState(NONE_PROXY_POOL_VALUE);
   const [rotateStrategy, setRotateStrategy] = useState("none");
+  const [opencodeCliInstalled, setOpencodeCliInstalled] = useState(false);
+  const [useServiceDaemon, setUseServiceDaemon] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
+    const fetchPromises = [
       fetch("/api/proxy-pools?isActive=true", { cache: "no-store" }).then((r) => r.ok ? r.json() : { proxyPools: [] }),
       fetch("/api/settings", { cache: "no-store" }).then((r) => r.ok ? r.json() : {}),
-    ]).then(([poolData, settingsData]) => {
+    ];
+
+    if (providerId === "opencode") {
+      fetchPromises.push(
+        fetch("/api/cli-tools/opencode-settings", { cache: "no-store" })
+          .then((r) => r.ok ? r.json() : { installed: false })
+          .catch(() => ({ installed: false }))
+      );
+    }
+
+    Promise.all(fetchPromises).then(([poolData, settingsData, opencodeData]) => {
       if (cancelled) return;
       setProxyPools(poolData.proxyPools || []);
       const override = (settingsData.providerStrategies || {})[providerId] || {};
       setProxyPoolId(override.proxyPoolId || NONE_PROXY_POOL_VALUE);
       setRotateStrategy(override.rotateStrategy || "none");
+      if (providerId === "opencode") {
+        setOpencodeCliInstalled(opencodeData?.installed === true);
+        setUseServiceDaemon(override.useServiceDaemon !== false);
+      }
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [providerId]);
 
-  const save = useCallback(async (poolId, strategy) => {
+  const save = useCallback(async (poolId, strategy, nextUseServiceDaemon = useServiceDaemon) => {
     setSaving(true);
     try {
       const res = await fetch("/api/settings", { cache: "no-store" });
@@ -46,6 +63,9 @@ export default function NoAuthProxyCard({ providerId }) {
       else override.proxyPoolId = poolId;
       if (strategy === "none") delete override.rotateStrategy;
       else override.rotateStrategy = strategy;
+      if (providerId === "opencode") {
+        override.useServiceDaemon = nextUseServiceDaemon;
+      }
       const updated = { ...current };
       if (Object.keys(override).length === 0) delete updated[providerId];
       else updated[providerId] = override;
@@ -61,16 +81,21 @@ export default function NoAuthProxyCard({ providerId }) {
     } finally {
       setSaving(false);
     }
-  }, [providerId]);
+  }, [providerId, useServiceDaemon]);
 
   const handlePoolChange = (newPoolId) => {
     setProxyPoolId(newPoolId);
-    save(newPoolId, rotateStrategy);
+    save(newPoolId, rotateStrategy, useServiceDaemon);
   };
 
   const handleStrategyChange = (newStrategy) => {
     setRotateStrategy(newStrategy);
-    save(proxyPoolId, newStrategy);
+    save(proxyPoolId, newStrategy, useServiceDaemon);
+  };
+
+  const handleToggleServiceDaemon = (checked) => {
+    setUseServiceDaemon(checked);
+    save(proxyPoolId, rotateStrategy, checked);
   };
 
   const canRotate = proxyPools.length >= 2;
@@ -79,12 +104,12 @@ export default function NoAuthProxyCard({ providerId }) {
   return (
     <Card>
       <div className="flex items-center gap-3 mb-4">
-        <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-success-bg text-success">
+        <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-green-500/10 text-green-500">
           <span className="material-symbols-outlined text-[20px]">lock_open</span>
         </div>
         <div className="flex-1">
           <p className="text-sm font-medium">No authentication required</p>
-          <p className="text-xs text-text-muted">Ready to use as-is, or route it through a proxy pool to bypass IP-based limits.</p>
+          <p className="text-xs text-text-muted">This provider is ready to use. Optionally route requests through a proxy pool to bypass IP-based limits.</p>
         </div>
         {savedFlash && <Badge variant="success" size="sm">Saved</Badge>}
       </div>
@@ -107,7 +132,7 @@ export default function NoAuthProxyCard({ providerId }) {
           value={rotateStrategy}
           onChange={(e) => handleStrategyChange(e.target.value)}
           disabled={saving}
-          className="py-2 px-3 text-sm text-text-main bg-surface dark:bg-surface-2 border border-border rounded-md focus:ring-1 focus:ring-primary/30 focus:border-primary/50 focus:outline-none transition-all disabled:opacity-50"
+          className="py-2 px-3 text-sm text-text-main bg-white dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-md focus:ring-1 focus:ring-primary/30 focus:border-primary/50 focus:outline-none transition-all disabled:opacity-50"
         >
           {STRATEGIES.map((s) => (
             <option key={s.value} value={s.value} disabled={s.value !== "none" && !canRotate}>
@@ -125,6 +150,27 @@ export default function NoAuthProxyCard({ providerId }) {
               : `Uses the selected pool above. Set to Round-robin or Random to rotate across all active pools.`}
         </p>
       </div>
+
+      {providerId === "opencode" && opencodeCliInstalled && (
+        <div className="flex items-center justify-between p-3.5 rounded-lg border border-border bg-black/[0.02] dark:bg-white/[0.02] mt-4">
+          <div className="flex flex-col gap-0.5 pr-3">
+            <span className="text-sm font-medium text-text-main flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[18px]">terminal</span>
+              Use Local Service Daemon
+            </span>
+            <span className="text-xs text-text-muted">
+              {useServiceDaemon
+                ? "Active: routing via local OpenCode daemon and native MCP relay."
+                : "Active: routing via direct Cloudflare HTTP wire."}
+            </span>
+          </div>
+          <Toggle
+            checked={useServiceDaemon}
+            onChange={(checked) => handleToggleServiceDaemon(checked)}
+            disabled={saving}
+          />
+        </div>
+      )}
     </Card>
   );
 }

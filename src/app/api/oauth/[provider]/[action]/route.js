@@ -285,6 +285,7 @@ export async function GET(request, { params }) {
         "grok-cli",
         "muse",
         "glm",
+        "zcode",
       ];
       let deviceData;
       if (noPkceDeviceProviders.includes(provider)) {

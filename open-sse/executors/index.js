@@ -28,6 +28,7 @@ import ZedExecutor from "./zed.js";
 import WindsurfExecutor from "./windsurf.js";
 import { DefaultExecutor } from "./default.js";
 import { DevinCliExecutor } from "./devin-cli.js";
+import { ZCodeExecutor } from "./zcode.js";
 import { MinimaxCodeExecutor } from "./minimax-code.js";
 import { KiloGatewayExecutor } from "./kilo-gateway.js";
 import { OpenSatanExecutor } from "./opensatan.js";
@@ -83,6 +84,7 @@ const executors = {
   zed: new ZedExecutor(),
   windsurf: new WindsurfExecutor(),
   "devin-cli": new DevinCliExecutor(),
+  zcode: new ZCodeExecutor(),
   opensatan: new OpenSatanExecutor(),
   satan: new OpenSatanExecutor(),
   adcode: new AdcodeExecutor(),
@@ -130,6 +132,7 @@ export { default as TraeExecutor } from "./trae.js";
 export { default as ZedExecutor } from "./zed.js";
 export { default as WindsurfExecutor } from "./windsurf.js";
 export { DevinCliExecutor } from "./devin-cli.js";
+export { ZCodeExecutor } from "./zcode.js";
 export { OpenSatanExecutor } from "./opensatan.js";
 export { AdcodeExecutor } from "./adcode.js";
 export { PteroExecutor } from "./ptero.js";

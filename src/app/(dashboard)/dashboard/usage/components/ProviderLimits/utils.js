@@ -299,6 +299,15 @@ export function calculatePercentage(used, total) {
  * @param {Object} quota - Normalized quota object
  * @returns {number} Remaining percentage (0-100)
  */
+function roundRemainingPercentage(value) {
+  const clamped = Math.max(0, Math.min(100, Number(value) || 0));
+  const rounded = Math.round(clamped);
+  if (rounded === 100 && clamped < 100 && clamped >= 99) {
+    return Math.round(clamped * 10) / 10;
+  }
+  return rounded;
+}
+
 export function getRemainingPercentage(quota) {
   if (quota?.remaining !== undefined) {
     return Math.max(0, Math.round(quota.remaining));
@@ -368,6 +377,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
             });
           });
         }
@@ -400,6 +412,9 @@ export function parseQuotaData(provider, data) {
                 used: quota.used || 0,
                 total: quota.total || 0,
                 resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
                 remainingPercentage: quota.remainingPercentage,
               });
             });
@@ -432,6 +447,9 @@ export function parseQuotaData(provider, data) {
                 used: quota.used || 0,
                 total: quota.total || 0,
                 resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
                 remainingPercentage: quota.remainingPercentage,
               });
             });
@@ -446,6 +464,9 @@ export function parseQuotaData(provider, data) {
                 used: quota.used || 0,
                 total: quota.total || 0,
                 resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
                 remainingPercentage: quota.remainingPercentage,
               });
             });
@@ -477,6 +498,9 @@ export function parseQuotaData(provider, data) {
                 used: quota.used || 0,
                 total: quota.total || 0,
                 resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
                 remainingPercentage: quota.remainingPercentage,
               });
             });
@@ -490,6 +514,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               remainingPercentage: quota.remainingPercentage,
             });
           });
@@ -507,6 +534,9 @@ export function parseQuotaData(provider, data) {
                 used: quota.used || 0,
                 total: quota.total || 0,
                 resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
                 remainingPercentage: quota.remainingPercentage,
               });
             });
@@ -532,6 +562,9 @@ export function parseQuotaData(provider, data) {
               total: quota.total || 0,
               remaining: quota.remaining,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
             });
           });
         }
@@ -545,6 +578,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
             });
           });
         }
@@ -582,6 +618,9 @@ export function parseQuotaData(provider, data) {
               total: quota.total || 0,
               unit: quota.unit,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               // Qoder reports open-ended plans as a 9999 sentinel; the service
               // turns that into neverExpires so the row can read
               // "Never expires" instead of "N/A" or a year-9999 date.
@@ -612,6 +651,9 @@ export function parseQuotaData(provider, data) {
               remaining: quota.remaining !== undefined ? quota.remaining : Math.max(0, (quota.total || 100) - (quota.used || 0)),
               remainingPercentage: quota.remainingPercentage !== undefined ? quota.remainingPercentage : calculatePercentage(quota.used, quota.total),
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
             });
           });
         }
@@ -629,6 +671,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               remainingPercentage: quota.remainingPercentage,
             });
           });
@@ -648,6 +693,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               recurring: quota.recurring !== false,
             });
           });
@@ -665,6 +713,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               remainingPercentage: quota.remainingPercentage,
             });
           });
@@ -680,6 +731,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               remainingPercentage: quota.remainingPercentage,
             });
           });
@@ -695,6 +749,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               remainingPercentage: quota.remainingPercentage,
               isCreditBalance: quota.isCreditBalance ?? true,
               currency: quota.currency || (name.includes("(") ? name.slice(name.indexOf("(") + 1, name.indexOf(")")) : "USD"),
@@ -713,6 +770,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               remainingPercentage: quota.remainingPercentage,
             });
           });
@@ -729,6 +789,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
             });
           });
         }
@@ -745,6 +808,9 @@ export function parseQuotaData(provider, data) {
               remaining: quota.remaining,
               remainingPercentage: quota.remainingPercentage,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               unlimited: quota.unlimited,
             });
           });
@@ -761,6 +827,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               remainingPercentage: quota.remainingPercentage,
               isCreditBalance: quota.isCreditBalance,
               currency: quota.currency,
@@ -780,6 +849,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               remainingPercentage: quota.remainingPercentage,
               unlimited: quota.unlimited,
             });
@@ -801,6 +873,9 @@ export function parseQuotaData(provider, data) {
               remaining: quota.remaining,
               remainingPercentage: quota.remainingPercentage,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
               message: quota.message,
               isCreditBalance: quota.isCreditBalance,
               currency: quota.currency,
@@ -818,6 +893,9 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
             });
           });
         }

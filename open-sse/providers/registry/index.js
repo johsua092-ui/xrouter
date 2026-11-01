@@ -145,6 +145,7 @@ import p147 from "./minimax-code-global.js";
 import p149 from "./dothoosh.js";
 import p150 from "./opensatan.js";
 import p153 from "./ptero.js";
+import p154 from "./zcode.js";
 
 export default [
   p0,
@@ -294,4 +295,5 @@ export default [
   p149,
   p150,
   p153,
+  p154,
 ];

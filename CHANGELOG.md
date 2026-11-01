@@ -1,5 +1,17 @@
 # v0.0.5 (2026-10-31)
 
+- **ZCode Provider & Start-Plan Balance Resolution (PR #5351 Port)**:
+  - Added native `zcode` provider (`open-sse/providers/registry/zcode.js`, alias `zc`) supporting both coding plans (project tokens via Z.AI org APIs) and start plans (`https://zcode.z.ai/api/v1/zcode-plan/anthropic`).
+  - Added `ZCodeExecutor` (`open-sse/executors/zcode.js`) with client version 3.16.3 fingerprinting, UUIDv7 `x-query-id`, and ZCode 3-block system prompt alignment to avoid HTTP 405 "unusual activity" gates.
+  - Added start plan balance usage resolution (`open-sse/services/usage/zcode.js`), fetching `billing/balance` with stable device identity (`X-Device-Mid`) to detect ZCode Start Plan and Weekend Build 500M token grants.
+  - Linked `glm` provider usage to auto-detect ZCode start-plan balances when a `zcodeJwtToken` exists on the connection.
+  - Added support for absolute expiry formatting (`absoluteReset: true`) in `QuotaTable.js` and `utils.js`.
+  - Added ZCode CLI OAuth device login flow (`src/lib/oauth/providers/zcode.js`).
+- **OpenCode Enhancements & Hardening (PR #5310, #5328, #5338 Port)**:
+  - Gated tool name anti-WAF bypass (`open-sse/utils/opencodeFingerprint.js`): declared tools matching `/terminal/i` are aliased to `run_command` to evade 429 FreeUsageLimitError gates.
+  - Streaming timeout protection (`open-sse/executors/opencode.js`): disabled total timeout (`timeoutMs: 0`) on streaming responses to prevent 120s drops.
+  - OpenCode native MCP service bridge and daemon routing fallback (`open-sse/services/opencodeServiceBridge.js`).
+  - Added additional free-tier models (`gpt-4o-mini-free`, `claude-3-haiku-free`, `llama-3.1-8b-free`, `mixtral-8x7b-free`) to OpenCode registry.
 - **Fix DeepSeek Web (dsw) DSML Tool Calls Leak (`<｜｜DSML｜｜ calls>` dialect)**:
   - DeepSeek V3/V4 web models emit tool calls using a nested block dialect (`<｜｜DSML｜｜ calls>` containing `<｜｜DSML｜｜ invoke name="...">` and `<｜｜DSML｜｜ parameter name="...">`) with double fullwidth pipes (`｜｜`).
   - Previously, `cleanDeepSeekToken` and `filterDsmlStream` only checked for single pipes (`[｜|]`), and non-greedy regex prematurely stopped at parameter closing tags, leaking the outer tags into chat outputs.
