@@ -165,11 +165,15 @@ export function normalizeStartPlanResponse(response) {
 }
 
 export class ZCodeExecutor extends DefaultExecutor {
-  constructor() {
-    super("zcode");
+  constructor(provider = "zcode") {
+    super(provider);
   }
 
   async execute(args) {
+    const hasZcodeAuth = args.credentials?.providerSpecificData?.zcodeJwtToken || args.credentials?.accessToken;
+    if (!hasZcodeAuth) {
+      return super.execute(args);
+    }
     const resolved = await resolveZcodeAuth(args.credentials, { log: args.log });
     if (args.credentials) {
       args.credentials.providerSpecificData = {
@@ -211,14 +215,18 @@ export class ZCodeExecutor extends DefaultExecutor {
 
   buildUrl(model, stream, urlIndex = 0, credentials = null) {
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
+    if (!resolved && credentials?.apiKey) {
+      return super.buildUrl(model, stream, urlIndex, credentials);
+    }
     const base = resolved?.baseUrl || credentials?.providerSpecificData?.zcodeBaseUrl || this.config.baseUrl;
     return `${base.replace(/\/$/, "")}/v1/messages`;
   }
 
   transformRequest(model, body, stream, credentials) {
     const transformed = super.transformRequest(model, body, stream, credentials);
-    const aligned = alignZcodeSystem(transformed);
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
+    if (!resolved) return transformed;
+    const aligned = alignZcodeSystem(transformed);
     if (resolved?.lane === "start") {
       return withStartPlanOptions(aligned, credentials?.providerSpecificData?.userId);
     }
@@ -228,6 +236,7 @@ export class ZCodeExecutor extends DefaultExecutor {
   buildHeaders(credentials, stream = true, url, model, body = null) {
     const headers = super.buildHeaders(credentials, stream, url, model, body);
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
+    if (!resolved) return headers;
     const apiKey = resolved?.apiKey || credentials?.apiKey || credentials?.accessToken;
     if (apiKey) {
       if (resolved?.lane === "start") {

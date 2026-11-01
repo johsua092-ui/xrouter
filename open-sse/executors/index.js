@@ -85,6 +85,8 @@ const executors = {
   windsurf: new WindsurfExecutor(),
   "devin-cli": new DevinCliExecutor(),
   zcode: new ZCodeExecutor(),
+  glm: new ZCodeExecutor("glm"),
+  "glm-cn": new ZCodeExecutor("glm-cn"),
   opensatan: new OpenSatanExecutor(),
   satan: new OpenSatanExecutor(),
   adcode: new AdcodeExecutor(),

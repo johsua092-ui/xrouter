@@ -158,12 +158,45 @@ const OAUTH_TEST_CONFIG = {
     extraHeaders: { "x-api-version": "1.0.0" },
     refreshable: false,
   },
+  "zcode": {
+    customTest: async (connection, effectiveProxy) => {
+      try {
+        const { getZcodeUsage } = await import("open-sse/services/usage/zcode.js");
+        const usage = await getZcodeUsage(connection, effectiveProxy);
+        if (usage && (usage.quotas || usage.plan)) {
+          return { valid: true, error: null, refreshed: false, newTokens: null };
+        }
+        return { valid: false, error: usage?.message || "ZCode test failed", refreshed: false };
+      } catch (err) {
+        return { valid: false, error: err?.message || "ZCode connection test error", refreshed: false };
+      }
+    },
+  },
   "glm": {
-    url: "https://api.z.ai/api/monitor/usage/quota/limit",
-    method: "GET",
-    authHeader: "x-api-key",
-    authPrefix: "",
-    refreshable: false,
+    customTest: async (connection, effectiveProxy) => {
+      try {
+        if (connection.providerSpecificData?.zcodeJwtToken) {
+          const { getZcodeUsage } = await import("open-sse/services/usage/zcode.js");
+          const usage = await getZcodeUsage(connection, effectiveProxy);
+          if (usage && (usage.quotas || usage.plan)) {
+            return { valid: true, error: null, refreshed: false, newTokens: null };
+          }
+        }
+        const token = connection.accessToken || connection.apiKey;
+        const res = await fetch("https://api.z.ai/api/monitor/usage/quota/limit", {
+          headers: { "x-api-key": token },
+        }).catch(() => null);
+        if (res && res.ok) {
+          return { valid: true, error: null, refreshed: false, newTokens: null };
+        }
+        if (connection.providerSpecificData?.zcodeJwtToken) {
+          return { valid: true, error: null, refreshed: false, newTokens: null };
+        }
+        return { valid: false, error: "Z.ai connection check failed", refreshed: false };
+      } catch (err) {
+        return { valid: false, error: err?.message || "GLM test error", refreshed: false };
+      }
+    },
   },
 };
 

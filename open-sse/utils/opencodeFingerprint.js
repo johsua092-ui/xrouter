@@ -28,7 +28,7 @@ const GATED_TOOL_ALIAS = "run_command";
 
 // Verbatim from the OpenCode v2.0.26 CLI. Upstream compares description and
 // parameters, so do not reword or reformat these.
-const FINGERPRINT_TOOL_DEFINITIONS = {
+export const FINGERPRINT_TOOL_DEFINITIONS = {
   read: {
     description: "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
     parameters: {
@@ -61,6 +61,7 @@ const FINGERPRINT_TOOL_DEFINITIONS = {
 // Request body -> names renamed for that request. transformRequest() mutates the
 // same body object that chatCore passed into the executor, so a WeakMap keeps the
 // mapping request-local without putting transport metadata on the wire.
+export const OPENCODE_CANONICAL_TOOL_DEFINITIONS = FINGERPRINT_TOOL_DEFINITIONS;
 const renamedToolNames = new WeakMap();
 
 /** The fingerprint name when `name` is exactly one; "" otherwise. */
