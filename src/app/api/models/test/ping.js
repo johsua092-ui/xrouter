@@ -211,6 +211,12 @@ export async function pingModelByKind(model, kind, baseUrl = `http://127.0.0.1:$
             hasDelta = true;
             if (delta.content) content += delta.content;
             if (delta.reasoning || delta.reasoning_content) reasoning += (delta.reasoning || delta.reasoning_content);
+          } else if (chunk?.content || chunk?.delta) {
+            hasDelta = true;
+            const textParts = Array.isArray(chunk.content)
+              ? chunk.content.map(p => p.text || p.thinking || "").join("")
+              : (chunk.content || chunk.delta?.text || "");
+            if (textParts) content += textParts;
           }
         } catch {}
       }

@@ -36,6 +36,7 @@ export default {
   transport: {
     baseUrl: "https://api.z.ai/api/anthropic/v1/messages",
     format: "claude",
+    forceStream: true,
     urlSuffix: "?beta=true",
     headers: { ...CLAUDE_API_HEADERS },
     auth: {
@@ -59,6 +60,7 @@ export default {
     {
       format: "claude",
       baseUrl: "https://api.z.ai/api/anthropic/v1/messages",
+      forceStream: true,
       urlSuffix: "?beta=true",
       headers: { ...CLAUDE_API_HEADERS },
       auth: { combined: true, header: "x-api-key", scheme: "raw" },
