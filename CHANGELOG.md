@@ -7,6 +7,7 @@
   - Linked `glm` provider usage to auto-detect ZCode start-plan balances when a `zcodeJwtToken` exists on the connection.
   - Added support for absolute expiry formatting (`absoluteReset: true`) in `QuotaTable.js` and `utils.js`.
   - Added ZCode CLI OAuth device login flow (`src/lib/oauth/providers/zcode.js`).
+  - Fixed ZCode device-code poll route: added `zcode` to `noPkceProviders` so `extraData` with `_zcodePollToken` is forwarded properly during device flow polling.
 - **OpenCode Enhancements & Hardening (PR #5310, #5328, #5338 Port)**:
   - Gated tool name anti-WAF bypass (`open-sse/utils/opencodeFingerprint.js`): declared tools matching `/terminal/i` are aliased to `run_command` to evade 429 FreeUsageLimitError gates.
   - Streaming timeout protection (`open-sse/executors/opencode.js`): disabled total timeout (`timeoutMs: 0`) on streaming responses to prevent 120s drops.
