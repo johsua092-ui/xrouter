@@ -60,6 +60,7 @@ export function parseZcodeStartPlanBalance(json) {
     quotas[name] = {
       used: Number.isFinite(used) ? used : 0,
       total: Number.isFinite(total) ? total : 0,
+      remaining: Number.isFinite(total) && total > 0 && Number.isFinite(remaining) ? Math.round((remaining / total) * 100) : 100,
       // Remaining share with decimals so small usage is not rounded up to 100%.
       ...(Number.isFinite(total) && total > 0 && Number.isFinite(remaining)
         ? { percentage: (remaining / total) * 100, percentageIsUsed: false }

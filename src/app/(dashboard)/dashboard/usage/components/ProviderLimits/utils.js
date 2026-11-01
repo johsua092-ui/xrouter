@@ -797,6 +797,8 @@ export function parseQuotaData(provider, data) {
         }
         break;
 
+      case "zcode":
+      case "zc":
       case "glm":
       case "glm-cn":
         if (data.quotas) {

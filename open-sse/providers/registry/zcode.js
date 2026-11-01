@@ -9,6 +9,7 @@ export default {
     textIcon: "ZC",
     website: "https://zcode.z.ai",
     notice: {
+      apiKeyUrl: "https://zcode.z.ai",
       signupUrl: "https://zcode.z.ai",
     },
     deprecated: true,

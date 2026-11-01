@@ -48,7 +48,7 @@ function getColorClasses(remainingPercentage) {
       text: "text-green-600 dark:text-green-400",
       bg: "bg-green-500",
       bgLight: "bg-green-500/10",
-      emoji: "🟢",
+      emoji: "",
     };
   }
 
@@ -57,7 +57,7 @@ function getColorClasses(remainingPercentage) {
       text: "text-yellow-600 dark:text-yellow-400",
       bg: "bg-yellow-500",
       bgLight: "bg-yellow-500/10",
-      emoji: "🟡",
+      emoji: "",
     };
   }
 
@@ -65,7 +65,7 @@ function getColorClasses(remainingPercentage) {
     text: "text-red-600 dark:text-red-400",
     bg: "bg-red-500",
     bgLight: "bg-red-500/10",
-    emoji: "🔴",
+    emoji: "",
   };
 }
 
@@ -166,9 +166,10 @@ export default function QuotaTable({
         {currentPageRows.map((quota) => {
           const isUnlimited = quota.unlimited === true;
           const isCreditBalance = quota.isCreditBalance === true;
+          const remPercent = typeof quota.remaining === "number" ? quota.remaining : (typeof quota.remainingPercentage === "number" ? quota.remainingPercentage : 100);
           const colors = isCreditBalance
-            ? { text: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500", bgLight: "bg-blue-500/10", emoji: "💰" }
-            : getColorClasses(quota.remaining);
+            ? { text: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500", bgLight: "bg-blue-500/10", emoji: "" }
+            : getColorClasses(remPercent);
           // Qoder flags open-ended plans with `neverExpires` (its API reports a
           // year-9999 sentinel). Return "-"/"Never expires" rather than an empty
           // countdown: the render below branches on `countdown !== "-"`, so an
@@ -228,7 +229,7 @@ export default function QuotaTable({
                     </span>
                   </div>
                   <span className={`shrink-0 text-xs font-semibold tabular-nums ${colors.text}`}>
-                    {isUnlimited ? "Unlimited" : `${quota.remaining}%`}
+                    {isUnlimited ? "Unlimited" : `${remPercent}%`}
                   </span>
                 </div>
 
@@ -237,7 +238,7 @@ export default function QuotaTable({
                   <div className={`h-1.5 rounded-full overflow-hidden ${colors.bgLight}`}>
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${colors.bg}`}
-                      style={{ width: `${Math.min(quota.remaining, 100)}%` }}
+                      style={{ width: `${Math.min(remPercent, 100)}%` }}
                     />
                   </div>
                 )}

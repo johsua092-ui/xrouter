@@ -46,7 +46,7 @@ export default function ProviderIcon({
           fontSize: Math.max(10, Math.floor(size * 0.38)),
         }}
       >
-        {fallbackText}
+        {fallbackText || (providerId ? providerId.slice(0, 2).toUpperCase() : "?")}
       </span>
     );
   }

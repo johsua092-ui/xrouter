@@ -1,6 +1,9 @@
 # v0.0.5 (2026-10-31)
 
-- **Gemini Web 3-Column Cookie UI & CC Support**:
+- **Fix Client-Side Error on Quota & ZCode Provider Pages**:
+  - Added `zcode` / `zc` provider parser case in `ProviderLimits/utils.js` so quotas render cleanly without null property crash.
+  - Added safety fallback for missing `quota.remaining` percentage calculation in `QuotaTable.js`.
+  - Added `zcode` icon alias to `providerIcon.js` and fallback text in `ProviderIcon.js`.
   - Added dedicated 3rd input column for `__Secure-1PSIDCC` in `AddApiKeyModal.js` and `EditConnectionModal.js` with auto-split parsing across all three cookies.
   - Added `undici` agent with 64KB `maxHeaderSize` in `testUtils.js` to prevent `UND_ERR_HEADERS_OVERFLOW` on Google Set-Cookie responses.
   - Added native `zcode` provider (`open-sse/providers/registry/zcode.js`, alias `zc`) supporting both coding plans (project tokens via Z.AI org APIs) and start plans (`https://zcode.z.ai/api/v1/zcode-plan/anthropic`).
