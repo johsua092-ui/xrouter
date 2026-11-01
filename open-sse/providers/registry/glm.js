@@ -50,22 +50,6 @@ export default {
       resetCardsUseUrl: "https://api.z.ai/api/biz/customer-package-reset/use",
     },
   },
-  // Multi-endpoint: pick the transport matching client sourceFormat to skip translation.
-  transports: [
-    {
-      format: "openai",
-      baseUrl: "https://api.z.ai/api/coding/paas/v4/chat/completions",
-      auth: { combined: true, header: "Authorization", scheme: "bearer" },
-    },
-    {
-      format: "claude",
-      baseUrl: "https://api.z.ai/api/anthropic/v1/messages",
-      forceStream: true,
-      urlSuffix: "?beta=true",
-      headers: { ...CLAUDE_API_HEADERS },
-      auth: { combined: true, header: "x-api-key", scheme: "raw" },
-    },
-  ],
   models: [
     { id: "glm-5.3", name: "GLM 5.3" },
     { id: "glm-5.3-flash", name: "GLM 5.3 Flash (Vision)" },

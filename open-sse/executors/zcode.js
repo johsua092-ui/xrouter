@@ -3,6 +3,7 @@ import { release } from "node:os";
 import { DefaultExecutor } from "./default.js";
 import { refreshZcodeJwt, resolveZcodeAuth } from "../services/zcodePlan.js";
 import { ZCODE_SYSTEM_PROMPTS } from "../services/zcodePrompt.js";
+import { FORMATS } from "../translator/formats.js";
 
 const ZCODE_APP_VERSION = "3.17.1";
 const ZCODE_THIRD_SYSTEM_BLOCK = "Follow the user's instructions and use the available tools when helpful.";
@@ -185,6 +186,7 @@ export class ZCodeExecutor extends DefaultExecutor {
 
     let result = await super.execute(args);
     result.response = await normalizeStartPlanResponse(result.response);
+    result.responseFormat = FORMATS.CLAUDE;
 
     // The edge occasionally answers a legitimate start-plan request with a
     // transient 405/3012 anti-abuse block. Retry twice with backoff and a fresh
@@ -207,6 +209,7 @@ export class ZCodeExecutor extends DefaultExecutor {
         }
         result = await super.execute(args);
         result.response = await normalizeStartPlanResponse(result.response);
+        result.responseFormat = FORMATS.CLAUDE;
       }
     }
 
