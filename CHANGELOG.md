@@ -16,6 +16,10 @@
   - `fetchSessionParams` now attempts session extraction directly with the user's cookie first, falling back to rotation only if extraction fails.
   - Enhanced `SNlM0e` and `cfb2h` regex to tolerate arbitrary whitespace variations across Google page markup.
   - Diagnostic error reporting: now explicitly identifies Google login redirects, consent gates, and ÜberProxy IP blocks rather than emitting a generic "cookie expired" error.
+- **Restore Antigravity & Gemini CLI Localhost Callback (Decolua Original)**:
+  - Restored Decolua's original `http://localhost:${port}/callback` redirect URI in `OAuthModal.js`.
+  - Fixes Google OAuth Error 400 `redirect_uri_mismatch`: Google Cloud Console only permits `localhost` callback URIs for Desktop Client IDs; public origins like `x.aikernel.qzz.io/callback` are rejected by Google.
+  - Remote browser sessions now correctly follow the copy-paste callback code flow without hitting Google access blocked errors.
 - **Super-Fast Key Bulk Operations & Atomic Deletion**:
   - Replaced sequential per-key fetch loop in `handleBulkApply` with a single atomic `PATCH /api/keys/bulk` request.
   - Added native `DELETE /api/keys/bulk` endpoint with single-transaction SQLite deletion (`DELETE FROM apiKeys WHERE id IN (...)`) for sub-millisecond execution.
