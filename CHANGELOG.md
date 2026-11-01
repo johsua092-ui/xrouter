@@ -1,6 +1,10 @@
 # v0.0.5 (2026-10-31)
 
-- **Fix ReferenceError: provider is not defined in EditConnectionModal**:
+- **Port Seren's Native Gemini Web Reverse-Engineering (gemini-web2api-go standard)**:
+  - Switched from fragile BardFrontendService to Seren's battle-tested `gemini-web.js` with `batchexecute?rpcids=otAQ7b` payload structure.
+  - Added `webCookieToolBridge.js` for native OpenAI tool calling support on browser sessions.
+  - Added SAPISID authentication hashing (`SAPISIDHASH`) and inner slot payload formatting with full Gemini 4 Argon support (hex `95a4c0abcba24364`, mode 8).
+  - No headless browser/Playwright required: runs pure high-speed HTTP wire protocol without consuming RAM or CPU.
   - Bound `const provider = connection?.provider || ""` inside `EditConnectionModal.js` to prevent React client-side exception when mounting the provider settings page.
   - Added `zcode` / `zc` provider parser case in `ProviderLimits/utils.js` so quotas render cleanly without null property crash.
   - Added safety fallback for missing `quota.remaining` percentage calculation in `QuotaTable.js`.
