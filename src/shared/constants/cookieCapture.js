@@ -33,7 +33,7 @@ export const COOKIE_CAPTURE = {
   "gemini-web": {
     label: "Capture from Gemini",
     domains: ["gemini.google.com"],
-    cookies: ["__Secure-1PSID", "__Secure-1PSIDTS"],
+    cookies: ["__Secure-1PSID", "__Secure-1PSIDTS", "__Secure-1PSIDCC"],
   },
   "deepseek-web": {
     label: "Capture from DeepSeek",

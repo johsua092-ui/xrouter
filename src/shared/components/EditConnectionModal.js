@@ -32,36 +32,52 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
   const [saving, setSaving] = useState(false);
 
   // Dual-column states for multi-cookie providers
-  const isGeminiWeb = connection?.provider === "gemini-web";
-  const isGrokWeb = connection?.provider === "grok-web";
+  const isGeminiWeb = provider === "gemini-web";
+  const isGrokWeb = provider === "grok-web";
   const [geminiPsid, setGeminiPsid] = useState("");
   const [geminiPsidts, setGeminiPsidts] = useState("");
+  const [geminiPsidcc, setGeminiPsidcc] = useState("");
   const [grokSso, setGrokSso] = useState("");
   const [grokSsoRw, setGrokSsoRw] = useState("");
 
-  const updateGeminiCookie = (newPsid, newPsidts) => {
+  const updateGeminiCookie = (newPsid, newPsidts, newPsidcc) => {
     let p1 = String(newPsid || "").trim();
     let p2 = String(newPsidts || "").trim();
+    let p3 = String(newPsidcc || "").trim();
 
-    if (p1.includes("__Secure-1PSID=") || p1.includes("__Secure-1PSIDTS=")) {
+    if (p1.includes("__Secure-1PSID=") || p1.includes("__Secure-1PSIDTS=") || p1.includes("__Secure-1PSIDCC=")) {
       const m1 = p1.match(/(?:^|[;\s])__Secure-1PSID=([^;\s]+)/);
       const m2 = p1.match(/(?:^|[;\s])__Secure-1PSIDTS=([^;\s]+)/);
+      const m3 = p1.match(/(?:^|[;\s])__Secure-1PSIDCC=([^;\s]+)/);
       if (m1) p1 = m1[1];
       if (m2 && !p2) p2 = m2[1];
+      if (m3 && !p3) p3 = m3[1];
     }
-    if (p2.includes("__Secure-1PSID=") || p2.includes("__Secure-1PSIDTS=")) {
+    if (p2.includes("__Secure-1PSID=") || p2.includes("__Secure-1PSIDTS=") || p2.includes("__Secure-1PSIDCC=")) {
       const m2 = p2.match(/(?:^|[;\s])__Secure-1PSIDTS=([^;\s]+)/);
       const m1 = p2.match(/(?:^|[;\s])__Secure-1PSID=([^;\s]+)/);
+      const m3 = p2.match(/(?:^|[;\s])__Secure-1PSIDCC=([^;\s]+)/);
       if (m2) p2 = m2[1];
       if (m1 && !p1) p1 = m1[1];
+      if (m3 && !p3) p3 = m3[1];
+    }
+    if (p3.includes("__Secure-1PSID=") || p3.includes("__Secure-1PSIDTS=") || p3.includes("__Secure-1PSIDCC=")) {
+      const m3 = p3.match(/(?:^|[;\s])__Secure-1PSIDCC=([^;\s]+)/);
+      const m1 = p3.match(/(?:^|[;\s])__Secure-1PSID=([^;\s]+)/);
+      const m2 = p3.match(/(?:^|[;\s])__Secure-1PSIDTS=([^;\s]+)/);
+      if (m3) p3 = m3[1];
+      if (m1 && !p1) p1 = m1[1];
+      if (m2 && !p2) p2 = m2[1];
     }
 
     setGeminiPsid(p1);
     setGeminiPsidts(p2);
+    setGeminiPsidcc(p3);
 
     const parts = [];
     if (p1) parts.push(p1.startsWith("__Secure-1PSID=") ? p1 : `__Secure-1PSID=${p1}`);
     if (p2) parts.push(p2.startsWith("__Secure-1PSIDTS=") ? p2 : `__Secure-1PSIDTS=${p2}`);
+    if (p3) parts.push(p3.startsWith("__Secure-1PSIDCC=") ? p3 : `__Secure-1PSIDCC=${p3}`);
     setFormData((prev) => ({ ...prev, apiKey: parts.join("; ") }));
   };
 
@@ -106,8 +122,10 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
       if (connection.provider === "gemini-web") {
         const m1 = existingKey.match(/(?:^|[;\s])__Secure-1PSID=([^;\s]+)/);
         const m2 = existingKey.match(/(?:^|[;\s])__Secure-1PSIDTS=([^;\s]+)/);
+        const m3 = existingKey.match(/(?:^|[;\s])__Secure-1PSIDCC=([^;\s]+)/);
         setGeminiPsid(m1 ? m1[1] : "");
         setGeminiPsidts(m2 ? m2[1] : "");
+        setGeminiPsidcc(m3 ? m3[1] : "");
       } else if (connection.provider === "grok-web") {
         const m1 = existingKey.match(/(?:^|[;\s])sso=([^;\s]+)/);
         const m2 = existingKey.match(/(?:^|[;\s])sso-rw=([^;\s]+)/);
@@ -331,12 +349,26 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
                   <span>2. __Secure-1PSIDTS (Timestamp Token) <span className="text-primary">*</span></span>
                   <span className="text-[10px] text-text-muted">Mulai dengan sidts-...</span>
                 </label>
+                <Input
+                  type="text"
+                  value={geminiPsidts}
+                  onChange={(e) => updateGeminiCookie(geminiPsid, e.target.value, geminiPsidcc)}
+                  placeholder="sidts-... (Paste nilai __Secure-1PSIDTS saja)"
+                  className="w-full font-mono text-xs"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-text-muted font-mono flex items-center justify-between">
+                  <span>3. __Secure-1PSIDCC (Consistency Token) <span className="text-text-muted">(Optional)</span></span>
+                  <span className="text-[10px] text-text-muted">Mulai dengan AKEy...</span>
+                </label>
                 <div className="flex gap-2">
                   <Input
                     type="text"
-                    value={geminiPsidts}
-                    onChange={(e) => updateGeminiCookie(geminiPsid, e.target.value)}
-                    placeholder="sidts-... (Paste nilai __Secure-1PSIDTS saja)"
+                    value={geminiPsidcc}
+                    onChange={(e) => updateGeminiCookie(geminiPsid, geminiPsidts, e.target.value)}
+                    placeholder="AKEy... (Paste nilai __Secure-1PSIDCC saja)"
                     className="flex-1 font-mono text-xs"
                   />
                   <Button onClick={handleValidate} disabled={(!geminiPsid && !formData.apiKey) || validating || saving} variant="secondary">

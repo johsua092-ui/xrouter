@@ -960,8 +960,15 @@ case "llm7": {
           cookie = `__Secure-1PSID=${cookie}`;
         }
 
+        let dispatcher = undefined;
+        try {
+          const { Agent } = await import("undici");
+          dispatcher = new Agent({ maxHeaderSize: 64 * 1024 });
+        } catch {}
+
         const res = await fetchWithConnectionProxy("https://gemini.google.com/app", {
           method: "GET",
+          dispatcher,
           headers: {
             Cookie: cookie,
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",

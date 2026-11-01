@@ -1,6 +1,8 @@
 # v0.0.5 (2026-10-31)
 
-- **ZCode Provider & Start-Plan Balance Resolution (PR #5351 Port)**:
+- **Gemini Web 3-Column Cookie UI & CC Support**:
+  - Added dedicated 3rd input column for `__Secure-1PSIDCC` in `AddApiKeyModal.js` and `EditConnectionModal.js` with auto-split parsing across all three cookies.
+  - Added `undici` agent with 64KB `maxHeaderSize` in `testUtils.js` to prevent `UND_ERR_HEADERS_OVERFLOW` on Google Set-Cookie responses.
   - Added native `zcode` provider (`open-sse/providers/registry/zcode.js`, alias `zc`) supporting both coding plans (project tokens via Z.AI org APIs) and start plans (`https://zcode.z.ai/api/v1/zcode-plan/anthropic`).
   - Added `ZCodeExecutor` (`open-sse/executors/zcode.js`) with client version 3.16.3 fingerprinting, UUIDv7 `x-query-id`, and ZCode 3-block system prompt alignment to avoid HTTP 405 "unusual activity" gates.
   - Added start plan balance usage resolution (`open-sse/services/usage/zcode.js`), fetching `billing/balance` with stable device identity (`X-Device-Mid`) to detect ZCode Start Plan and Weekend Build 500M token grants.
