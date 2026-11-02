@@ -174,55 +174,208 @@ export function normalizeStartPlanResponse(response) {
     .catch(() => response);
 }
 
+class KeyedMutex {
+  constructor() {
+    this.chains = new Map();
+  }
+
+  async acquire(key, signal) {
+    if (signal?.aborted) {
+      throw new Error("Request aborted before acquiring lock");
+    }
+
+    let releaseCurrent;
+    const currentPromise = new Promise((resolve) => {
+      releaseCurrent = resolve;
+    });
+
+    const previousPromise = this.chains.get(key) || Promise.resolve();
+    this.chains.set(key, previousPromise.then(() => currentPromise, () => currentPromise));
+
+    let abortListener;
+    try {
+      if (signal) {
+        await Promise.race([
+          previousPromise,
+          new Promise((_, reject) => {
+            abortListener = () => reject(new Error("Request aborted in queue"));
+            signal.addEventListener("abort", abortListener, { once: true });
+          }),
+        ]);
+      } else {
+        await previousPromise;
+      }
+    } catch (err) {
+      releaseCurrent();
+      if (this.chains.get(key) === currentPromise) {
+        this.chains.delete(key);
+      }
+      throw err;
+    } finally {
+      if (signal && abortListener) {
+        signal.removeEventListener("abort", abortListener);
+      }
+    }
+
+    let released = false;
+    return () => {
+      if (!released) {
+        released = true;
+        releaseCurrent();
+        if (this.chains.get(key) === currentPromise) {
+          this.chains.delete(key);
+        }
+      }
+    };
+  }
+}
+
+const zcodeMutex = new KeyedMutex();
+
+function hookStreamRelease(response, release, abortCtrl) {
+  const body = response?.body;
+  if (!body || typeof body.getReader !== "function") {
+    release();
+    return response;
+  }
+
+  const reader = body.getReader();
+  let doneOrCancelled = false;
+
+  const doRelease = () => {
+    if (!doneOrCancelled) {
+      doneOrCancelled = true;
+      release();
+    }
+  };
+
+  const hookedBody = new ReadableStream({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          doRelease();
+          controller.close();
+          return;
+        }
+        controller.enqueue(value);
+      } catch (err) {
+        doRelease();
+        controller.error(err);
+      }
+    },
+    async cancel(reason) {
+      try {
+        abortCtrl?.abort(reason || "client_cancelled");
+        await reader.cancel(reason);
+      } catch {
+        // ignore
+      } finally {
+        doRelease();
+      }
+    }
+  });
+
+  return new Response(hookedBody, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
 export class ZCodeExecutor extends DefaultExecutor {
   constructor(provider = "zcode") {
     super(provider);
   }
 
   async execute(args) {
-    const hasZcodeAuth = args.credentials?.providerSpecificData?.zcodeJwtToken || args.credentials?.accessToken;
-    if (!hasZcodeAuth) {
-      return super.execute(args);
-    }
-    const resolved = await resolveZcodeAuth(args.credentials, { log: args.log });
-    if (args.credentials) {
-      args.credentials.providerSpecificData = {
-        ...(args.credentials.providerSpecificData || {}),
-        ...resolved.persist,
-        __zcodeAuth: resolved,
-      };
-    }
+    const lockKey = String(
+      args.credentials?.providerSpecificData?.userId ||
+      args.credentials?.providerSpecificData?.zcodeJwtToken ||
+      args.credentials?.accessToken ||
+      args.credentials?.apiKey ||
+      args.credentials?.connectionId ||
+      "zcode_default"
+    );
 
-    let result = await super.execute(args);
-    result.response = await normalizeStartPlanResponse(result.response);
-    result.responseFormat = FORMATS.CLAUDE;
-
-    // The edge occasionally answers a legitimate start-plan request with a
-    // transient 405/3012 anti-abuse block. Retry twice with backoff and a fresh
-    // session id so a session-keyed window clears without touching the body.
-    if (resolved.lane === "start") {
-      const backoffMs = [2000, 8000];
-      for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
-        if (!(await isGatewayActivityBlock(result.response))) break;
-        try {
-          await result.response.body?.cancel?.();
-        } catch {
-          // Already consumed/closed.
-        }
-        await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
-        if (args.credentials) {
-          args.credentials.providerSpecificData = {
-            ...(args.credentials.providerSpecificData || {}),
-            __zcodeSessionSalt: randomBytes(8).toString("hex"),
-          };
-        }
-        result = await super.execute(args);
-        result.response = await normalizeStartPlanResponse(result.response);
-        result.responseFormat = FORMATS.CLAUDE;
+    const upstreamAbortCtrl = new AbortController();
+    if (args.signal) {
+      if (args.signal.aborted) {
+        upstreamAbortCtrl.abort(args.signal.reason);
+      } else {
+        args.signal.addEventListener("abort", () => upstreamAbortCtrl.abort(args.signal.reason), { once: true });
       }
     }
 
-    return result;
+    const releaseLock = await zcodeMutex.acquire(lockKey, upstreamAbortCtrl.signal);
+    let releaseCalled = false;
+    const safeRelease = () => {
+      if (!releaseCalled) {
+        releaseCalled = true;
+        releaseLock();
+      }
+    };
+
+    try {
+      const hasZcodeAuth = args.credentials?.providerSpecificData?.zcodeJwtToken || args.credentials?.accessToken;
+      if (!hasZcodeAuth) {
+        const res = await super.execute({ ...args, signal: upstreamAbortCtrl.signal });
+        if (!res?.response?.ok) {
+          safeRelease();
+          return res;
+        }
+        res.response = hookStreamRelease(res.response, safeRelease, upstreamAbortCtrl);
+        return res;
+      }
+      const resolved = await resolveZcodeAuth(args.credentials, { log: args.log });
+      if (args.credentials) {
+        args.credentials.providerSpecificData = {
+          ...(args.credentials.providerSpecificData || {}),
+          ...resolved.persist,
+          __zcodeAuth: resolved,
+        };
+      }
+
+      let result = await super.execute({ ...args, signal: upstreamAbortCtrl.signal });
+      result.response = await normalizeStartPlanResponse(result.response);
+      result.responseFormat = FORMATS.CLAUDE;
+
+      // The edge occasionally answers a legitimate start-plan request with a
+      // transient 405/3012 anti-abuse block. Retry twice with backoff and a fresh
+      // session id so a session-keyed window clears without touching the body.
+      if (resolved.lane === "start") {
+        const backoffMs = [2000, 8000];
+        for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
+          if (!(await isGatewayActivityBlock(result.response))) break;
+          try {
+            await result.response.body?.cancel?.();
+          } catch {
+            // Already consumed/closed.
+          }
+          await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
+          if (args.credentials) {
+            args.credentials.providerSpecificData = {
+              ...(args.credentials.providerSpecificData || {}),
+              __zcodeSessionSalt: randomBytes(8).toString("hex"),
+            };
+          }
+          result = await super.execute({ ...args, signal: upstreamAbortCtrl.signal });
+          result.response = await normalizeStartPlanResponse(result.response);
+          result.responseFormat = FORMATS.CLAUDE;
+        }
+      }
+
+      if (!result?.response?.ok) {
+        safeRelease();
+        return result;
+      }
+
+      result.response = hookStreamRelease(result.response, safeRelease, upstreamAbortCtrl);
+      return result;
+    } catch (err) {
+      safeRelease();
+      throw err;
+    }
   }
 
   buildUrl(model, stream, urlIndex = 0, credentials = null) {

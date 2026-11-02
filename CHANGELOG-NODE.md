@@ -1,3 +1,11 @@
+# v0.0.7 (2026-11-02)
+
+## Updates & Improvements
+- **ZCode & GLM Concurrency Lock & Disconnect Guard**:
+  - Implemented per-token FIFO concurrency queue (concurrency = 1) in `ZCodeExecutor` via `KeyedMutex` to eliminate request collisions (error 1113 / quota conflict).
+  - Added immediate upstream abort and socket teardown upon client disconnect to prevent hanging SSE slots on Z.ai.
+  - Ensured reliable lock release across stream completion, client cancellation, and upstream error branches.
+
 # v0.0.6 (2026-11-02)
 
 ## Updates & Improvements
