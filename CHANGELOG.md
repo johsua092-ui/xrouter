@@ -1,6 +1,8 @@
 # v0.0.5 (2026-10-31)
 
-- **Fix GLM Provider Links & Quota Token Display**:
+- **Gemini Web Argon Stream Timing & Node Changelog Update**:
+  - Prevented premature stream disconnect on Google's initial 186-byte handshake frame for Gemini 4 Argon.
+  - Updated `CHANGELOG-NODE.md` with latest v0.0.5 features so the Node.js legacy tab in dashboard is no longer stuck.
   - Pointed GLM website and apiKeyUrl in `glm.js` to `https://chat.z.ai` instead of `open.bigmodel.cn`.
   - Passed token units through `QuotaTable.js` so GLM / ZCode quotas display total millions of tokens (e.g. `5.0M tok (100%)`).
   - Fixed Cloudflare and Tailscale Funnel tunnels to target `getAppPort()` instead of hardcoded 20128 so funnels work dynamically under custom ports and dev servers.

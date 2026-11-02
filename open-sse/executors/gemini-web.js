@@ -612,7 +612,7 @@ export async function readGeminiStream(res, externalSignal) {
   let chunks = 0;
   const t0 = Date.now();
   const HARD_MS = 150000;
-  const IDLE_MS = 30000;
+  const IDLE_MS = 45000;
   let lastData = Date.now();
   let gotFirst = false;
   try {
@@ -620,16 +620,15 @@ export async function readGeminiStream(res, externalSignal) {
       if (externalSignal?.aborted) break;
       const elapsed = Date.now() - t0;
       if (elapsed > HARD_MS) break;
-      if (gotFirst && Date.now() - lastData > IDLE_MS) break;
+      // Google sends an initial handshake frame (~186 bytes) then thinks/streams.
+      // Do not trip the idle timeout on the handshake frame alone.
+      if (gotFirst && chunks > 1 && Date.now() - lastData > IDLE_MS) break;
       const r = await reader.read();
       if (r.done) break;
       chunks++;
       lastData = Date.now();
       gotFirst = true;
       buf += decoder.decode(r.value, { stream: true });
-      // Each mid-stream frame carries the answer so far, so parsing the first
-      // parseable frame returns a half-written reply - and cut tool-call JSON in
-      // half. Read until Google sends its terminal `["e",...]` frame instead.
       if (END_FRAME_RE.test(buf)) break;
     }
   } catch {

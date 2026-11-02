@@ -1,3 +1,12 @@
+# v0.0.5 (2026-10-31)
+
+## Updates & Improvements
+- **Gemini Web Argon Handshake Stream Idle Guard**:
+  - Prevented idle timeout from prematurely tripping on Google's initial 186-byte handshake frame for complex reasoning models like Gemini 4 Argon.
+- **Node.js Engine & Go Core Synchronization**:
+  - Unified Go Core and Node.js package versioning to v0.0.5.
+  - Added BLA memory obfuscation and dynamic app port routing for Cloudflare/Tailscale funnels.
+
 # v0.6.230 (2026-10-24)
 
 ## Features & Improvements
