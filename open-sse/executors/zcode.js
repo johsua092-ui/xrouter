@@ -248,7 +248,6 @@ export class ZCodeExecutor extends DefaultExecutor {
   buildHeaders(credentials, stream = true, url, model, body = null) {
     const headers = super.buildHeaders(credentials, stream, url, model, body);
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
-    if (!resolved) return headers;
     const apiKey = resolved?.apiKey || credentials?.apiKey || credentials?.accessToken;
     if (apiKey) {
       if (resolved?.lane === "start") {
@@ -257,7 +256,7 @@ export class ZCodeExecutor extends DefaultExecutor {
         delete headers["x-api-key"];
         headers.Authorization = `Bearer ${apiKey}`;
       } else {
-        // Project tokens are accepted with both headers on api.z.ai.
+        // Project tokens and API keys are accepted with both headers on api.z.ai.
         headers["x-api-key"] = apiKey;
         headers.Authorization = `Bearer ${apiKey}`;
       }
