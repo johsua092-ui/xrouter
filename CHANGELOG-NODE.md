@@ -1,3 +1,11 @@
+# v0.0.6 (2026-11-02)
+
+## Updates & Improvements
+- **GLM / ZCode Auth Spoofing & Circuit Breaker Recovery**:
+  - Spoofed official desktop client fingerprint (`X-Device-Mid`, `win32-x64`, `10.0.26300`) across `ZCodeExecutor` and connection test utilities.
+  - Added auto-recovery canary probe (10m TTL) for circuit breaker `EXHAUSTED` state.
+  - Routed GLM test probes through `fetchWithConnectionProxy` with client header impersonation.
+
 # v0.0.5 (2026-10-31)
 
 ## Updates & Improvements
