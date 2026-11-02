@@ -32,6 +32,7 @@ import { ZCodeExecutor } from "./zcode.js";
 import { MinimaxCodeExecutor } from "./minimax-code.js";
 import { KiloGatewayExecutor } from "./kilo-gateway.js";
 import { OpenSatanExecutor } from "./opensatan.js";
+import { KomaFreeExecutor } from "./koma-free.js";
 import { AdcodeExecutor } from "./adcode.js";
 import { PteroExecutor } from "./ptero.js";
 
@@ -89,6 +90,8 @@ const executors = {
   "glm-cn": new ZCodeExecutor("glm-cn"),
   opensatan: new OpenSatanExecutor(),
   satan: new OpenSatanExecutor(),
+  "koma-free": new KomaFreeExecutor(),
+  koma: new KomaFreeExecutor(),
   adcode: new AdcodeExecutor(),
   adc: new AdcodeExecutor(),
   ptero: new PteroExecutor(),
@@ -136,5 +139,6 @@ export { default as WindsurfExecutor } from "./windsurf.js";
 export { DevinCliExecutor } from "./devin-cli.js";
 export { ZCodeExecutor } from "./zcode.js";
 export { OpenSatanExecutor } from "./opensatan.js";
+export { KomaFreeExecutor } from "./koma-free.js";
 export { AdcodeExecutor } from "./adcode.js";
 export { PteroExecutor } from "./ptero.js";

@@ -1,6 +1,9 @@
 # v0.0.5 (2026-10-31)
 
-- **Gemini Web Argon Stream Timing & Node Changelog Update**:
+- **Koma Free Zero-Auth Provider (Unlimited Tokens & Native Tool Calling)**:
+  - Added `koma-free` (alias `koma`) with vLLM engine support (`koma/apple`).
+  - Auto-generated ephemeral UUID pairs (`X-Koma` / `X-Session`) per request for unlimited keyless throughput.
+  - Native OpenAI function calling support (`finish_reason: "tool_calls"`).
   - Prevented premature stream disconnect on Google's initial 186-byte handshake frame for Gemini 4 Argon.
   - Updated `CHANGELOG-NODE.md` with latest v0.0.5 features so the Node.js legacy tab in dashboard is no longer stuck.
   - Pointed GLM website and apiKeyUrl in `glm.js` to `https://chat.z.ai` instead of `open.bigmodel.cn`.
