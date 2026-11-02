@@ -1,6 +1,8 @@
 # v0.0.5 (2026-10-31)
 
-- **Tunnel Dynamic Port Resolution (PR #5354 Port)**:
+- **Fix GLM Provider Links & Quota Token Display**:
+  - Pointed GLM website and apiKeyUrl in `glm.js` to `https://chat.z.ai` instead of `open.bigmodel.cn`.
+  - Passed token units through `QuotaTable.js` so GLM / ZCode quotas display total millions of tokens (e.g. `5.0M tok (100%)`).
   - Fixed Cloudflare and Tailscale Funnel tunnels to target `getAppPort()` instead of hardcoded 20128 so funnels work dynamically under custom ports and dev servers.
   - Switched from fragile BardFrontendService to Seren's battle-tested `gemini-web.js` with `batchexecute?rpcids=otAQ7b` payload structure.
   - Added `webCookieToolBridge.js` for native OpenAI tool calling support on browser sessions.

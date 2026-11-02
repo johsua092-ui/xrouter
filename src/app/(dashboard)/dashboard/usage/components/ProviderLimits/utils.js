@@ -808,11 +808,14 @@ export function parseQuotaData(provider, data) {
               used: quota.used || 0,
               total: quota.total || 0,
               remaining: quota.remaining,
+              percentage: quota.percentage,
               remainingPercentage: quota.remainingPercentage,
               resetAt: quota.resetAt || null,
               expiresAt: quota.expiresAt || null,
               recurring: quota.recurring,
               absoluteReset: quota.absoluteReset === true,
+              totalTokens: quota.totalTokens,
+              usedTokens: quota.usedTokens,
               unlimited: quota.unlimited,
             });
           });

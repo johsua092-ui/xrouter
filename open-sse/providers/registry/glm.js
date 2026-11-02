@@ -9,9 +9,9 @@ export default {
     icon: "code",
     color: "#2563EB",
     textIcon: "GL",
-    website: "https://open.bigmodel.cn",
+    website: "https://chat.z.ai",
     notice: {
-      apiKeyUrl: "https://open.bigmodel.cn/usercenter/apikeys",
+      apiKeyUrl: "https://chat.z.ai",
       signupUrl: "https://chat.z.ai",
     },
   },

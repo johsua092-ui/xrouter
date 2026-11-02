@@ -167,6 +167,14 @@ export default function QuotaTable({
           const isUnlimited = quota.unlimited === true;
           const isCreditBalance = quota.isCreditBalance === true;
           const remPercent = typeof quota.remaining === "number" ? quota.remaining : (typeof quota.remainingPercentage === "number" ? quota.remainingPercentage : 100);
+          let displayRemaining = `${remPercent}%`;
+          if (quota.totalTokens && quota.totalTokens > 0) {
+            const remTokens = Math.max(0, quota.totalTokens - (quota.usedTokens || 0));
+            displayRemaining = `${(remTokens / 1000000).toFixed(1)}M tok (${remPercent}%)`;
+          } else if (quota.total >= 1000000) {
+            const remTokens = Math.max(0, quota.total - (quota.used || 0));
+            displayRemaining = `${(remTokens / 1000000).toFixed(1)}M tok (${remPercent}%)`;
+          }
           const colors = isCreditBalance
             ? { text: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500", bgLight: "bg-blue-500/10", emoji: "" }
             : getColorClasses(remPercent);
@@ -229,7 +237,7 @@ export default function QuotaTable({
                     </span>
                   </div>
                   <span className={`shrink-0 text-xs font-semibold tabular-nums ${colors.text}`}>
-                    {isUnlimited ? "Unlimited" : `${remPercent}%`}
+                    {isUnlimited ? "Unlimited" : displayRemaining}
                   </span>
                 </div>
 
