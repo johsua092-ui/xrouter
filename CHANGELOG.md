@@ -1,3 +1,10 @@
+# v0.0.6 (2026-11-02)
+
+- **GLM / ZCode Auth Spoofing & Circuit Breaker Recovery**:
+  - Spoofed official desktop client fingerprint (`X-Device-Mid`, `win32-x64`, `10.0.26300`) across `ZCodeExecutor` and connection test utilities to prevent Z.ai edge 405/3012 bot blocks.
+  - Added auto-recovery canary probe (10m TTL) for circuit breaker `EXHAUSTED` state, preventing accounts from getting permanently locked/skipped after transient errors.
+  - Routed GLM test probes through `fetchWithConnectionProxy` with complete client header impersonation.
+
 # v0.0.5 (2026-10-31)
 
 - **Koma Free Zero-Auth Provider (Unlimited Tokens & Native Tool Calling)**:

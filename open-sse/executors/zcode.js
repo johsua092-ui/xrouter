@@ -8,6 +8,15 @@ import { FORMATS } from "../translator/formats.js";
 const ZCODE_APP_VERSION = "3.17.1";
 const ZCODE_THIRD_SYSTEM_BLOCK = "Follow the user's instructions and use the available tools when helpful.";
 
+function stableDeviceMid(credentials) {
+  const seed = String(credentials?.providerSpecificData?.userId || credentials?.connectionId || credentials?.id || "zcode");
+  const bytes = createHash("sha256").update(seed).digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function platformTag() {
   const os = process.platform === "win32" ? "windows" : process.platform === "darwin" ? "darwin" : "linux";
   return { platform: `${process.platform}-${process.arch}`, category: os };
@@ -255,8 +264,8 @@ export class ZCodeExecutor extends DefaultExecutor {
     }
 
     const version = resolved?.clientVersion || ZCODE_APP_VERSION;
-    const { platform, category } = platformTag();
     const sessionId = sessionTag(credentials?.connectionId, credentials?.providerSpecificData?.__zcodeSessionSalt);
+    const deviceMid = credentials?.providerSpecificData?.deviceMid || stableDeviceMid(credentials);
     Object.assign(headers, {
       "HTTP-Referer": "https://zcode.z.ai",
       "User-Agent": `ZCode/${version}`,
@@ -266,9 +275,10 @@ export class ZCodeExecutor extends DefaultExecutor {
       "x-client-language": "en-US",
       "x-client-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       "x-zcode-agent": "glm",
-      "x-platform": platform,
-      "x-os-category": category,
-      "x-os-version": release(),
+      "x-platform": "win32-x64",
+      "x-os-category": "windows",
+      "x-os-version": "10.0.26300",
+      "x-device-mid": deviceMid,
       "x-request-id": randomUUID(),
       "x-zcode-session-type": "main",
       "x-zcode-trace-id": randomUUID(),

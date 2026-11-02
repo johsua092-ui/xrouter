@@ -183,9 +183,19 @@ const OAUTH_TEST_CONFIG = {
           }
         }
         const token = connection.accessToken || connection.apiKey;
-        const res = await fetch("https://api.z.ai/api/monitor/usage/quota/limit", {
-          headers: { "x-api-key": token },
-        }).catch(() => null);
+        const res = await fetchWithConnectionProxy("https://api.z.ai/api/monitor/usage/quota/limit", {
+          headers: {
+            "x-api-key": token,
+            "Authorization": `Bearer ${token}`,
+            "User-Agent": "ZCode/3.16.3",
+            "HTTP-Referer": "https://zcode.z.ai",
+            "x-zcode-app-version": "3.16.3",
+            "x-title": "Z Code@electron",
+            "x-platform": "win32-x64",
+            "x-os-category": "windows",
+            "x-os-version": "10.0.26300",
+          },
+        }, effectiveProxy).catch(() => null);
         if (res && res.ok) {
           return { valid: true, error: null, refreshed: false, newTokens: null };
         }
@@ -666,9 +676,22 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
         };
       }
       case "glm": {
+        const token = connection.apiKey || connection.accessToken;
         const res = await fetchWithConnectionProxy("https://api.z.ai/api/anthropic/v1/messages", {
           method: "POST",
-          headers: { "x-api-key": connection.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          headers: {
+            "x-api-key": token,
+            "Authorization": `Bearer ${token}`,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            "User-Agent": "ZCode/3.16.3",
+            "HTTP-Referer": "https://zcode.z.ai",
+            "x-zcode-app-version": "3.16.3",
+            "x-title": "Z Code@electron",
+            "x-platform": "win32-x64",
+            "x-os-category": "windows",
+            "x-os-version": "10.0.26300",
+          },
           body: JSON.stringify({ model: "glm-4.7", max_tokens: 1, messages: [{ role: "user", content: "test" }] }),
         }, effectiveProxy);
         const valid = res.status !== 401 && res.status !== 403;

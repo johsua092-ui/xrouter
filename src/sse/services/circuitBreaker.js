@@ -73,6 +73,10 @@ export function isCircuitBreakerOpen(connectionId) {
   if (!entry) return false;
 
   if (entry.state === CIRCUIT_STATES.EXHAUSTED) {
+    // Auto-recovery canary after 10 minutes so transient errors do not quarantine indefinitely
+    if (Date.now() - entry.cooldownUntil > 10 * 60 * 1000) {
+      return false;
+    }
     return true;
   }
 
