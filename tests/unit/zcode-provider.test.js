@@ -551,7 +551,7 @@ describe("zcode executor", () => {
     expect(transformed.system[1].text).toBe(ZCODE_SYSTEM_PROMPTS[1]);
     expect(transformed.system[2].text).toContain("You are Claude Code.");
     expect(transformed.system[2].text).toContain("sandbox instructions");
-    expect(transformed.metadata).toEqual({ user_id: "fa0f00fc-de8b-4d73-9088-dfa7c8a96afa" });
+    expect(transformed.metadata).toEqual({ user_id: JSON.stringify({ device_id: "fa0f00fc-de8b-4d73-9088-dfa7c8a96afa" }) });
     expect(transformed.output_config).toEqual({ effort: "high" });
   });
 

@@ -84,12 +84,16 @@ function alignZcodeSystem(body) {
 
 // Carry the account identity on the start-plan body (the thinking shape and
 // output_config.effort are produced by the unified thinking translator).
-function withStartPlanOptions(body, accountUserId) {
+// Upstream start-plan requires metadata.user_id format: '{"device_id":"<DEVICE_ID>"}'
+function withStartPlanOptions(body, deviceId) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return body;
   const metadata = body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
     ? { ...body.metadata }
     : {};
-  if (accountUserId) metadata.user_id = accountUserId;
+  const devId = deviceId || "zcode";
+  metadata.user_id = typeof metadata.user_id === "string" && metadata.user_id.startsWith("{\"device_id\"")
+    ? metadata.user_id
+    : JSON.stringify({ device_id: String(devId) });
   return Object.keys(metadata).length ? { ...body, metadata } : body;
 }
 
@@ -405,15 +409,15 @@ export class ZCodeExecutor extends DefaultExecutor {
   buildUrl(model, stream, urlIndex = 0, credentials = null) {
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
     if (!resolved && credentials?.apiKey) {
-      return super.buildUrl(model, stream, urlIndex, credentials);
+      const url = super.buildUrl(model, stream, urlIndex, credentials);
+      return url.replace(/[?&]beta=true\b/, "").replace(/\?$/, "");
     }
     const base = resolved?.baseUrl || credentials?.providerSpecificData?.zcodeBaseUrl || this.config.baseUrl;
-    const cleanBase = String(base || "").replace(/\/$/, "");
+    const cleanBase = String(base || "").replace(/\/$/, "").split("?")[0];
     if (cleanBase.endsWith("/v1/messages")) {
-      return this.config?.urlSuffix ? `${cleanBase}${this.config.urlSuffix}` : cleanBase;
+      return cleanBase;
     }
-    const target = `${cleanBase}/v1/messages`;
-    return this.config?.urlSuffix ? `${target}${this.config.urlSuffix}` : target;
+    return `${cleanBase}/v1/messages`;
   }
 
   transformRequest(model, body, stream, credentials) {
@@ -451,7 +455,11 @@ export class ZCodeExecutor extends DefaultExecutor {
     }
 
     if (resolved?.lane === "start") {
-      return withStartPlanOptions(aligned, credentials?.providerSpecificData?.userId);
+      const deviceId = credentials?.providerSpecificData?.deviceMid ||
+        credentials?.providerSpecificData?.deviceId ||
+        credentials?.providerSpecificData?.userId ||
+        stableDeviceMid(credentials);
+      return withStartPlanOptions(aligned, deviceId);
     }
     return aligned;
   }
