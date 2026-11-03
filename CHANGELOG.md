@@ -1,3 +1,10 @@
+# v0.0.9 (2026-11-03)
+
+- **Fix ZCode Upstream 3012 Prompt-Shape Rejection**:
+  - Aligned ZCode system prompt to canonical 3.16.3 desktop asset (>1500 chars) including full `# ZCode Desktop Context` block.
+  - Hardened 3-block system alignment in `alignZcodeSystem` to prevent duplicating stock ZCode prompt blocks when caller passes pre-formed system blocks.
+  - Ensured compliance with upstream ZCode gateway content inspection on `/api/v1/zcode-plan/anthropic/v1/messages`.
+
 # v0.0.7 (2026-11-03)
 
 - **Fix Standalone Preloaded wreq-js Instance & Zero-Import ZCode TLS Impersonation**:

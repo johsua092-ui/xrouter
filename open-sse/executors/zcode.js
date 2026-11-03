@@ -50,10 +50,16 @@ function alignZcodeSystem(body) {
   if (Array.isArray(existing)) {
     for (const block of existing) {
       const text = typeof block === "string" ? block : block?.type === "text" ? block.text : "";
-      if (typeof text === "string" && text) parts.push(text);
+      if (typeof text === "string" && text) {
+        if (text !== ZCODE_SYSTEM_PROMPTS[0] && !text.startsWith("\nYou are an interactive ZCode agent")) {
+          parts.push(text);
+        }
+      }
     }
   } else if (typeof existing === "string" && existing) {
-    parts.push(existing);
+    if (existing !== ZCODE_SYSTEM_PROMPTS[0] && !existing.startsWith("\nYou are an interactive ZCode agent")) {
+      parts.push(existing);
+    }
   }
 
   const messages = [];
@@ -64,10 +70,16 @@ function alignZcodeSystem(body) {
         hadSystemMessages = true;
         if (Array.isArray(message.content)) {
           for (const block of message.content) {
-            if (block && block.type === "text" && block.text) parts.push(block.text);
+            if (block && block.type === "text" && block.text) {
+              if (block.text !== ZCODE_SYSTEM_PROMPTS[0] && !block.text.startsWith("\nYou are an interactive ZCode agent")) {
+                parts.push(block.text);
+              }
+            }
           }
         } else if (typeof message.content === "string" && message.content) {
-          parts.push(message.content);
+          if (message.content !== ZCODE_SYSTEM_PROMPTS[0] && !message.content.startsWith("\nYou are an interactive ZCode agent")) {
+            parts.push(message.content);
+          }
         }
       } else {
         messages.push(message);
