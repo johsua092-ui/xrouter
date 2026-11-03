@@ -4,8 +4,9 @@ import { DefaultExecutor } from "./default.js";
 import { refreshZcodeJwt, resolveZcodeAuth } from "../services/zcodePlan.js";
 import { ZCODE_SYSTEM_PROMPTS } from "../services/zcodePrompt.js";
 import { FORMATS } from "../translator/formats.js";
+import { zcodeTlsFetch } from "../services/zcodeTlsClient.js";
 
-const ZCODE_APP_VERSION = "3.17.1";
+const ZCODE_APP_VERSION = "3.16.3";
 const ZCODE_THIRD_SYSTEM_BLOCK = "Follow the user's instructions and use the available tools when helpful.";
 
 function stableDeviceMid(credentials) {
@@ -27,8 +28,7 @@ function sessionTag(connectionId, salt = "") {
   return `session_${hash.slice(0, 32)}`;
 }
 
-// The desktop client sends a time-ordered UUIDv7 as x-query-id; random v4 ids
-// stand out from its traffic profile.
+// The desktop client sends a time-ordered UUIDv7 as x-query-id
 function uuidv7() {
   const bytes = randomBytes(16);
   const ms = BigInt(Date.now());
@@ -317,9 +317,33 @@ export class ZCodeExecutor extends DefaultExecutor {
     };
 
     try {
+      const effectiveProxyOptions = args.proxyOptions || (args.credentials?.providerSpecificData?.connectionProxyEnabled && args.credentials?.providerSpecificData?.connectionProxyUrl
+        ? {
+            connectionProxyEnabled: true,
+            connectionProxyUrl: args.credentials.providerSpecificData.connectionProxyUrl,
+            connectionNoProxy: args.credentials.providerSpecificData.connectionNoProxy || "",
+          }
+        : null);
+
+      const execArgs = {
+        ...args,
+        signal: upstreamAbortCtrl.signal,
+        proxyOptions: effectiveProxyOptions,
+        directFetchProxy: true,
+        directFetch: (url, options, extra = {}) => zcodeTlsFetch(url, {
+          method: options.method,
+          headers: options.headers,
+          body: options.body,
+        }, {
+          signal: options.signal,
+          proxy: extra.proxyUrl || options.proxyUrl,
+          timeoutMs: args.stream ? 0 : 300000,
+        }),
+      };
+
       const hasZcodeAuth = args.credentials?.providerSpecificData?.zcodeJwtToken || args.credentials?.accessToken;
       if (!hasZcodeAuth) {
-        const res = await super.execute({ ...args, signal: upstreamAbortCtrl.signal });
+        const res = await super.execute(execArgs);
         if (!res?.response?.ok) {
           safeRelease();
           return res;
@@ -336,7 +360,7 @@ export class ZCodeExecutor extends DefaultExecutor {
         };
       }
 
-      let result = await super.execute({ ...args, signal: upstreamAbortCtrl.signal });
+      let result = await super.execute(execArgs);
       result.response = await normalizeStartPlanResponse(result.response);
       result.responseFormat = FORMATS.CLAUDE;
 
@@ -359,7 +383,7 @@ export class ZCodeExecutor extends DefaultExecutor {
               __zcodeSessionSalt: randomBytes(8).toString("hex"),
             };
           }
-          result = await super.execute({ ...args, signal: upstreamAbortCtrl.signal });
+          result = await super.execute(execArgs);
           result.response = await normalizeStartPlanResponse(result.response);
           result.responseFormat = FORMATS.CLAUDE;
         }
@@ -391,7 +415,24 @@ export class ZCodeExecutor extends DefaultExecutor {
     const transformed = super.transformRequest(model, body, stream, credentials);
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
     if (!resolved) return transformed;
+
+    // Upstream rejects lowercase model names
+    if (typeof transformed?.model === "string") {
+      const m = transformed.model.toLowerCase();
+      if (m === "glm-5.3-flash") transformed.model = "GLM-5.3-Flash";
+      else if (m === "glm-5.3") transformed.model = "GLM-5.3";
+      else if (m === "glm-5.2") transformed.model = "GLM-5.2";
+      else if (m === "glm-5-turbo") transformed.model = "GLM-5-Turbo";
+    }
+
     const aligned = alignZcodeSystem(transformed);
+    delete aligned.context_management;
+    if (Array.isArray(aligned.tools)) {
+      for (const tool of aligned.tools) {
+        if (tool && typeof tool === "object") delete tool.strict;
+      }
+    }
+
     if (resolved?.lane === "start") {
       return withStartPlanOptions(aligned, credentials?.providerSpecificData?.userId);
     }
@@ -404,16 +445,17 @@ export class ZCodeExecutor extends DefaultExecutor {
     const apiKey = resolved?.apiKey || credentials?.apiKey || credentials?.accessToken;
     if (apiKey) {
       if (resolved?.lane === "start") {
-        // The plan gateway expects the raw zcode JWT as a Bearer token only;
-        // an extra x-api-key is answered with the same 405 block as unknown clients.
         delete headers["x-api-key"];
         headers.Authorization = `Bearer ${apiKey}`;
       } else {
-        // Project tokens and API keys are accepted with both headers on api.z.ai.
         headers["x-api-key"] = apiKey;
         headers.Authorization = `Bearer ${apiKey}`;
       }
     }
+
+    // Drop anthropic-beta: official desktop client never sends this header
+    delete headers["anthropic-beta"];
+    delete headers["Anthropic-Beta"];
 
     const version = resolved?.clientVersion || ZCODE_APP_VERSION;
     const sessionId = sessionTag(credentials?.connectionId, credentials?.providerSpecificData?.__zcodeSessionSalt);
@@ -429,7 +471,7 @@ export class ZCodeExecutor extends DefaultExecutor {
       "x-zcode-agent": "glm",
       "x-platform": "win32-x64",
       "x-os-category": "windows",
-      "x-os-version": "10.0.26300",
+      "x-os-version": "10.0.26100",
       "x-device-mid": deviceMid,
       "x-request-id": randomUUID(),
       "x-zcode-session-type": "main",

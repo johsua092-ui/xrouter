@@ -1,3 +1,13 @@
+# v0.0.8 (2026-11-03)
+
+## Updates & Improvements
+- **ZCode TLS Impersonation (BoringSSL Chrome 131) & Edge Anti-Abuse 3012 Bypass**:
+  - Hardened ZCode HTTP transport via `wreq-js` (`zcodeTlsClient.js`) delivering Chrome 131 BoringSSL / Post-Quantum TLS 1.3 ClientHello matching desktop Electron and Ciii-ATM/zcode-gateway, with connection proxy pool integration.
+  - Dropped `anthropic-beta` headers by default to match official desktop client behavior.
+  - Aligned ZCode system prompt to official 1213-char prefix, dropping desktop visualization placeholder that tripped edge WAF rules.
+  - Normalized GLM model IDs to PascalCase (`GLM-5.3-Flash`, `GLM-5.3`, `GLM-5.2`, `GLM-5-Turbo`) and stripped `context_management` and `tool.strict`.
+  - Locked ZCode client version to `3.16.3` and aligned OS version to valid Windows build `10.0.26100`.
+
 # v0.0.7 (2026-11-02)
 
 ## Updates & Improvements
