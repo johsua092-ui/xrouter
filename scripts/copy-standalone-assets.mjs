@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -36,6 +36,19 @@ export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = pr
   if (existsSync(serverWrapperSource)) {
     cpSync(serverWrapperSource, serverWrapperDestination, { force: true });
     console.log(`[standalone-assets] Copied custom-server.js to ${serverWrapperDestination}`);
+  }
+
+  // Ensure server.js in standalone exposes native require to global scope even if launched directly
+  const standaloneServer = resolve(standaloneDir, "server.js");
+  if (existsSync(standaloneServer)) {
+    try {
+      const serverCode = readFileSync(standaloneServer, "utf8");
+      if (!serverCode.includes("__xrouter_native_require__")) {
+        const hook = `if (typeof globalThis !== "undefined") {\n  globalThis.__xrouter_native_require__ = require;\n  globalThis.__non_webpack_require__ = require;\n}\n`;
+        writeFileSync(standaloneServer, hook + serverCode, "utf8");
+        console.log(`[standalone-assets] Injected native require hook into ${standaloneServer}`);
+      }
+    } catch {}
   }
 
   // Copy src/lib/mimoReverseProxy.js and src/lib/mimoLoginSession.js so Xiaomi MiMo login reverse proxy works in standalone

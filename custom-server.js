@@ -4,6 +4,12 @@ const fs = require("fs");
 const crypto = require("crypto");
 const { pathToFileURL } = require("url");
 
+// Expose native CommonJS require globally so standalone Next.js webpack bundles can load native binary modules (wreq-js)
+if (typeof globalThis !== "undefined") {
+  globalThis.__xrouter_native_require__ = require;
+  globalThis.__non_webpack_require__ = require;
+}
+
 const origCreate = http.createServer.bind(http);
 
 // Per-process secret proving x-9r-real-ip was stamped below rather than sent by the client.

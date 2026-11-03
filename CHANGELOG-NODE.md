@@ -1,3 +1,11 @@
+# v0.0.9 (2026-11-03)
+
+- **Fix Standalone Webpack Scope wreq-js Native Loader & 3012 WAF Bypass**:
+  - Resolved `eval("require")` reference failure in Webpack standalone chunk scope where `require` was not in lexical scope, leading to `wreq-js unavailable` and failing open to native fetch.
+  - Implemented global require bootstrap hook (`globalThis.__xrouter_native_require__`) initialized at entrypoint (`custom-server.js` and standalone `server.js`).
+  - Added multi-tier resolution using `process.getBuiltinModule("module")`, dynamic `Function` constructor require/import completely invisible to Webpack AST analysis, candidate `package.json` resolution, and direct `.cjs` file resolution.
+  - Hardened both `zcodeTlsClient.js` and `opencodeTlsClient.js` against standalone Next.js bundling quirks.
+
 # v0.0.8 (2026-11-03)
 
 ## Updates & Improvements

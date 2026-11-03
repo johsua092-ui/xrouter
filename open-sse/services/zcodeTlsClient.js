@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
 // Hardened TLS-impersonating HTTP client for ZCode start-plan.
 // Emulates Chrome 131 BoringSSL / Post-Quantum TLS 1.3 ClientHello via wreq-js,
 // matching the Ciii-ATM/zcode-gateway and desktop Electron signature with proxy awareness.
@@ -6,11 +10,23 @@ const sessionCache = new Map();
 let cachedWreq = null;
 
 function getNativeRequire() {
+  if (typeof globalThis !== "undefined") {
+    if (typeof globalThis.__xrouter_native_require__ === "function") return globalThis.__xrouter_native_require__;
+    if (typeof globalThis.__non_webpack_require__ === "function") return globalThis.__non_webpack_require__;
+  }
+  if (typeof __non_webpack_require__ === "function") return __non_webpack_require__;
   try {
-    if (typeof __non_webpack_require__ !== "undefined") return __non_webpack_require__;
+    if (typeof process !== "undefined" && typeof process.getBuiltinModule === "function") {
+      const nodeModule = process.getBuiltinModule("module");
+      if (typeof nodeModule?.createRequire === "function") {
+        return nodeModule.createRequire(process.cwd() + "/package.json");
+      }
+    }
   } catch {}
   try {
-    return eval("require");
+    const dynamicRequire = new Function("fromPath", "const m = typeof process !== 'undefined' && process.getBuiltinModule ? process.getBuiltinModule('module') : (typeof require !== 'undefined' ? require('module') : null); return m ? m.createRequire(fromPath) : null;");
+    const req = dynamicRequire(process.cwd() + "/package.json");
+    if (req) return req;
   } catch {}
   return null;
 }
@@ -41,27 +57,64 @@ async function getWreqModule() {
   }
 
   // 2. createRequire via native module
-  if (nativeReq) {
+  let createReq = null;
+  if (nativeReq && typeof nativeReq.resolve === "function") {
     try {
       const nodeModule = nativeReq("node:module") || nativeReq("module");
-      const createReq = nodeModule?.createRequire || nodeModule?.default?.createRequire;
-      if (typeof createReq === "function") {
-        const path = nativeReq("node:path") || nativeReq("path");
-        const fs = nativeReq("node:fs") || nativeReq("fs");
-        const cwd = process.cwd();
-        const pkgCandidates = [
-          path.resolve(cwd, "package.json"),
-          path.resolve(cwd, "..", "package.json"),
-          path.resolve(cwd, "..", "..", "package.json"),
-          path.resolve(cwd, ".next", "standalone", "package.json"),
-          "/root/xrouter/package.json",
-          "/root/xrouter/.next/standalone/package.json",
-        ];
+      createReq = nodeModule?.createRequire || nodeModule?.default?.createRequire;
+    } catch {}
+  }
+  if (!createReq && typeof process !== "undefined" && typeof process.getBuiltinModule === "function") {
+    try {
+      createReq = process.getBuiltinModule("module")?.createRequire;
+    } catch {}
+  }
+  if (!createReq) {
+    try {
+      const dynamicModule = new Function("return (typeof process !== 'undefined' && process.getBuiltinModule ? process.getBuiltinModule('module') : (typeof require !== 'undefined' ? require('module') : null));");
+      createReq = dynamicModule()?.createRequire;
+    } catch {}
+  }
+
+  const cwd = process.cwd();
+  const pkgCandidates = [
+    path.resolve(cwd, "package.json"),
+    path.resolve(cwd, ".next", "standalone", "package.json"),
+    path.resolve(cwd, "..", "package.json"),
+    path.resolve(cwd, "..", "..", "package.json"),
+    "/root/xrouter/.next/standalone/package.json",
+    "/root/xrouter/package.json",
+  ];
+
+  if (typeof createReq === "function") {
+    for (const pkg of pkgCandidates) {
+      if (fs.existsSync(pkg)) {
+        try {
+          const req = createReq(pkg);
+          const mod = req("wreq-js");
+          if (isValidWreq(mod)) {
+            cachedWreq = normalizeWreq(mod);
+            return cachedWreq;
+          }
+        } catch {}
+      }
+    }
+
+    const directCandidates = [
+      path.resolve(cwd, "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
+      path.resolve(cwd, ".next", "standalone", "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
+      path.resolve(cwd, "..", "..", "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
+      "/root/xrouter/.next/standalone/node_modules/wreq-js/dist/wreq-js.cjs",
+      "/root/xrouter/node_modules/wreq-js/dist/wreq-js.cjs",
+    ];
+
+    for (const direct of directCandidates) {
+      if (fs.existsSync(direct)) {
         for (const pkg of pkgCandidates) {
           if (fs.existsSync(pkg)) {
             try {
               const req = createReq(pkg);
-              const mod = req("wreq-js");
+              const mod = req(direct);
               if (isValidWreq(mod)) {
                 cachedWreq = normalizeWreq(mod);
                 return cachedWreq;
@@ -70,40 +123,44 @@ async function getWreqModule() {
           }
         }
       }
-    } catch {}
+    }
   }
 
-  // 3. Direct file path resolution
-  if (nativeReq) {
-    try {
-      const path = nativeReq("node:path") || nativeReq("path");
-      const fs = nativeReq("node:fs") || nativeReq("fs");
-      const cwd = process.cwd();
-      const directCandidates = [
-        path.resolve(cwd, "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
-        path.resolve(cwd, "node_modules", "wreq-js"),
-        path.resolve(cwd, "..", "..", "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
-        path.resolve(cwd, "..", "..", "node_modules", "wreq-js"),
-        "/root/xrouter/node_modules/wreq-js/dist/wreq-js.cjs",
-        "/root/xrouter/.next/standalone/node_modules/wreq-js/dist/wreq-js.cjs",
-      ];
-      for (const direct of directCandidates) {
-        if (fs.existsSync(direct)) {
-          try {
-            const mod = nativeReq(direct);
-            if (isValidWreq(mod)) {
-              cachedWreq = normalizeWreq(mod);
-              return cachedWreq;
-            }
-          } catch {}
-        }
-      }
-    } catch {}
-  }
-
-  // 4. ESM dynamic import
+  // 3. True native ESM dynamic import via Function constructor (completely hidden from webpack AST)
   try {
-    const mod = await import("wreq-js");
+    const dynamicImport = new Function("specifier", "return import(specifier)");
+    const mod = await dynamicImport("wreq-js");
+    if (isValidWreq(mod)) {
+      cachedWreq = normalizeWreq(mod);
+      return cachedWreq;
+    }
+  } catch {}
+
+  // 4. Direct file URL import via dynamic import
+  try {
+    const directCandidates = [
+      path.resolve(cwd, "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
+      path.resolve(cwd, ".next", "standalone", "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
+      "/root/xrouter/.next/standalone/node_modules/wreq-js/dist/wreq-js.cjs",
+      "/root/xrouter/node_modules/wreq-js/dist/wreq-js.cjs",
+    ];
+    const dynamicImport = new Function("specifier", "return import(specifier)");
+    for (const file of directCandidates) {
+      if (fs.existsSync(file)) {
+        try {
+          const mod = await dynamicImport(pathToFileURL(file).href);
+          if (isValidWreq(mod)) {
+            cachedWreq = normalizeWreq(mod);
+            return cachedWreq;
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+
+  // 5. Fallback webpack import as last resort
+  try {
+    const mod = await import(/* webpackIgnore: true */ "wreq-js");
     if (isValidWreq(mod)) {
       cachedWreq = normalizeWreq(mod);
       return cachedWreq;
