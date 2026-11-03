@@ -55,6 +55,20 @@ export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = pr
   if (existsSync(guardSrc)) {
     cpSync(guardSrc, guardDest, { force: true });
   }
+
+  // Copy wreq-js and @wreq-js native bindings so TLS fingerprint impersonation works in standalone mode
+  const wreqSrc = resolve(projectRoot, "node_modules", "wreq-js");
+  const wreqDest = resolve(standaloneDir, "node_modules", "wreq-js");
+  if (existsSync(wreqSrc)) {
+    cpSync(wreqSrc, wreqDest, { recursive: true, force: true });
+    console.log(`[standalone-assets] Copied wreq-js to ${wreqDest}`);
+  }
+  const wreqBindingSrc = resolve(projectRoot, "node_modules", "@wreq-js");
+  const wreqBindingDest = resolve(standaloneDir, "node_modules", "@wreq-js");
+  if (existsSync(wreqBindingSrc)) {
+    cpSync(wreqBindingSrc, wreqBindingDest, { recursive: true, force: true });
+    console.log(`[standalone-assets] Copied @wreq-js to ${wreqBindingDest}`);
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(dirname(fileURLToPath(import.meta.url)), "copy-standalone-assets.mjs")) {

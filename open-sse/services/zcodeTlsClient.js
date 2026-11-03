@@ -3,12 +3,40 @@
 // matching the Ciii-ATM/zcode-gateway and desktop Electron signature with proxy awareness.
 
 const sessionCache = new Map();
+let cachedWreq = null;
 
 async function getWreqModule() {
+  if (cachedWreq) return cachedWreq;
   try {
-    return await import("wreq-js");
-  } catch (error) {
-    throw new Error(`wreq-js import failed: ${error?.message || error}`);
+    cachedWreq = await import("wreq-js");
+    return cachedWreq;
+  } catch (esmError) {
+    try {
+      const { createRequire } = await import("node:module");
+      const require = createRequire(import.meta.url);
+      cachedWreq = require("wreq-js");
+      return cachedWreq;
+    } catch (cjsError) {
+      try {
+        const { createRequire } = await import("node:module");
+        const path = await import("node:path");
+        const fs = await import("node:fs");
+        const candidates = [
+          path.resolve(process.cwd(), "package.json"),
+          path.resolve(process.cwd(), "..", "..", "package.json"),
+        ];
+        for (const pkgPath of candidates) {
+          if (fs.existsSync(pkgPath)) {
+            try {
+              const require = createRequire(pkgPath);
+              cachedWreq = require("wreq-js");
+              if (cachedWreq) return cachedWreq;
+            } catch {}
+          }
+        }
+      } catch {}
+      throw new Error(`wreq-js import failed: ${esmError?.message || esmError} (cjs fallback: ${cjsError?.message || cjsError})`);
+    }
   }
 }
 

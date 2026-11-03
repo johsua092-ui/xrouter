@@ -1,6 +1,6 @@
 {
   "name": "xrouter-ai",
-  "version": "0.0.8",
+  "version": "0.0.7",
   "description": "X Router AI - High-Performance Multi-Tenant AI Gateway & Proxy",
   "repository": {
     "type": "git",
