@@ -12,6 +12,15 @@ function platformTag() {
   return { platform: `${process.platform}-${process.arch}`, category: os };
 }
 
+function stableDeviceMid(credentials) {
+  const seed = String(credentials?.providerSpecificData?.userId || credentials?.connectionId || credentials?.id || "zcode");
+  const bytes = createHash("sha256").update(seed).digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function sessionTag(connectionId, salt = "") {
   const hash = createHash("sha256").update(`${connectionId || "zcode"}:${salt}`).digest("hex");
   return `session_${hash.slice(0, 32)}`;
@@ -258,6 +267,7 @@ export class ZCodeExecutor extends DefaultExecutor {
       "x-os-category": category,
       "x-os-version": release(),
       "x-request-id": randomUUID(),
+      "x-device-mid": stableDeviceMid(credentials),
       "x-zcode-session-type": "main",
       "x-zcode-trace-id": randomUUID(),
       "x-query-id": uuidv7(),

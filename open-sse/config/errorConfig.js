@@ -78,6 +78,7 @@ export const ERROR_RULES = [
   { text: "improperly formed request", cooldownMs: COOLDOWN.long },
   { text: "rate limit",               backoff: true },
   { text: "too many requests",        backoff: true },
+  { text: "concurrency limit",        cooldownMs: COOLDOWN.short },
   { text: "quota exceeded",           backoff: true },
   { text: "insufficient credit",      backoff: true },
   { text: "credit balance is too low", backoff: true },
