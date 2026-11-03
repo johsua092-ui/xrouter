@@ -3,20 +3,9 @@ import { release } from "node:os";
 import { DefaultExecutor } from "./default.js";
 import { refreshZcodeJwt, resolveZcodeAuth } from "../services/zcodePlan.js";
 import { ZCODE_SYSTEM_PROMPTS } from "../services/zcodePrompt.js";
-import { FORMATS } from "../translator/formats.js";
-import { zcodeTlsFetch } from "../services/zcodeTlsClient.js";
 
-const ZCODE_APP_VERSION = "3.16.3";
+const ZCODE_APP_VERSION = "3.17.1";
 const ZCODE_THIRD_SYSTEM_BLOCK = "Follow the user's instructions and use the available tools when helpful.";
-
-function stableDeviceMid(credentials) {
-  const seed = String(credentials?.providerSpecificData?.userId || credentials?.connectionId || credentials?.id || "zcode");
-  const bytes = createHash("sha256").update(seed).digest().subarray(0, 16);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = bytes.toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 function platformTag() {
   const os = process.platform === "win32" ? "windows" : process.platform === "darwin" ? "darwin" : "linux";
@@ -28,7 +17,8 @@ function sessionTag(connectionId, salt = "") {
   return `session_${hash.slice(0, 32)}`;
 }
 
-// The desktop client sends a time-ordered UUIDv7 as x-query-id
+// The desktop client sends a time-ordered UUIDv7 as x-query-id; random v4 ids
+// stand out from its traffic profile.
 function uuidv7() {
   const bytes = randomBytes(16);
   const ms = BigInt(Date.now());
@@ -50,16 +40,10 @@ function alignZcodeSystem(body) {
   if (Array.isArray(existing)) {
     for (const block of existing) {
       const text = typeof block === "string" ? block : block?.type === "text" ? block.text : "";
-      if (typeof text === "string" && text) {
-        if (text !== ZCODE_SYSTEM_PROMPTS[0] && !text.startsWith("\nYou are an interactive ZCode agent")) {
-          parts.push(text);
-        }
-      }
+      if (typeof text === "string" && text) parts.push(text);
     }
   } else if (typeof existing === "string" && existing) {
-    if (existing !== ZCODE_SYSTEM_PROMPTS[0] && !existing.startsWith("\nYou are an interactive ZCode agent")) {
-      parts.push(existing);
-    }
+    parts.push(existing);
   }
 
   const messages = [];
@@ -70,16 +54,10 @@ function alignZcodeSystem(body) {
         hadSystemMessages = true;
         if (Array.isArray(message.content)) {
           for (const block of message.content) {
-            if (block && block.type === "text" && block.text) {
-              if (block.text !== ZCODE_SYSTEM_PROMPTS[0] && !block.text.startsWith("\nYou are an interactive ZCode agent")) {
-                parts.push(block.text);
-              }
-            }
+            if (block && block.type === "text" && block.text) parts.push(block.text);
           }
         } else if (typeof message.content === "string" && message.content) {
-          if (message.content !== ZCODE_SYSTEM_PROMPTS[0] && !message.content.startsWith("\nYou are an interactive ZCode agent")) {
-            parts.push(message.content);
-          }
+          parts.push(message.content);
         }
       } else {
         messages.push(message);
@@ -96,16 +74,12 @@ function alignZcodeSystem(body) {
 
 // Carry the account identity on the start-plan body (the thinking shape and
 // output_config.effort are produced by the unified thinking translator).
-// Upstream start-plan requires metadata.user_id format: '{"device_id":"<DEVICE_ID>"}'
-function withStartPlanOptions(body, deviceId) {
+function withStartPlanOptions(body, accountUserId) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return body;
   const metadata = body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
     ? { ...body.metadata }
     : {};
-  const devId = deviceId || "zcode";
-  metadata.user_id = typeof metadata.user_id === "string" && metadata.user_id.startsWith("{\"device_id\"")
-    ? metadata.user_id
-    : JSON.stringify({ device_id: String(devId) });
+  if (accountUserId) metadata.user_id = accountUserId;
   return Object.keys(metadata).length ? { ...body, metadata } : body;
 }
 
@@ -190,288 +164,63 @@ export function normalizeStartPlanResponse(response) {
     .catch(() => response);
 }
 
-class KeyedMutex {
-  constructor() {
-    this.chains = new Map();
-  }
-
-  async acquire(key, signal) {
-    if (signal?.aborted) {
-      throw new Error("Request aborted before acquiring lock");
-    }
-
-    let releaseCurrent;
-    const currentPromise = new Promise((resolve) => {
-      releaseCurrent = resolve;
-    });
-
-    const previousPromise = this.chains.get(key) || Promise.resolve();
-    this.chains.set(key, previousPromise.then(() => currentPromise, () => currentPromise));
-
-    let abortListener;
-    try {
-      if (signal) {
-        await Promise.race([
-          previousPromise,
-          new Promise((_, reject) => {
-            abortListener = () => reject(new Error("Request aborted in queue"));
-            signal.addEventListener("abort", abortListener, { once: true });
-          }),
-        ]);
-      } else {
-        await previousPromise;
-      }
-    } catch (err) {
-      releaseCurrent();
-      if (this.chains.get(key) === currentPromise) {
-        this.chains.delete(key);
-      }
-      throw err;
-    } finally {
-      if (signal && abortListener) {
-        signal.removeEventListener("abort", abortListener);
-      }
-    }
-
-    let released = false;
-    return () => {
-      if (!released) {
-        released = true;
-        releaseCurrent();
-        if (this.chains.get(key) === currentPromise) {
-          this.chains.delete(key);
-        }
-      }
-    };
-  }
-}
-
-const zcodeMutex = new KeyedMutex();
-
-function hookStreamRelease(response, release, abortCtrl) {
-  const body = response?.body;
-  if (!body || typeof body.getReader !== "function") {
-    release();
-    return response;
-  }
-
-  const reader = body.getReader();
-  let doneOrCancelled = false;
-
-  const doRelease = () => {
-    if (!doneOrCancelled) {
-      doneOrCancelled = true;
-      release();
-    }
-  };
-
-  const hookedBody = new ReadableStream({
-    async pull(controller) {
-      try {
-        const { done, value } = await reader.read();
-        if (done) {
-          doRelease();
-          controller.close();
-          return;
-        }
-        controller.enqueue(value);
-      } catch (err) {
-        doRelease();
-        controller.error(err);
-      }
-    },
-    async cancel(reason) {
-      try {
-        abortCtrl?.abort(reason || "client_cancelled");
-        await reader.cancel(reason);
-      } catch {
-        // ignore
-      } finally {
-        doRelease();
-      }
-    }
-  });
-
-  return new Response(hookedBody, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
-  });
-}
-
 export class ZCodeExecutor extends DefaultExecutor {
-  constructor(provider = "zcode") {
-    super(provider);
+  constructor() {
+    super("zcode");
   }
 
   async execute(args) {
-    const lockKey = String(
-      args.credentials?.providerSpecificData?.userId ||
-      args.credentials?.providerSpecificData?.zcodeJwtToken ||
-      args.credentials?.accessToken ||
-      args.credentials?.apiKey ||
-      args.credentials?.connectionId ||
-      "zcode_default"
-    );
-
-    const upstreamAbortCtrl = new AbortController();
-    if (args.signal) {
-      if (args.signal.aborted) {
-        upstreamAbortCtrl.abort(args.signal.reason);
-      } else {
-        args.signal.addEventListener("abort", () => upstreamAbortCtrl.abort(args.signal.reason), { once: true });
-      }
-    }
-
-    const releaseLock = await zcodeMutex.acquire(lockKey, upstreamAbortCtrl.signal);
-    let releaseCalled = false;
-    const safeRelease = () => {
-      if (!releaseCalled) {
-        releaseCalled = true;
-        releaseLock();
-      }
-    };
-
-    try {
-      const effectiveProxyOptions = args.proxyOptions || (args.credentials?.providerSpecificData?.connectionProxyEnabled && args.credentials?.providerSpecificData?.connectionProxyUrl
-        ? {
-            connectionProxyEnabled: true,
-            connectionProxyUrl: args.credentials.providerSpecificData.connectionProxyUrl,
-            connectionNoProxy: args.credentials.providerSpecificData.connectionNoProxy || "",
-          }
-        : null);
-
-      const execArgs = {
-        ...args,
-        signal: upstreamAbortCtrl.signal,
-        proxyOptions: effectiveProxyOptions,
-        directFetchProxy: true,
-        directFetch: (url, options, extra = {}) => zcodeTlsFetch(url, {
-          method: options.method,
-          headers: options.headers,
-          body: options.body,
-        }, {
-          signal: options.signal,
-          proxy: extra.proxyUrl || options.proxyUrl,
-          timeoutMs: args.stream ? 0 : 300000,
-        }),
+    const resolved = await resolveZcodeAuth(args.credentials, { log: args.log });
+    if (args.credentials) {
+      args.credentials.providerSpecificData = {
+        ...(args.credentials.providerSpecificData || {}),
+        ...resolved.persist,
+        __zcodeAuth: resolved,
       };
-
-      const hasZcodeAuth = args.credentials?.providerSpecificData?.zcodeJwtToken || args.credentials?.accessToken;
-      if (!hasZcodeAuth) {
-        const res = await super.execute(execArgs);
-        if (!res?.response?.ok) {
-          safeRelease();
-          return res;
-        }
-        res.response = hookStreamRelease(res.response, safeRelease, upstreamAbortCtrl);
-        return res;
-      }
-      const resolved = await resolveZcodeAuth(args.credentials, { log: args.log });
-      if (args.credentials) {
-        args.credentials.providerSpecificData = {
-          ...(args.credentials.providerSpecificData || {}),
-          ...resolved.persist,
-          __zcodeAuth: resolved,
-        };
-      }
-
-      let result = await super.execute(execArgs);
-      result.response = await normalizeStartPlanResponse(result.response);
-      result.responseFormat = FORMATS.CLAUDE;
-
-      // The edge occasionally answers a legitimate start-plan request with a
-      // transient 405/3012 anti-abuse block. Retry twice with backoff and a fresh
-      // session id so a session-keyed window clears without touching the body.
-      if (resolved.lane === "start") {
-        const backoffMs = [2000, 8000];
-        for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
-          if (!(await isGatewayActivityBlock(result.response))) break;
-          try {
-            await result.response.body?.cancel?.();
-          } catch {
-            // Already consumed/closed.
-          }
-          await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
-          if (args.credentials) {
-            args.credentials.providerSpecificData = {
-              ...(args.credentials.providerSpecificData || {}),
-              __zcodeSessionSalt: randomBytes(8).toString("hex"),
-            };
-          }
-          result = await super.execute(execArgs);
-          result.response = await normalizeStartPlanResponse(result.response);
-          result.responseFormat = FORMATS.CLAUDE;
-        }
-      }
-
-      if (!result?.response?.ok) {
-        safeRelease();
-        return result;
-      }
-
-      result.response = hookStreamRelease(result.response, safeRelease, upstreamAbortCtrl);
-      return result;
-    } catch (err) {
-      safeRelease();
-      throw err;
     }
+
+    let result = await super.execute(args);
+    result.response = await normalizeStartPlanResponse(result.response);
+
+    // The edge occasionally answers a legitimate start-plan request with a
+    // transient 405/3012 anti-abuse block. Retry twice with backoff and a fresh
+    // session id so a session-keyed window clears without touching the body.
+    if (resolved.lane === "start") {
+      const backoffMs = [2000, 8000];
+      for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
+        if (!(await isGatewayActivityBlock(result.response))) break;
+        try {
+          await result.response.body?.cancel?.();
+        } catch {
+          // Already consumed/closed.
+        }
+        await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
+        if (args.credentials) {
+          args.credentials.providerSpecificData = {
+            ...(args.credentials.providerSpecificData || {}),
+            __zcodeSessionSalt: randomBytes(8).toString("hex"),
+          };
+        }
+        result = await super.execute(args);
+        result.response = await normalizeStartPlanResponse(result.response);
+      }
+    }
+
+    return result;
   }
 
   buildUrl(model, stream, urlIndex = 0, credentials = null) {
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
-    if (!resolved && credentials?.apiKey) {
-      const url = super.buildUrl(model, stream, urlIndex, credentials);
-      return url.replace(/[?&]beta=true\b/, "").replace(/\?$/, "");
-    }
     const base = resolved?.baseUrl || credentials?.providerSpecificData?.zcodeBaseUrl || this.config.baseUrl;
-    const cleanBase = String(base || "").replace(/\/$/, "").split("?")[0];
-    if (cleanBase.endsWith("/v1/messages")) {
-      return cleanBase;
-    }
-    return `${cleanBase}/v1/messages`;
+    return `${base.replace(/\/$/, "")}/v1/messages`;
   }
 
   transformRequest(model, body, stream, credentials) {
     const transformed = super.transformRequest(model, body, stream, credentials);
-    const resolved = credentials?.providerSpecificData?.__zcodeAuth;
-
-    // Upstream rejects lowercase model names
-    if (typeof transformed?.model === "string") {
-      const m = transformed.model.toLowerCase();
-      if (m === "glm-5.3-flash") transformed.model = "GLM-5.3-Flash";
-      else if (m === "glm-5.3") transformed.model = "GLM-5.3";
-      else if (m === "glm-5.2") transformed.model = "GLM-5.2";
-      else if (m === "glm-5.1") transformed.model = "GLM-5.1";
-      else if (m === "glm-5-turbo") transformed.model = "GLM-5-Turbo";
-      else if (m === "glm-5") transformed.model = "GLM-5";
-      else if (m === "glm-4.7") transformed.model = "GLM-4.7";
-      else if (m === "glm-4.6v") transformed.model = "GLM-4.6V";
-    }
-
-    if (Array.isArray(transformed?.tools)) {
-      for (const tool of transformed.tools) {
-        if (tool && typeof tool === "object") delete tool.strict;
-      }
-    }
-    delete transformed?.context_management;
-
-    if (!resolved) return transformed;
-
     const aligned = alignZcodeSystem(transformed);
-    delete aligned.context_management;
-    if (Array.isArray(aligned.tools)) {
-      for (const tool of aligned.tools) {
-        if (tool && typeof tool === "object") delete tool.strict;
-      }
-    }
-
+    const resolved = credentials?.providerSpecificData?.__zcodeAuth;
     if (resolved?.lane === "start") {
-      const deviceId = credentials?.providerSpecificData?.deviceMid ||
-        credentials?.providerSpecificData?.deviceId ||
-        credentials?.providerSpecificData?.userId ||
-        stableDeviceMid(credentials);
-      return withStartPlanOptions(aligned, deviceId);
+      return withStartPlanOptions(aligned, credentials?.providerSpecificData?.userId);
     }
     return aligned;
   }
@@ -482,21 +231,20 @@ export class ZCodeExecutor extends DefaultExecutor {
     const apiKey = resolved?.apiKey || credentials?.apiKey || credentials?.accessToken;
     if (apiKey) {
       if (resolved?.lane === "start") {
+        // The plan gateway expects the raw zcode JWT as a Bearer token only;
+        // an extra x-api-key is answered with the same 405 block as unknown clients.
         delete headers["x-api-key"];
         headers.Authorization = `Bearer ${apiKey}`;
       } else {
+        // Project tokens are accepted with both headers on api.z.ai.
         headers["x-api-key"] = apiKey;
         headers.Authorization = `Bearer ${apiKey}`;
       }
     }
 
-    // Drop anthropic-beta: official desktop client never sends this header
-    delete headers["anthropic-beta"];
-    delete headers["Anthropic-Beta"];
-
     const version = resolved?.clientVersion || ZCODE_APP_VERSION;
+    const { platform, category } = platformTag();
     const sessionId = sessionTag(credentials?.connectionId, credentials?.providerSpecificData?.__zcodeSessionSalt);
-    const deviceMid = credentials?.providerSpecificData?.deviceMid || stableDeviceMid(credentials);
     Object.assign(headers, {
       "HTTP-Referer": "https://zcode.z.ai",
       "User-Agent": `ZCode/${version}`,
@@ -506,10 +254,9 @@ export class ZCodeExecutor extends DefaultExecutor {
       "x-client-language": "en-US",
       "x-client-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       "x-zcode-agent": "glm",
-      "x-platform": "win32-x64",
-      "x-os-category": "windows",
-      "x-os-version": "10.0.26100",
-      "x-device-mid": deviceMid,
+      "x-platform": platform,
+      "x-os-category": category,
+      "x-os-version": release(),
       "x-request-id": randomUUID(),
       "x-zcode-session-type": "main",
       "x-zcode-trace-id": randomUUID(),
