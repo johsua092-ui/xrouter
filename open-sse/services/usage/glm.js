@@ -102,6 +102,14 @@ function parseGlmCardExpiry(value) {
 async function glmResetRequest(apiKey, card, proxyOptions) {
   let response;
   try {
+    const bodyPayload = card ? {
+      targetType: "PERSONAL",
+      resetType: card.type,
+      recordId: card.recordId,
+      requestId: crypto.randomUUID(),
+      ...(card.grantType ? { grantType: card.grantType } : {})
+    } : undefined;
+
     response = await proxyAwareFetch(U("glm")[card ? "resetCardsUseUrl" : "resetCardsUrl"], {
       method: card ? "POST" : "GET",
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json", "Content-Type": "application/json" },
@@ -109,7 +117,7 @@ async function glmResetRequest(apiKey, card, proxyOptions) {
       redirect: "error",
       strictTls: true,
       ...(card ? {
-        body: JSON.stringify({ targetType: "PERSONAL", resetType: card.type, recordId: card.recordId, requestId: crypto.randomUUID() }),
+        body: JSON.stringify(bodyPayload),
       } : {}),
     // Proxy fallback would replay an irreversible POST after a potentially delivered request.
     }, card ? { ...proxyOptions, strictProxy: true } : proxyOptions);
@@ -238,7 +246,12 @@ export async function getGlmResetCards(apiKey, proxyOptions = null, providerSpec
       if (item?.available !== true || !isGlmResetCardId(item.recordId)) continue;
       const expiry = parseGlmCardExpiry(item.expireTime);
       if (expiry <= Date.now()) continue;
-      cards.push({ recordId: item.recordId, type, expiresAt: new Date(expiry).toISOString() });
+      cards.push({
+        recordId: item.recordId,
+        type,
+        ...(typeof item.grantType === "string" ? { grantType: item.grantType } : {}),
+        expiresAt: new Date(expiry).toISOString()
+      });
     }
   }
   cards.sort((a, b) => Date.parse(a.expiresAt) - Date.parse(b.expiresAt));

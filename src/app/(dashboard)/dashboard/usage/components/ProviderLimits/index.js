@@ -446,7 +446,15 @@ export default function ProviderLimits() {
         setResetConfirmState(null);
         let outcome;
         try {
-          const response = await fetch(`/api/usage/${connection.id}/glm-reset-cards`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recordId: card.recordId, type: card.type }) });
+          const response = await fetch(`/api/usage/${connection.id}/glm-reset-cards`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              recordId: card.recordId,
+              type: card.type,
+              ...(card.grantType ? { grantType: card.grantType } : {})
+            })
+          });
           outcome = classifyResetPostOutcome({ ok: response.ok, payload: await response.json().catch(() => null) });
         } catch { outcome = { kind: "uncertain" }; }
         if (outcome.kind !== "success") throw new Error(outcome.message || "GLM reset outcome is uncertain. Check your GLM dashboard before trying again.");

@@ -88,7 +88,11 @@ export async function POST(request, { params }) {
     const resolved = await resolveConnection(connectionId);
     if (resolved.response) return resolved.response;
 
-    const card = { recordId: body.recordId, type: body.type };
+    const card = {
+      recordId: body.recordId,
+      type: body.type,
+      ...(typeof body.grantType === "string" ? { grantType: body.grantType } : {})
+    };
     let connection = resolved.connection;
     let result;
     try {
@@ -98,6 +102,24 @@ export async function POST(request, { params }) {
     }
 
     if (result?.ok) {
+      // Clear rate-limit and model-lock cooldown on the connection after confirmed reset
+      try {
+        const updateData = {
+          testStatus: "active",
+          lastError: null,
+          lastErrorAt: null,
+          rateLimitedUntil: null,
+          backoffLevel: 0,
+        };
+        // Clean out any modelLock_ keys
+        for (const k of Object.keys(connection)) {
+          if (k.startsWith("modelLock_")) {
+            updateData[k] = null;
+          }
+        }
+        await updateProviderConnection(connectionId, updateData);
+      } catch {}
+
       return Response.json(result);
     }
     return failure(result?.code || "redemption_failed", result?.message || "Failed to redeem GLM reset card.", result?.status || 502, result?.uncertain);
