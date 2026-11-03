@@ -309,12 +309,17 @@ function roundRemainingPercentage(value) {
 }
 
 export function getRemainingPercentage(quota) {
+  if (quota?.percentage !== undefined) {
+    const raw = quota.percentageIsUsed ? 100 - quota.percentage : quota.percentage;
+    return roundRemainingPercentage(raw);
+  }
+
   if (quota?.remaining !== undefined) {
-    return Math.max(0, Math.round(quota.remaining));
+    return roundRemainingPercentage(quota.remaining);
   }
 
   if (quota?.remainingPercentage !== undefined) {
-    return Math.round(quota.remainingPercentage);
+    return roundRemainingPercentage(quota.remainingPercentage);
   }
 
   return calculatePercentage(quota?.used, quota?.total);

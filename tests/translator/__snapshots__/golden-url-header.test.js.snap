@@ -145,6 +145,25 @@ exports[`GOLDEN buildHeaders (default executor providers) > api-airforce → hea
 }
 `;
 
+exports[`GOLDEN buildHeaders (default executor providers) > arena-ai → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "nonStream": {
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+}
+`;
+
 exports[`GOLDEN buildHeaders (default executor providers) > assemblyai → headers (apiKey / oauth) 1`] = `
 {
   "apiKey": {
@@ -316,6 +335,25 @@ exports[`GOLDEN buildHeaders (default executor providers) > cerebras → headers
 }
 `;
 
+exports[`GOLDEN buildHeaders (default executor providers) > chatgpt-web → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "nonStream": {
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+}
+`;
+
 exports[`GOLDEN buildHeaders (default executor providers) > chutes → headers (apiKey / oauth) 1`] = `
 {
   "apiKey": {
@@ -392,6 +430,25 @@ exports[`GOLDEN buildHeaders (default executor providers) > claude → headers (
     "X-Stainless-Runtime": "node",
     "X-Stainless-Runtime-Version": "v24.14.0",
     "X-Stainless-Timeout": "600",
+  },
+}
+`;
+
+exports[`GOLDEN buildHeaders (default executor providers) > claude-web → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "nonStream": {
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
   },
 }
 `;
@@ -600,6 +657,25 @@ exports[`GOLDEN buildHeaders (default executor providers) > cohere → headers (
 }
 `;
 
+exports[`GOLDEN buildHeaders (default executor providers) > copilot-web → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "nonStream": {
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+}
+`;
+
 exports[`GOLDEN buildHeaders (default executor providers) > dahl → headers (apiKey / oauth) 1`] = `
 {
   "apiKey": {
@@ -691,6 +767,44 @@ exports[`GOLDEN buildHeaders (default executor providers) > devin-cli → header
     "Accept": "text/event-stream",
     "Authorization": "Bearer <TOK>",
     "Content-Type": "application/json",
+  },
+}
+`;
+
+exports[`GOLDEN buildHeaders (default executor providers) > dothoosh → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "nonStream": {
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+}
+`;
+
+exports[`GOLDEN buildHeaders (default executor providers) > duckduckgo-web → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "nonStream": {
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
   },
 }
 `;
@@ -1019,6 +1133,25 @@ exports[`GOLDEN buildHeaders (default executor providers) > kimi-web → headers
 }
 `;
 
+exports[`GOLDEN buildHeaders (default executor providers) > koma-free → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "nonStream": {
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+}
+`;
+
 exports[`GOLDEN buildHeaders (default executor providers) > llm7 → headers (apiKey / oauth) 1`] = `
 {
   "apiKey": {
@@ -1110,6 +1243,80 @@ exports[`GOLDEN buildHeaders (default executor providers) > minimax-cn → heade
 }
 `;
 
+exports[`GOLDEN buildHeaders (default executor providers) > minimax-code → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+    "User-Agent": "MiniMaxAgent",
+    "X-Mavis-Agent-Id": "main",
+    "X-Mavis-Session-Id": "3c016bc3-634f-4be7-90ec-95b77a90031e",
+    "X-Mavis-Timezone-Offset": "0",
+    "anthropic-version": "2023-06-01",
+    "x-api-key": "sk-xxx",
+  },
+  "nonStream": {
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+    "User-Agent": "MiniMaxAgent",
+    "X-Mavis-Agent-Id": "main",
+    "X-Mavis-Session-Id": "3cf8d78a-1568-41dc-b645-0c3c3942838a",
+    "X-Mavis-Timezone-Offset": "0",
+    "anthropic-version": "2023-06-01",
+    "x-api-key": "sk-xxx",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+    "User-Agent": "MiniMaxAgent",
+    "X-Mavis-Agent-Id": "main",
+    "X-Mavis-Session-Id": "c6289718-f549-48ff-bceb-1c5d0e16596d",
+    "X-Mavis-Timezone-Offset": "0",
+    "anthropic-version": "2023-06-01",
+    "x-api-key": "sk-xxx",
+  },
+}
+`;
+
+exports[`GOLDEN buildHeaders (default executor providers) > minimax-code-global → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+    "User-Agent": "MiniMaxAgent",
+    "X-Mavis-Agent-Id": "main",
+    "X-Mavis-Session-Id": "d3c97d89-30e5-46d1-a6eb-8c1efc856935",
+    "X-Mavis-Timezone-Offset": "0",
+    "anthropic-version": "2023-06-01",
+    "x-api-key": "sk-xxx",
+  },
+  "nonStream": {
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+    "User-Agent": "MiniMaxAgent",
+    "X-Mavis-Agent-Id": "main",
+    "X-Mavis-Session-Id": "65c03bd6-d548-4aab-98d7-8791ffce2fc7",
+    "X-Mavis-Timezone-Offset": "0",
+    "anthropic-version": "2023-06-01",
+    "x-api-key": "sk-xxx",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+    "User-Agent": "MiniMaxAgent",
+    "X-Mavis-Agent-Id": "main",
+    "X-Mavis-Session-Id": "ec22c7f3-c7bf-4b0c-81a7-afe8ef9a6333",
+    "X-Mavis-Timezone-Offset": "0",
+    "anthropic-version": "2023-06-01",
+    "x-api-key": "sk-xxx",
+  },
+}
+`;
+
 exports[`GOLDEN buildHeaders (default executor providers) > mistral → headers (apiKey / oauth) 1`] = `
 {
   "apiKey": {
@@ -1188,6 +1395,44 @@ exports[`GOLDEN buildHeaders (default executor providers) > nanobanana → heade
 `;
 
 exports[`GOLDEN buildHeaders (default executor providers) > nebius → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "nonStream": {
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+}
+`;
+
+exports[`GOLDEN buildHeaders (default executor providers) > notion-web → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "nonStream": {
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+}
+`;
+
+exports[`GOLDEN buildHeaders (default executor providers) > nous → headers (apiKey / oauth) 1`] = `
 {
   "apiKey": {
     "Accept": "text/event-stream",
@@ -1307,6 +1552,25 @@ exports[`GOLDEN buildHeaders (default executor providers) > openrouter → heade
 }
 `;
 
+exports[`GOLDEN buildHeaders (default executor providers) > opensatan → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "nonStream": {
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+}
+`;
+
 exports[`GOLDEN buildHeaders (default executor providers) > perplexity → headers (apiKey / oauth) 1`] = `
 {
   "apiKey": {
@@ -1365,6 +1629,25 @@ exports[`GOLDEN buildHeaders (default executor providers) > poolside → headers
 `;
 
 exports[`GOLDEN buildHeaders (default executor providers) > qoder-cn → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "nonStream": {
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+}
+`;
+
+exports[`GOLDEN buildHeaders (default executor providers) > river → headers (apiKey / oauth) 1`] = `
 {
   "apiKey": {
     "Accept": "text/event-stream",
@@ -1643,6 +1926,69 @@ exports[`GOLDEN buildHeaders (default executor providers) > xiaomi-mimo → head
 }
 `;
 
+exports[`GOLDEN buildHeaders (default executor providers) > yuanbao-web → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "nonStream": {
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "Cookie": "<CRED>",
+  },
+}
+`;
+
+exports[`GOLDEN buildHeaders (default executor providers) > zai-web → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "nonStream": {
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Authorization": "Bearer <TOK>",
+    "Content-Type": "application/json",
+  },
+}
+`;
+
+exports[`GOLDEN buildHeaders (default executor providers) > zcode → headers (apiKey / oauth) 1`] = `
+{
+  "apiKey": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "User-Agent": "ZCode/3.17.1",
+    "anthropic-version": "2023-06-01",
+    "x-api-key": "<CRED>",
+  },
+  "nonStream": {
+    "Content-Type": "application/json",
+    "User-Agent": "ZCode/3.17.1",
+    "anthropic-version": "2023-06-01",
+    "x-api-key": "<CRED>",
+  },
+  "oauth": {
+    "Accept": "text/event-stream",
+    "Content-Type": "application/json",
+    "User-Agent": "ZCode/3.17.1",
+    "anthropic-version": "2023-06-01",
+    "x-api-key": "<CRED>",
+  },
+}
+`;
+
 exports[`GOLDEN buildHeaders (default executor providers) > zed → headers (apiKey / oauth) 1`] = `
 {
   "apiKey": {
@@ -1714,6 +2060,13 @@ exports[`GOLDEN buildUrl (default executor providers) > api-airforce → url (st
 }
 `;
 
+exports[`GOLDEN buildUrl (default executor providers) > arena-ai → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://arena.ai/nextjs-api",
+  "stream": "https://arena.ai/nextjs-api",
+}
+`;
+
 exports[`GOLDEN buildUrl (default executor providers) > assemblyai → url (stream + non-stream) 1`] = `
 {
   "nonStream": "https://api.assemblyai.com/v1/audio/transcriptions",
@@ -1777,6 +2130,13 @@ exports[`GOLDEN buildUrl (default executor providers) > cerebras → url (stream
 }
 `;
 
+exports[`GOLDEN buildUrl (default executor providers) > chatgpt-web → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://chatgpt.com/backend-api",
+  "stream": "https://chatgpt.com/backend-api",
+}
+`;
+
 exports[`GOLDEN buildUrl (default executor providers) > chutes → url (stream + non-stream) 1`] = `
 {
   "nonStream": "https://llm.chutes.ai/v1/chat/completions",
@@ -1788,6 +2148,13 @@ exports[`GOLDEN buildUrl (default executor providers) > claude → url (stream +
 {
   "nonStream": "https://api.anthropic.com/v1/messages?beta=true",
   "stream": "https://api.anthropic.com/v1/messages?beta=true",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > claude-web → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://claude.ai/api",
+  "stream": "https://claude.ai/api",
 }
 `;
 
@@ -1833,6 +2200,13 @@ exports[`GOLDEN buildUrl (default executor providers) > cohere → url (stream +
 }
 `;
 
+exports[`GOLDEN buildUrl (default executor providers) > copilot-web → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://copilot.microsoft.com/c/api",
+  "stream": "https://copilot.microsoft.com/c/api",
+}
+`;
+
 exports[`GOLDEN buildUrl (default executor providers) > dahl → url (stream + non-stream) 1`] = `
 {
   "nonStream": "https://inference.dahl.global/v1/chat/completions",
@@ -1865,6 +2239,20 @@ exports[`GOLDEN buildUrl (default executor providers) > devin-cli → url (strea
 {
   "nonStream": "devin://acp/stdio",
   "stream": "devin://acp/stdio",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > dothoosh → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://gateway.dothoosh.com/v1/chat/completions",
+  "stream": "https://gateway.dothoosh.com/v1/chat/completions",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > duckduckgo-web → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://duckduckgo.com/duckchat/v1",
+  "stream": "https://duckduckgo.com/duckchat/v1",
 }
 `;
 
@@ -1973,6 +2361,13 @@ exports[`GOLDEN buildUrl (default executor providers) > kimi-web → url (stream
 }
 `;
 
+exports[`GOLDEN buildUrl (default executor providers) > koma-free → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://koma.run/api/v1/koma-free/chat/completions",
+  "stream": "https://koma.run/api/v1/koma-free/chat/completions",
+}
+`;
+
 exports[`GOLDEN buildUrl (default executor providers) > llm7 → url (stream + non-stream) 1`] = `
 {
   "nonStream": "https://api.llm7.io/v1/chat/completions",
@@ -1998,6 +2393,20 @@ exports[`GOLDEN buildUrl (default executor providers) > minimax-cn → url (stre
 {
   "nonStream": "https://api.minimaxi.com/anthropic/v1/messages?beta=true",
   "stream": "https://api.minimaxi.com/anthropic/v1/messages?beta=true",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > minimax-code → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://agent.minimax.cn/mavis/api/v1/llm/v1/messages",
+  "stream": "https://agent.minimax.cn/mavis/api/v1/llm/v1/messages",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > minimax-code-global → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://agent.minimax.io/mavis/api/v1/llm/v1/messages",
+  "stream": "https://agent.minimax.io/mavis/api/v1/llm/v1/messages",
 }
 `;
 
@@ -2036,6 +2445,20 @@ exports[`GOLDEN buildUrl (default executor providers) > nebius → url (stream +
 }
 `;
 
+exports[`GOLDEN buildUrl (default executor providers) > notion-web → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://www.notion.so/api/v3",
+  "stream": "https://www.notion.so/api/v3",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > nous → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://inference-api.nousresearch.com/v1/chat/completions",
+  "stream": "https://inference-api.nousresearch.com/v1/chat/completions",
+}
+`;
+
 exports[`GOLDEN buildUrl (default executor providers) > nvidia → url (stream + non-stream) 1`] = `
 {
   "nonStream": "https://integrate.api.nvidia.com/v1/chat/completions",
@@ -2071,6 +2494,13 @@ exports[`GOLDEN buildUrl (default executor providers) > openrouter → url (stre
 }
 `;
 
+exports[`GOLDEN buildUrl (default executor providers) > opensatan → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://opensatan.com/api/chat",
+  "stream": "https://opensatan.com/api/chat",
+}
+`;
+
 exports[`GOLDEN buildUrl (default executor providers) > perplexity → url (stream + non-stream) 1`] = `
 {
   "nonStream": "https://api.perplexity.ai/chat/completions",
@@ -2096,6 +2526,13 @@ exports[`GOLDEN buildUrl (default executor providers) > qoder-cn → url (stream
 {
   "nonStream": "https://gateway.qoder.com.cn/algo/api/v2/service/pro/sse/agent_chat_generation",
   "stream": "https://gateway.qoder.com.cn/algo/api/v2/service/pro/sse/agent_chat_generation",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > river → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://api.river.ai/v1/chat/completions",
+  "stream": "https://api.river.ai/v1/chat/completions",
 }
 `;
 
@@ -2187,6 +2624,27 @@ exports[`GOLDEN buildUrl (default executor providers) > xiaomi-mimo → url (str
 {
   "nonStream": "https://api.xiaomimimo.com/v1/chat/completions",
   "stream": "https://api.xiaomimimo.com/v1/chat/completions",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > yuanbao-web → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://yuanbao.tencent.com/api",
+  "stream": "https://yuanbao.tencent.com/api",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > zai-web → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://chat.z.ai/openai/chat/completions",
+  "stream": "https://chat.z.ai/openai/chat/completions",
+}
+`;
+
+exports[`GOLDEN buildUrl (default executor providers) > zcode → url (stream + non-stream) 1`] = `
+{
+  "nonStream": "https://api.z.ai/api/anthropic",
+  "stream": "https://api.z.ai/api/anthropic",
 }
 `;
 

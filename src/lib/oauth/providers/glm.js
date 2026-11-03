@@ -256,10 +256,13 @@ async function exchangeBusinessToken(config, zaiAccessToken) {
 // data is returned directly (null when missing).
 async function fetchBusinessJson(url, options, label) {
   const { proxyAwareFetch } = await import("open-sse/utils/proxyFetch.js");
-  const response = await proxyAwareFetch(url, {
-    ...options,
-    signal: options.signal || AbortSignal.timeout(10000),
-  }).catch((err) => {
+  const fetchFn = typeof proxyAwareFetch === "function" ? proxyAwareFetch : fetch;
+  const response = await Promise.resolve(
+    fetchFn(url, {
+      ...options,
+      signal: options.signal || AbortSignal.timeout(10000),
+    }),
+  ).catch((err) => {
     throw new Error(`Z.ai ${label} network error: ${err?.message || err}`);
   });
   const text = await response.text();

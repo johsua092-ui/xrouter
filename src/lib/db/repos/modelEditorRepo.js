@@ -49,12 +49,16 @@ function toModel(callName, value) {
   return {
   callName,
   displayName: (value.displayName || "").trim() || callName,
+  ownedBy: (typeof value.ownedBy === "string" ? value.ownedBy.trim() : "") || "",
   targetModel: target,
    targetLabel: (value.targetLabel || value.targetModel || "").trim() || target,
   provider: target.slice(0, firstSlash),
   model: target.slice(firstSlash + 1),
   contextWindow: Number(value.contextWindow) || 0,
   systemPrompt: typeof value.systemPrompt === "string" ? value.systemPrompt : "",
+  antiProbe: typeof value.antiProbe === "boolean" ? value.antiProbe : undefined,
+  inputMultiplier: Number(value.inputMultiplier) > 0 ? Number(value.inputMultiplier) : undefined,
+  outputMultiplier: Number(value.outputMultiplier) > 0 ? Number(value.outputMultiplier) : undefined,
   createdAt: value.createdAt || "",
   };
 }
@@ -65,6 +69,7 @@ function toComboTargetModel(callName, value, target) {
   return {
   callName,
   displayName: (value.displayName || "").trim() || callName,
+  ownedBy: (typeof value.ownedBy === "string" ? value.ownedBy.trim() : "") || "",
   targetModel: target,
    targetLabel: (value.targetLabel || value.targetModel || "").trim() || target,
   provider: "combo",
@@ -72,6 +77,9 @@ function toComboTargetModel(callName, value, target) {
   isComboTarget: true,
   contextWindow: Number(value.contextWindow) || 0,
   systemPrompt: typeof value.systemPrompt === "string" ? value.systemPrompt : "",
+  antiProbe: typeof value.antiProbe === "boolean" ? value.antiProbe : undefined,
+  inputMultiplier: Number(value.inputMultiplier) > 0 ? Number(value.inputMultiplier) : undefined,
+  outputMultiplier: Number(value.outputMultiplier) > 0 ? Number(value.outputMultiplier) : undefined,
   createdAt: value.createdAt || "",
   };
 }
@@ -113,14 +121,18 @@ export async function getStudioModel(callName) {
   return value ? toModel(callName, value) : null;
 }
 
-export async function setStudioModel({ callName, displayName, targetModel, targetLabel, contextWindow, systemPrompt }) {
+export async function setStudioModel({ callName, displayName, ownedBy, targetModel, targetLabel, contextWindow, systemPrompt, antiProbe, inputMultiplier, outputMultiplier }) {
   const payload = {
   callName,
   displayName: (displayName || "").trim(),
+  ownedBy: (ownedBy || "").trim(),
   targetModel: (targetModel || "").trim(),
    targetLabel: (targetLabel || targetModel || "").trim(),
   contextWindow: Number(contextWindow) || 0,
   systemPrompt: systemPrompt || "",
+  ...(typeof antiProbe === "boolean" ? { antiProbe } : {}),
+  ...(Number(inputMultiplier) > 0 ? { inputMultiplier: Number(inputMultiplier) } : {}),
+  ...(Number(outputMultiplier) > 0 ? { outputMultiplier: Number(outputMultiplier) } : {}),
   createdAt: new Date().toISOString(),
   };
   await store().set(callName, payload);

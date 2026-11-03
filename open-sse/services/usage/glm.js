@@ -61,8 +61,7 @@ export function parseGlmQuotaResponse(json) {
       total: 100,
       remaining,
       remainingPercentage: remaining,
-      usedTokens: absUsed,
-      totalTokens: absTotal,
+      ...(absTotal > 0 || absUsed > 0 ? { usedTokens: absUsed, totalTokens: absTotal } : {}),
       resetAt: resetMs > 0 ? new Date(resetMs).toISOString() : null,
       unlimited: false,
     };
@@ -344,6 +343,7 @@ export async function getGlmUsage(apiKey, provider, proxyOptions = null, provide
     if (quotaRes.status === 401 && !balanceData) {
       return { message: "GLM API key invalid or expired." };
     }
+    message = `GLM quota API error (${quotaRes.status}).`;
   }
 
   // Merge ZCode billing balance (gift cards, Weekend Build 500M tokens, Start Plan grants)
@@ -389,7 +389,7 @@ export async function getGlmUsage(apiKey, provider, proxyOptions = null, provide
     } catch {}
   }
 
-  return { plan, quotas, message, resetCards };
+  return { plan, quotas, ...(message ? { message } : {}), resetCards };
 }
 
 /**
@@ -416,9 +416,9 @@ export async function getGlmClaimablePlans(token, proxyOptions = null, options =
   };
 
   const [previewRes, incentiveRes, touchRes] = await Promise.all([
-    proxyAwareFetch(url.toString(), { method: "GET", headers: zcodeHeaders, signal: AbortSignal.timeout(12000), redirect: "error" }, proxyOptions).catch(() => null),
-    proxyAwareFetch(ZCODE_INCENTIVE_SUMMARY_URL, { method: "GET", headers: zcodeHeaders, signal: AbortSignal.timeout(12000), redirect: "error" }, proxyOptions).catch(() => null),
-    proxyAwareFetch(`${ZCODE_MARKETING_TOUCH_URL}?seq=1`, { method: "GET", headers: zcodeHeaders, signal: AbortSignal.timeout(12000), redirect: "error" }, proxyOptions).catch(() => null),
+    Promise.resolve(proxyAwareFetch(url.toString(), { method: "GET", headers: zcodeHeaders, signal: AbortSignal.timeout(12000), redirect: "error" }, proxyOptions)).catch(() => null),
+    Promise.resolve(proxyAwareFetch(ZCODE_INCENTIVE_SUMMARY_URL, { method: "GET", headers: zcodeHeaders, signal: AbortSignal.timeout(12000), redirect: "error" }, proxyOptions)).catch(() => null),
+    Promise.resolve(proxyAwareFetch(`${ZCODE_MARKETING_TOUCH_URL}?seq=1`, { method: "GET", headers: zcodeHeaders, signal: AbortSignal.timeout(12000), redirect: "error" }, proxyOptions)).catch(() => null),
   ]);
 
   const plansMap = new Map();

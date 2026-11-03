@@ -1,21 +1,14 @@
-# v0.0.10 (2026-11-03)
+# v0.0.7 (2026-11-03)
 
 - **Fix Standalone Preloaded wreq-js Instance & Zero-Import ZCode TLS Impersonation**:
   - Preloaded `wreq-js` instance into `globalThis.__xrouter_wreq__` in both `custom-server.js` and standalone `server.js` before Next.js server initialization.
   - Prioritized `globalThis.__xrouter_wreq__` directly in `zcodeTlsClient.js` and `opencodeTlsClient.js`, bypassing webpack chunk dynamic import isolation completely (`Cannot find package 'wreq-js'`).
   - Cleaned up entrypoint require hook injection in `scripts/copy-standalone-assets.mjs`.
-
-# v0.0.9 (2026-11-03)
-
 - **Fix Standalone Webpack Scope wreq-js Native Loader & 3012 WAF Bypass**:
   - Resolved `eval("require")` reference failure in Webpack standalone chunk scope where `require` was not in lexical scope, leading to `wreq-js unavailable` and failing open to native fetch.
   - Implemented global require bootstrap hook (`globalThis.__xrouter_native_require__`) initialized at entrypoint (`custom-server.js` and standalone `server.js`).
   - Added multi-tier resolution using `process.getBuiltinModule("module")`, dynamic `Function` constructor require/import completely invisible to Webpack AST analysis, candidate `package.json` resolution, and direct `.cjs` file resolution.
   - Hardened both `zcodeTlsClient.js` and `opencodeTlsClient.js` against standalone Next.js bundling quirks.
-
-# v0.0.8 (2026-11-03)
-
-## Updates & Improvements
 - **Fix Standalone & CLI wreq-js Native Loader & 3012 WAF Bypass**:
   - Fixed webpack module bundling issue where `import("node:module")` resolved to undefined, causing `cjs fallback: e is not a function` and failing open to native fetch.
   - Replaced broken webpack-intercepted loader in `zcodeTlsClient.js` and `opencodeTlsClient.js` with multi-tier native require (`__non_webpack_require__` / `eval("require")`), candidate package.json `createRequire`, and direct filesystem resolution.

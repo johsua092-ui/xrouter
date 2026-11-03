@@ -111,8 +111,12 @@ export async function POST(request) {
   targetModel,
   targetLabel: body.targetModel,
   displayName: body.displayName,
+  ownedBy: body.ownedBy,
   contextWindow: body.contextWindow,
   systemPrompt: body.systemPrompt,
+  antiProbe: body.antiProbe,
+  inputMultiplier: body.inputMultiplier,
+  outputMultiplier: body.outputMultiplier,
   });
 
   return NextResponse.json({ model });
@@ -143,8 +147,12 @@ export async function PUT(request) {
   targetModel,
   targetLabel: body.targetModel,
   displayName: body.displayName,
+  ownedBy: body.ownedBy,
   contextWindow: body.contextWindow,
   systemPrompt: body.systemPrompt,
+  antiProbe: body.antiProbe,
+  inputMultiplier: body.inputMultiplier,
+  outputMultiplier: body.outputMultiplier,
   });
 
   if (previousName !== callName) {

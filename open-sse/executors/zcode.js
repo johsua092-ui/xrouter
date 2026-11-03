@@ -408,13 +408,17 @@ export class ZCodeExecutor extends DefaultExecutor {
       return super.buildUrl(model, stream, urlIndex, credentials);
     }
     const base = resolved?.baseUrl || credentials?.providerSpecificData?.zcodeBaseUrl || this.config.baseUrl;
-    return `${base.replace(/\/$/, "")}/v1/messages`;
+    const cleanBase = String(base || "").replace(/\/$/, "");
+    if (cleanBase.endsWith("/v1/messages")) {
+      return this.config?.urlSuffix ? `${cleanBase}${this.config.urlSuffix}` : cleanBase;
+    }
+    const target = `${cleanBase}/v1/messages`;
+    return this.config?.urlSuffix ? `${target}${this.config.urlSuffix}` : target;
   }
 
   transformRequest(model, body, stream, credentials) {
     const transformed = super.transformRequest(model, body, stream, credentials);
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
-    if (!resolved) return transformed;
 
     // Upstream rejects lowercase model names
     if (typeof transformed?.model === "string") {
@@ -422,8 +426,21 @@ export class ZCodeExecutor extends DefaultExecutor {
       if (m === "glm-5.3-flash") transformed.model = "GLM-5.3-Flash";
       else if (m === "glm-5.3") transformed.model = "GLM-5.3";
       else if (m === "glm-5.2") transformed.model = "GLM-5.2";
+      else if (m === "glm-5.1") transformed.model = "GLM-5.1";
       else if (m === "glm-5-turbo") transformed.model = "GLM-5-Turbo";
+      else if (m === "glm-5") transformed.model = "GLM-5";
+      else if (m === "glm-4.7") transformed.model = "GLM-4.7";
+      else if (m === "glm-4.6v") transformed.model = "GLM-4.6V";
     }
+
+    if (Array.isArray(transformed?.tools)) {
+      for (const tool of transformed.tools) {
+        if (tool && typeof tool === "object") delete tool.strict;
+      }
+    }
+    delete transformed?.context_management;
+
+    if (!resolved) return transformed;
 
     const aligned = alignZcodeSystem(transformed);
     delete aligned.context_management;

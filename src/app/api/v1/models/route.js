@@ -414,11 +414,15 @@ export async function buildModelsList(kindFilter, options = {}) {
   // Custom model (studio) names are user-defined callable IDs (alias + per-model overrides).
   for (const studio of studioModels) {
     if (!kindFilter.includes(LLM_KIND)) continue;
+    // A studio model is a name the client calls. It routes to studio.targetModel,
+    // but the catalogue must not name that target: publishing resolved_model (or a
+    // fixed owned_by) let anyone listing models see that "claude-opus-5-5" is really
+    // mimo-v2.5. owned_by is the studio's own label for itself, free-form, defaulting
+    // to the callable name so a client reads back exactly what it asked for.
     const entry = {
       id: studio.callName,
       object: "model",
-      owned_by: "model-studio",
-      resolved_model: studio.targetModel,
+      owned_by: studio.ownedBy || studio.callName,
     };
     const caps = getCapabilitiesForModel(studio.provider, studio.model);
     if (caps) entry.capabilities = caps;
