@@ -122,7 +122,7 @@ function antiMaskFindings({ callName, ownedBy, targetModel }) {
 }
 
 export default function ModelStudioPage() {
-  const [activeTab, setActiveTab] = useState("models"); // "models" | "masking"
+  const [activeTab, setActiveTab] = useState("masking"); // "masking" | "models"
   const [models, setModels] = useState([]);
   const [providerNodes, setProviderNodes] = useState([]);
   const [activeProviders, setActiveProviders] = useState([]);
@@ -197,8 +197,8 @@ export default function ModelStudioPage() {
         {/* Tab Switcher */}
         <SegmentedControl
           options={[
+            { value: "masking", label: "Masking Model", icon: "masks" },
             { value: "models", label: `Custom Models (${models.length})`, icon: "auto_awesome" },
-            { value: "masking", label: "Model Masking & Anti-Probe", icon: "masks" },
           ]}
           value={activeTab}
           onChange={setActiveTab}
@@ -206,7 +206,20 @@ export default function ModelStudioPage() {
         />
       </div>
 
-      {activeTab === "models" ? (
+      {activeTab === "masking" ? (
+        <ModelMaskingTab
+          models={models}
+          providerNodes={providerNodes}
+          loading={loading}
+          removing={removing}
+          copiedName={copiedName}
+          copy={copy}
+          onOpenCreate={() => openCreate("masking")}
+          onOpenEdit={(model) => openEdit(model, "masking")}
+          onDelete={handleDelete}
+          onRefresh={fetchData}
+        />
+      ) : (
         <CustomModelsTab
           models={models}
           providerNodes={providerNodes}
@@ -217,19 +230,6 @@ export default function ModelStudioPage() {
           copy={copy}
           onOpenCreate={() => openCreate("standard")}
           onOpenEdit={(model) => openEdit(model, "standard")}
-          onDelete={handleDelete}
-          onRefresh={fetchData}
-        />
-      ) : (
-        <ModelMaskingTab
-          models={models}
-          providerNodes={providerNodes}
-          loading={loading}
-          removing={removing}
-          copiedName={copiedName}
-          copy={copy}
-          onOpenCreate={() => openCreate("masking")}
-          onOpenEdit={(model) => openEdit(model, "masking")}
           onDelete={handleDelete}
           onRefresh={fetchData}
         />
@@ -680,6 +680,35 @@ function StudioFormModal({
     editing?.contextWindow ? String(editing.contextWindow) : ""
   );
   const [systemPrompt, setSystemPrompt] = useState(editing?.systemPrompt || "");
+  const [importedPromptFileName, setImportedPromptFileName] = useState("");
+  const promptFileInputRef = useRef(null);
+
+  const handleImportPromptFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = String(event.target?.result || "");
+      setSystemPrompt(content);
+      setImportedPromptFileName(file.name);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const handleDropPromptFile = (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith(".md") && !file.name.endsWith(".txt")) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = String(event.target?.result || "");
+      setSystemPrompt(content);
+      setImportedPromptFileName(file.name);
+    };
+    reader.readAsText(file);
+  };
 
   // Initialize prefix and baseName from editing
   useEffect(() => {
@@ -1052,16 +1081,47 @@ function StudioFormModal({
 
           {/* System Prompt */}
           <div>
-            <label className="block text-xs font-medium text-text-main mb-1">
-              System prompt <span className="text-text-muted font-normal">(optional)</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-medium text-text-main">
+                System prompt <span className="text-text-muted font-normal">(optional)</span>
+              </label>
+              <div>
+                <input
+                  type="file"
+                  ref={promptFileInputRef}
+                  accept=".md,.txt,text/markdown,text/plain"
+                  className="hidden"
+                  onChange={handleImportPromptFile}
+                />
+                <button
+                  type="button"
+                  onClick={() => promptFileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-surface-2 hover:bg-surface-3 border border-border text-text-muted hover:text-text-main transition-colors"
+                  title="Import .md or .txt file"
+                >
+                  <span className="material-symbols-outlined text-[13px] text-primary">upload_file</span>
+                  Import .md / .txt
+                </button>
+              </div>
+            </div>
             <textarea
               value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              placeholder="Instructions prepended to every request that uses this model/mask..."
+              onChange={(e) => {
+                setSystemPrompt(e.target.value);
+                setImportedPromptFileName("");
+              }}
+              onDrop={handleDropPromptFile}
+              onDragOver={(e) => e.preventDefault()}
+              placeholder="Instructions prepended to every request that uses this model/mask (drag & drop or import .md/.txt)..."
               rows={3}
               className="w-full rounded-[6px] border border-border/50 bg-surface-2 p-2.5 text-sm text-text-main placeholder-text-muted/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all duration-150 ease-out resize-y"
             />
+            {importedPromptFileName && (
+              <p className="text-[11px] text-text-muted mt-1 flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px] text-primary">check_circle</span>
+                Imported from <span className="font-mono font-medium text-text-main">{importedPromptFileName}</span>
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 mt-1">

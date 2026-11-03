@@ -277,6 +277,9 @@ function getHostIp() {
   return "104.207.77.41";
 }
 
+const LOCAL_GATEWAY_PORT = process.env.PORT || 3000;
+const ADMIN_LOGIN_PASSWORD = process.env.INITIAL_PASSWORD || "xrouter123";
+
 let cachedAuthCookie = null;
 let cookieExpireAt = 0;
 
@@ -285,8 +288,8 @@ async function getAdminCookie() {
     return cachedAuthCookie;
   }
   return new Promise((resolve) => {
-    const payload = JSON.stringify({ password: "xrouter123" });
-    const req = http.request("http://127.0.0.1:8080/api/auth/login", {
+    const payload = JSON.stringify({ password: ADMIN_LOGIN_PASSWORD });
+    const req = http.request(`http://127.0.0.1:${LOCAL_GATEWAY_PORT}/api/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -326,7 +329,7 @@ function callInternalApi(endpoint, method = "GET", body = null) {
       headers["Content-Length"] = Buffer.byteLength(payload);
     }
 
-    const req = http.request(`http://127.0.0.1:8080${endpoint}`, {
+    const req = http.request(`http://127.0.0.1:${LOCAL_GATEWAY_PORT}${endpoint}`, {
       method,
       headers,
     }, (res) => {
@@ -878,7 +881,7 @@ async function getActiveProvidersWithModels() {
 
   return new Promise((resolve) => {
     const req = http.request(
-      "http://127.0.0.1:8080/v1/models",
+      `http://127.0.0.1:${LOCAL_GATEWAY_PORT}/v1/models`,
       {
         headers: { Authorization: "Bearer " + key },
         timeout: 4000,
@@ -1185,7 +1188,7 @@ async function executeArenaCall(model, prompt) {
   const callLocal = () =>
     new Promise((resolve) => {
       const req = http.request(
-        `http://127.0.0.1:8080${tryEndpoint}`,
+        `http://127.0.0.1:${LOCAL_GATEWAY_PORT}${tryEndpoint}`,
         {
           method: "POST",
           headers: {
@@ -2365,7 +2368,7 @@ Pilih fitur pemeriksaan model, arena perbandingan, atau latensi di bawah ini:`;
 
       try {
         await new Promise((resolve, reject) => {
-          const req = http.get("http://127.0.0.1:8080/api/health", { timeout: 4000 }, (res) => {
+          const req = http.get(`http://127.0.0.1:${LOCAL_GATEWAY_PORT}/api/health`, { timeout: 4000 }, (res) => {
             statusCode = res.statusCode;
             latencyMs = Date.now() - start;
             resolve();
@@ -2383,7 +2386,7 @@ Pilih fitur pemeriksaan model, arena perbandingan, atau latensi di bawah ini:`;
 
       const text =
         `<blockquote>[ GATEWAY LOCAL PING DIAGNOSTIC ]</blockquote>\n\n` +
-        `Endpoint       : <code>http://127.0.0.1:8080/api/health</code>\n` +
+        `Endpoint       : <code>http://127.0.0.1:${LOCAL_GATEWAY_PORT}/api/health</code>\n` +
         `Response Status: <code>${statusCode} OK</code>\n` +
         `Internal Ping  : <b>${latencyMs} ms</b>\n\n` +
         `<i>Server loopback event-loop merespon normal.</i>`;
@@ -2418,7 +2421,7 @@ Pilih fitur pemeriksaan model, arena perbandingan, atau latensi di bawah ini:`;
           });
 
           const resp = await new Promise((resolve) => {
-            const req = http.request("http://127.0.0.1:8080/v1/chat/completions", {
+            const req = http.request(`http://127.0.0.1:${LOCAL_GATEWAY_PORT}/v1/chat/completions`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -5070,7 +5073,7 @@ Pilih fitur pemeriksaan model, arena perbandingan, atau latensi di bawah ini:`;
           });
 
           const respText = await new Promise((resolve, reject) => {
-            const req = http.request("http://127.0.0.1:8080/v1/chat/completions", {
+            const req = http.request(`http://127.0.0.1:${LOCAL_GATEWAY_PORT}/v1/chat/completions`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -5133,7 +5136,7 @@ Pilih fitur pemeriksaan model, arena perbandingan, atau latensi di bawah ini:`;
           });
 
           return new Promise((resolve) => {
-            const req = http.request("http://127.0.0.1:8080/v1/chat/completions", {
+            const req = http.request(`http://127.0.0.1:${LOCAL_GATEWAY_PORT}/v1/chat/completions`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
