@@ -43,6 +43,12 @@ function normalizeWreq(mod) {
 async function getWreqModule() {
   if (cachedWreq) return cachedWreq;
 
+  // 0. Global preloaded instance from custom-server.js / standalone server.js
+  if (typeof globalThis !== "undefined" && isValidWreq(globalThis.__xrouter_wreq__)) {
+    cachedWreq = normalizeWreq(globalThis.__xrouter_wreq__);
+    return cachedWreq;
+  }
+
   const nativeReq = getNativeRequire();
 
   // 1. Direct native CommonJS require (bypasses webpack chunk scope)

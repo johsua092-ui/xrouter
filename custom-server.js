@@ -8,6 +8,9 @@ const { pathToFileURL } = require("url");
 if (typeof globalThis !== "undefined") {
   globalThis.__xrouter_native_require__ = require;
   globalThis.__non_webpack_require__ = require;
+  try {
+    globalThis.__xrouter_wreq__ = require("wreq-js");
+  } catch {}
 }
 
 const origCreate = http.createServer.bind(http);

@@ -42,12 +42,12 @@ export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = pr
   const standaloneServer = resolve(standaloneDir, "server.js");
   if (existsSync(standaloneServer)) {
     try {
-      const serverCode = readFileSync(standaloneServer, "utf8");
-      if (!serverCode.includes("__xrouter_native_require__")) {
-        const hook = `if (typeof globalThis !== "undefined") {\n  globalThis.__xrouter_native_require__ = require;\n  globalThis.__non_webpack_require__ = require;\n}\n`;
-        writeFileSync(standaloneServer, hook + serverCode, "utf8");
-        console.log(`[standalone-assets] Injected native require hook into ${standaloneServer}`);
-      }
+      let serverCode = readFileSync(standaloneServer, "utf8");
+      // Strip any previous hook cleanly
+      serverCode = serverCode.replace(/^if \(typeof globalThis !== "undefined"\) \{[\s\S]*?\}\n/, "");
+      const hook = `if (typeof globalThis !== "undefined") {\n  globalThis.__xrouter_native_require__ = require;\n  globalThis.__non_webpack_require__ = require;\n  try { globalThis.__xrouter_wreq__ = require("wreq-js"); } catch {}\n}\n`;
+      writeFileSync(standaloneServer, hook + serverCode, "utf8");
+      console.log(`[standalone-assets] Injected native require hook into ${standaloneServer}`);
     } catch {}
   }
 

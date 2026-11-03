@@ -1,3 +1,10 @@
+# v0.0.10 (2026-11-03)
+
+- **Fix Standalone Preloaded wreq-js Instance & Zero-Import ZCode TLS Impersonation**:
+  - Preloaded `wreq-js` instance into `globalThis.__xrouter_wreq__` in both `custom-server.js` and standalone `server.js` before Next.js server initialization.
+  - Prioritized `globalThis.__xrouter_wreq__` directly in `zcodeTlsClient.js` and `opencodeTlsClient.js`, bypassing webpack chunk dynamic import isolation completely (`Cannot find package 'wreq-js'`).
+  - Cleaned up entrypoint require hook injection in `scripts/copy-standalone-assets.mjs`.
+
 # v0.0.9 (2026-11-03)
 
 - **Fix Standalone Webpack Scope wreq-js Native Loader & 3012 WAF Bypass**:
