@@ -254,6 +254,8 @@ function buildCliPackage() {
   ensureModuleInBundle("bcryptjs");
   ensureModuleInBundle("uuid");
   ensureModuleInBundle("node-machine-id");
+  ensureModuleInBundle("wreq-js");
+  ensureModuleInBundle("@wreq-js");
   const betterDir = path.join(cliAppDir, "node_modules", "better-sqlite3");
   if (fs.existsSync(betterDir)) {
     fs.rmSync(betterDir, { recursive: true, force: true });

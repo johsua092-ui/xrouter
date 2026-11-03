@@ -5,39 +5,114 @@
 const sessionCache = new Map();
 let cachedWreq = null;
 
+function getNativeRequire() {
+  try {
+    if (typeof __non_webpack_require__ !== "undefined") return __non_webpack_require__;
+  } catch {}
+  try {
+    return eval("require");
+  } catch {}
+  return null;
+}
+
+function isValidWreq(mod) {
+  return mod && (typeof mod.createSession === "function" || typeof mod.default?.createSession === "function");
+}
+
+function normalizeWreq(mod) {
+  if (!mod) return null;
+  return typeof mod.createSession === "function" ? mod : mod.default;
+}
+
 async function getWreqModule() {
   if (cachedWreq) return cachedWreq;
-  try {
-    cachedWreq = await import("wreq-js");
-    return cachedWreq;
-  } catch (esmError) {
+
+  const nativeReq = getNativeRequire();
+
+  // 1. Direct native CommonJS require (bypasses webpack chunk scope)
+  if (nativeReq) {
     try {
-      const { createRequire } = await import("node:module");
-      const require = createRequire(import.meta.url);
-      cachedWreq = require("wreq-js");
-      return cachedWreq;
-    } catch (cjsError) {
-      try {
-        const { createRequire } = await import("node:module");
-        const path = await import("node:path");
-        const fs = await import("node:fs");
-        const candidates = [
-          path.resolve(process.cwd(), "package.json"),
-          path.resolve(process.cwd(), "..", "..", "package.json"),
+      const mod = nativeReq("wreq-js");
+      if (isValidWreq(mod)) {
+        cachedWreq = normalizeWreq(mod);
+        return cachedWreq;
+      }
+    } catch {}
+  }
+
+  // 2. createRequire via native module
+  if (nativeReq) {
+    try {
+      const nodeModule = nativeReq("node:module") || nativeReq("module");
+      const createReq = nodeModule?.createRequire || nodeModule?.default?.createRequire;
+      if (typeof createReq === "function") {
+        const path = nativeReq("node:path") || nativeReq("path");
+        const fs = nativeReq("node:fs") || nativeReq("fs");
+        const cwd = process.cwd();
+        const pkgCandidates = [
+          path.resolve(cwd, "package.json"),
+          path.resolve(cwd, "..", "package.json"),
+          path.resolve(cwd, "..", "..", "package.json"),
+          path.resolve(cwd, ".next", "standalone", "package.json"),
+          "/root/xrouter/package.json",
+          "/root/xrouter/.next/standalone/package.json",
         ];
-        for (const pkgPath of candidates) {
-          if (fs.existsSync(pkgPath)) {
+        for (const pkg of pkgCandidates) {
+          if (fs.existsSync(pkg)) {
             try {
-              const require = createRequire(pkgPath);
-              cachedWreq = require("wreq-js");
-              if (cachedWreq) return cachedWreq;
+              const req = createReq(pkg);
+              const mod = req("wreq-js");
+              if (isValidWreq(mod)) {
+                cachedWreq = normalizeWreq(mod);
+                return cachedWreq;
+              }
             } catch {}
           }
         }
-      } catch {}
-      throw new Error(`wreq-js import failed: ${esmError?.message || esmError} (cjs fallback: ${cjsError?.message || cjsError})`);
-    }
+      }
+    } catch {}
   }
+
+  // 3. Direct file path resolution
+  if (nativeReq) {
+    try {
+      const path = nativeReq("node:path") || nativeReq("path");
+      const fs = nativeReq("node:fs") || nativeReq("fs");
+      const cwd = process.cwd();
+      const directCandidates = [
+        path.resolve(cwd, "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
+        path.resolve(cwd, "node_modules", "wreq-js"),
+        path.resolve(cwd, "..", "..", "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
+        path.resolve(cwd, "..", "..", "node_modules", "wreq-js"),
+        "/root/xrouter/node_modules/wreq-js/dist/wreq-js.cjs",
+        "/root/xrouter/.next/standalone/node_modules/wreq-js/dist/wreq-js.cjs",
+      ];
+      for (const direct of directCandidates) {
+        if (fs.existsSync(direct)) {
+          try {
+            const mod = nativeReq(direct);
+            if (isValidWreq(mod)) {
+              cachedWreq = normalizeWreq(mod);
+              return cachedWreq;
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+
+  // 4. ESM dynamic import
+  try {
+    const mod = await import("wreq-js");
+    if (isValidWreq(mod)) {
+      cachedWreq = normalizeWreq(mod);
+      return cachedWreq;
+    }
+  } catch (esmError) {
+    throw new Error(`wreq-js import failed: ${esmError?.message || esmError}`);
+  }
+
+  throw new Error("wreq-js runtime missing createSession");
 }
 
 async function getSession(proxyUrl = "") {

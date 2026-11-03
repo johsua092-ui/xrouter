@@ -1,4 +1,4 @@
-import { cpSync, existsSync } from "node:fs";
+import { cpSync, existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -57,17 +57,34 @@ export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = pr
   }
 
   // Copy wreq-js and @wreq-js native bindings so TLS fingerprint impersonation works in standalone mode
+  const standaloneDirs = [standaloneDir];
+  try {
+    const pkgJson = resolve(projectRoot, "package.json");
+    if (existsSync(pkgJson)) {
+      const pkg = JSON.parse(readFileSync(pkgJson, "utf8"));
+      if (pkg.name) {
+        const nested = resolve(standaloneDir, pkg.name);
+        if (existsSync(nested) && !standaloneDirs.includes(nested)) {
+          standaloneDirs.push(nested);
+        }
+      }
+    }
+  } catch {}
+
   const wreqSrc = resolve(projectRoot, "node_modules", "wreq-js");
-  const wreqDest = resolve(standaloneDir, "node_modules", "wreq-js");
-  if (existsSync(wreqSrc)) {
-    cpSync(wreqSrc, wreqDest, { recursive: true, force: true });
-    console.log(`[standalone-assets] Copied wreq-js to ${wreqDest}`);
-  }
   const wreqBindingSrc = resolve(projectRoot, "node_modules", "@wreq-js");
-  const wreqBindingDest = resolve(standaloneDir, "node_modules", "@wreq-js");
-  if (existsSync(wreqBindingSrc)) {
-    cpSync(wreqBindingSrc, wreqBindingDest, { recursive: true, force: true });
-    console.log(`[standalone-assets] Copied @wreq-js to ${wreqBindingDest}`);
+
+  for (const targetDir of standaloneDirs) {
+    const wreqDest = resolve(targetDir, "node_modules", "wreq-js");
+    if (existsSync(wreqSrc)) {
+      cpSync(wreqSrc, wreqDest, { recursive: true, force: true });
+      console.log(`[standalone-assets] Copied wreq-js to ${wreqDest}`);
+    }
+    const wreqBindingDest = resolve(targetDir, "node_modules", "@wreq-js");
+    if (existsSync(wreqBindingSrc)) {
+      cpSync(wreqBindingSrc, wreqBindingDest, { recursive: true, force: true });
+      console.log(`[standalone-assets] Copied @wreq-js to ${wreqBindingDest}`);
+    }
   }
 }
 

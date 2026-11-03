@@ -1,3 +1,12 @@
+# v0.0.8 (2026-11-03)
+
+- **Fix Standalone & CLI wreq-js Native Loader & 3012 WAF Bypass**:
+  - Fixed webpack module bundling issue where `import("node:module")` resolved to undefined, causing `cjs fallback: e is not a function` and failing open to native fetch.
+  - Replaced broken webpack-intercepted loader in `zcodeTlsClient.js` and `opencodeTlsClient.js` with multi-tier native require (`__non_webpack_require__` / `eval("require")`), candidate package.json `createRequire`, and direct filesystem resolution.
+  - Added `serverComponentsExternalPackages: externalPkgs` to `next.config.mjs` experimental block for Next.js 14 compatibility so `wreq-js` is properly treated as an external package.
+  - Added `wreq-js` and `@wreq-js` native bindings to `cli/scripts/build-cli.js` bundle step (`ensureModuleInBundle`) to ensure CLI packages ship with TLS impersonation.
+  - Updated `scripts/copy-standalone-assets.mjs` to copy native bindings across all standalone output targets.
+
 # v0.0.7 (2026-11-03)
 
 - **Fix Standalone wreq-js & Native Bindings Resolution**:
