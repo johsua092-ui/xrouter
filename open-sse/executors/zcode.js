@@ -4,7 +4,7 @@ import { DefaultExecutor } from "./default.js";
 import { refreshZcodeJwt, resolveZcodeAuth } from "../services/zcodePlan.js";
 import { ZCODE_SYSTEM_PROMPTS } from "../services/zcodePrompt.js";
 
-const ZCODE_APP_VERSION = "3.17.1";
+const ZCODE_APP_VERSION = "3.17.2";
 const ZCODE_THIRD_SYSTEM_BLOCK = "Follow the user's instructions and use the available tools when helpful.";
 
 function platformTag() {
@@ -245,9 +245,13 @@ export class ZCodeExecutor extends DefaultExecutor {
         delete headers["x-api-key"];
         headers.Authorization = `Bearer ${apiKey}`;
       } else {
-        // Project tokens are accepted with both headers on api.z.ai.
+        // Project tokens are accepted with both headers on api.z.ai and Ultra Gateway.
         headers["x-api-key"] = apiKey;
         headers.Authorization = `Bearer ${apiKey}`;
+        const zcodeJwt = credentials?.providerSpecificData?.zcodeJwtToken;
+        if (zcodeJwt) {
+          headers["X-ZCode-Authorization"] = `Bearer ${zcodeJwt}`;
+        }
       }
     }
 

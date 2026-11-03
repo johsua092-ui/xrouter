@@ -2,7 +2,7 @@
 // Mirrors the desktop client's own chain: subscription list -> project key ->
 // project access token, with the start-plan lane using the zcode JWT directly.
 
-const ZCODE_CLIENT_VERSION = "3.17.1";
+const ZCODE_CLIENT_VERSION = "3.17.2";
 // The start-plan gateway (zcode.z.ai) currently only admits the 3.16.3 client
 // fingerprint; newer declared versions get HTTP 405 code 3012 "unusual activity".
 export const ZCODE_START_CLIENT_VERSION = "3.16.3";
@@ -13,6 +13,11 @@ const CACHE_MAX_ENTRIES = 500;
 const FAMILY_ORIGIN = {
   zai: "https://api.z.ai",
   bigmodel: "https://open.bigmodel.cn",
+};
+
+export const ULTRA_GATEWAY_BASE = {
+  zai: "https://zcode.z.ai/api/v1/ultra-zai/anthropic",
+  bigmodel: "https://zcode.z.ai/api/v1/ultra/anthropic",
 };
 
 const INDIVIDUAL_BASE = {
