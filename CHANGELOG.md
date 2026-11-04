@@ -1,5 +1,10 @@
 # v0.0.7 (2026-11-03)
 
+- **Native Chrome BoringSSL TLS Client for ZCode & GLM (WAF 3012 Bypass)**:
+  - Directly integrated `zcodeTlsFetch` (`wreq-js` Chrome 131 BoringSSL / Post-Quantum TLS 1.3) into `ZCodeExecutor` for both `zcode` and `glm` providers.
+  - Eliminated Cloudflare/Z.ai edge HTTP 405 `code: 3012 (request has been blocked due to unusual activity)`.
+  - Full proxy awareness via `directFetchProxy` with zero external ports or daemon overhead.
+
 - **Fix ZCode Start Plan 3012 WAF & Subscription Auto-Lane Bypass**:
   - Restored complete `# ZCode Desktop Context` stock system prompt blocks in `zcodePrompt.js` required by zcode.z.ai WAF.
   - Skip unnecessary `/api/biz/subscription/list` checks when a valid start-plan `zcodeJwtToken` is present to eliminate false token-expired warnings.

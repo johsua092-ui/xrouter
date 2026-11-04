@@ -3,7 +3,7 @@ import { release } from "node:os";
 import { DefaultExecutor } from "./default.js";
 import { refreshZcodeJwt, resolveZcodeAuth } from "../services/zcodePlan.js";
 import { ZCODE_SYSTEM_PROMPTS } from "../services/zcodePrompt.js";
-import { getZcodeDaemon, isZcodeDaemonAlive } from "../services/zcodeServiceBridge.js";
+import { zcodeTlsFetch } from "../services/zcodeTlsClient.js";
 
 const ZCODE_APP_VERSION = "3.17.2";
 const ZCODE_THIRD_SYSTEM_BLOCK = "Follow the user's instructions and use the available tools when helpful.";
@@ -189,32 +189,26 @@ export class ZCodeExecutor extends DefaultExecutor {
       };
     }
 
-    try {
-      const daemon = await getZcodeDaemon();
-      if (daemon && (await isZcodeDaemonAlive(daemon))) {
-        const targetBase = resolved.baseUrl || args.credentials?.providerSpecificData?.zcodeBaseUrl || "https://zcode.z.ai/api/v1/zcode-plan/anthropic";
-        if (args.credentials) {
-          args.credentials.providerSpecificData = {
-            ...args.credentials.providerSpecificData,
-            __useZcodeDaemonUrl: `${daemon.url}/v1/messages`,
-            __daemonTargetBaseUrl: targetBase,
-          };
-        }
-      }
-    } catch {}
+    const proxyOptions = args.proxyOptions;
+    const proxyUrl = (proxyOptions?.connectionProxyEnabled && proxyOptions?.connectionProxyUrl)
+      ? proxyOptions.connectionProxyUrl
+      : (args.credentials?.providerSpecificData?.connectionProxyEnabled && args.credentials?.providerSpecificData?.connectionProxyUrl)
+        ? args.credentials.providerSpecificData.connectionProxyUrl
+        : "";
 
-    let result = await super.execute(args);
-
-    // Failover: If local daemon returned 401/403/502 (e.g. port collision or daemon error),
-    // retry once via direct TLS HTTP path immediately
-    if (args.credentials?.providerSpecificData?.__useZcodeDaemonUrl && (result.response.status === 401 || result.response.status >= 500)) {
-      try {
-        await result.response.body?.cancel?.();
-      } catch {}
-      delete args.credentials.providerSpecificData.__useZcodeDaemonUrl;
-      result = await super.execute(args);
-    }
-
+    let result = await super.execute({
+      ...args,
+      directFetch: (url, options) => zcodeTlsFetch(url, {
+        method: options.method,
+        headers: options.headers,
+        body: options.body,
+      }, {
+        signal: options.signal,
+        proxy: options.proxyUrl || proxyUrl,
+        timeoutMs: args.stream ? 0 : undefined,
+      }),
+      directFetchProxy: true,
+    });
     result.response = await normalizeStartPlanResponse(result.response);
 
     // The edge occasionally answers a legitimate start-plan request with a
@@ -245,9 +239,6 @@ export class ZCodeExecutor extends DefaultExecutor {
   }
 
   buildUrl(model, stream, urlIndex = 0, credentials = null) {
-    if (credentials?.providerSpecificData?.__useZcodeDaemonUrl) {
-      return credentials.providerSpecificData.__useZcodeDaemonUrl;
-    }
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
     const base = resolved?.baseUrl || credentials?.providerSpecificData?.zcodeBaseUrl || this.config.baseUrl;
     return `${base.replace(/\/$/, "")}/v1/messages`;
