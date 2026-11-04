@@ -9,7 +9,7 @@ import { release } from "node:os";
 import { dbg } from "../utils/debugLog.js";
 import { ZCODE_SYSTEM_PROMPTS } from "./zcodePrompt.js";
 
-const DEFAULT_DAEMON_PORT = 28888;
+const DEFAULT_DAEMON_PORT = 29999;
 const DAEMON_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes idle reaper
 const ZCODE_APP_VERSION = "3.17.2";
 
@@ -124,7 +124,9 @@ function startServer(port = DEFAULT_DAEMON_PORT) {
 
             const resHeaders = {};
             upstreamRes.headers.forEach((val, key) => {
-              resHeaders[key] = val;
+              if (key.toLowerCase() !== "content-encoding") {
+                resHeaders[key] = val;
+              }
             });
 
             res.writeHead(upstreamRes.status, resHeaders);

@@ -204,6 +204,17 @@ export class ZCodeExecutor extends DefaultExecutor {
     } catch {}
 
     let result = await super.execute(args);
+
+    // Failover: If local daemon returned 401/403/502 (e.g. port collision or daemon error),
+    // retry once via direct TLS HTTP path immediately
+    if (args.credentials?.providerSpecificData?.__useZcodeDaemonUrl && (result.response.status === 401 || result.response.status >= 500)) {
+      try {
+        await result.response.body?.cancel?.();
+      } catch {}
+      delete args.credentials.providerSpecificData.__useZcodeDaemonUrl;
+      result = await super.execute(args);
+    }
+
     result.response = await normalizeStartPlanResponse(result.response);
 
     // The edge occasionally answers a legitimate start-plan request with a

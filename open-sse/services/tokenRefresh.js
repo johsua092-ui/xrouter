@@ -164,6 +164,8 @@ const REFRESH_HANDLERS = {
   "minimax-code": (c, log) => refreshMiniMaxCodeToken("minimax-code", c.refreshToken, log),
   "minimax-code-global": (c, log) => refreshMiniMaxCodeToken("minimax-code-global", c.refreshToken, log),
   nous: (c, log) => refreshNousToken(c.refreshToken, log),
+  glm: (c, log) => null,
+  zcode: (c, log) => null,
   vertex: vertexRefreshHandler,
   "vertex-partner": vertexRefreshHandler
 };

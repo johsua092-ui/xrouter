@@ -1,5 +1,10 @@
 # v0.0.7 (2026-11-03)
 
+- **Fix ZCode Daemon Port Collision & Direct Failover**:
+  - Moved ZCode native daemon bridge to dedicated port `29999` to avoid collision with internal Next.js/gateway proxies on port `28888`.
+  - Added automatic instant failover in `open-sse/executors/zcode.js`: if local daemon responds with 401/403/502, request immediately falls back to direct upstream TLS HTTP.
+  - Disabled erroneous OAuth refresh loop on GLM and ZCode connections in `open-sse/services/tokenRefresh.js`.
+
 - **ZCode Native Headless Daemon Bridge (Option A)**:
   - Added lightweight on-demand ZCode headless daemon bridge in `open-sse/services/zcodeServiceBridge.js` on localhost:28888.
   - Implemented 10-minute idle reaper to guarantee zero background memory leaks / OOM prevention.
