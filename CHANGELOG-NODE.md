@@ -1,8 +1,8 @@
 # v0.0.7 (2026-11-04)
 
-- **Integrate Official OpenCode v2.2.5 Native Daemon**:
-  - Installed official OpenCode v2 CLI (`/usr/local/bin/opencode`) on host server.
-  - Aligned native on-demand daemon runner in `opencodeServiceBridge.js` to execute requests via official SDK path, eliminating `FreeUsageLimitError` 429 WAF false-positives documented by Kracked Devs.
+- **Fix OpenCode Daemon Binary Resolution & Service Integration**:
+  - Added robust absolute binary path resolution (`resolveOpencodeBin`) checking `/usr/local/bin/opencode` and `~/.opencode/bin/opencode` before falling back to PATH.
+  - Aligned native on-demand daemon runner in `opencodeServiceBridge.js` with OpenCode v2.2.5 (`/api/session` and `/api/session/:id/prompt`), bypassing Cloudflare WAF bot blocks.
 
 - **Fix ZCode WAF 3012 by Aligning System Prefix with Proven Capture**:
   - Restored verified `seg0` + `seg1` system prefix from `Zcode2api` research (`UPSTREAM-3012.md`), eliminating the unexpected `Gen UI` visualization block that triggered upstream template divergence.

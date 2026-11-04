@@ -194,6 +194,21 @@ function isUsefulServiceProcessLog(line) {
     && !/messages|prompt|content/i.test(line);
 }
 
+function resolveOpencodeBin() {
+  if (process.env.OPENCODE_BIN && fs.existsSync(process.env.OPENCODE_BIN)) {
+    return process.env.OPENCODE_BIN;
+  }
+  const candidates = [
+    "/usr/local/bin/opencode",
+    path.join(os.homedir(), ".opencode", "bin", "opencode"),
+    "/usr/bin/opencode",
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return "opencode";
+}
+
 export function buildOpenCodeServiceEnv({ baseEnv = process.env, proxyUrl = "", noProxy = "", apiKey } = {}) {
   const normalizedNoProxy = normalizeServiceNoProxy(noProxy);
   const env = {
@@ -1117,7 +1132,8 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
     try {
     const env = buildOpenCodeServiceEnv({ proxyUrl, noProxy, apiKey });
 
-      const p = spawn("opencode", ["serve", "--port", "0", "--print-logs"], {
+      const bin = resolveOpencodeBin();
+      const p = spawn(bin, ["serve", "--port", "0", "--print-logs"], {
         env,
         cwd: os.tmpdir(),
         stdio: ["ignore", "pipe", "pipe"],
