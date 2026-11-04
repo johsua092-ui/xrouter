@@ -11,7 +11,7 @@ import { ZCODE_SYSTEM_PROMPTS } from "./zcodePrompt.js";
 
 const DEFAULT_DAEMON_PORT = 29999;
 const DAEMON_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes idle reaper
-const ZCODE_APP_VERSION = "3.17.2";
+const ZCODE_APP_VERSION = "3.16.3";
 
 let activeServer = null;
 let activeServerPort = DEFAULT_DAEMON_PORT;
@@ -92,6 +92,7 @@ function startServer(port = DEFAULT_DAEMON_PORT) {
             const zcodeJwt = req.headers["x-zcode-authorization"] || authHeader;
             const deviceMid = req.headers["x-device-mid"] || stableDeviceMid(req.headers["x-user-id"]);
 
+            // Forward exact headers sent by the executor
             const upstreamHeaders = {
               "Content-Type": "application/json",
               Authorization: authHeader,
@@ -118,7 +119,7 @@ function startServer(port = DEFAULT_DAEMON_PORT) {
             const upstreamRes = await fetch(upstreamUrl, {
               method: "POST",
               headers: upstreamHeaders,
-              body: JSON.stringify(body),
+              body: rawBody,
               signal: AbortSignal.timeout(120000),
             });
 

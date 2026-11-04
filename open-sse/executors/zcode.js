@@ -175,8 +175,8 @@ export function normalizeStartPlanResponse(response) {
 }
 
 export class ZCodeExecutor extends DefaultExecutor {
-  constructor() {
-    super("zcode");
+  constructor(providerName = "zcode") {
+    super(providerName);
   }
 
   async execute(args) {
@@ -291,6 +291,7 @@ export class ZCodeExecutor extends DefaultExecutor {
     if (credentials?.providerSpecificData?.__daemonTargetBaseUrl) {
       headers["x-target-base-url"] = credentials.providerSpecificData.__daemonTargetBaseUrl;
       headers["x-user-id"] = credentials.providerSpecificData.userId || "";
+      headers["x-device-mid"] = stableDeviceMid(credentials);
     }
 
     Object.assign(headers, {

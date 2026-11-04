@@ -403,7 +403,7 @@ export async function resolveZcodeAuth(credentials, { log = null, force = false 
     // Auto: an active personal coding subscription selects the project-token
     // lane; otherwise the account falls back to its start-plan JWT.
     let individual = false;
-    if (businessToken) {
+    if (businessToken && !zcodeJwtToken) {
       try {
         const subscriptions = await requestJson(`${FAMILY_ORIGIN[family]}/api/biz/subscription/list`, {
           headers: { Authorization: bearer(businessToken), "Content-Type": "application/json" },

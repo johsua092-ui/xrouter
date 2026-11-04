@@ -43,9 +43,13 @@ export default {
   },
   models: [
     { id: "GLM-5.3-Flash", name: "GLM-5.3 Flash" },
+    { id: "glm-5.3-flash", name: "GLM-5.3 Flash" },
     { id: "GLM-5.3", name: "GLM-5.3" },
+    { id: "glm-5.3", name: "GLM-5.3" },
     { id: "GLM-5.2", name: "GLM-5.2" },
+    { id: "glm-5.2", name: "GLM-5.2" },
     { id: "GLM-5-Turbo", name: "GLM-5 Turbo" },
+    { id: "glm-5-turbo", name: "GLM-5 Turbo" },
   ],
   oauth: {
     clientId: "client_P8X5CMWmlaRO9gyO-KSqtg",
