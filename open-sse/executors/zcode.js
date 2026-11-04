@@ -279,6 +279,16 @@ export class ZCodeExecutor extends DefaultExecutor {
 
   transformRequest(model, body, stream, credentials) {
     const transformed = super.transformRequest(model, body, stream, credentials);
+    if (transformed && typeof transformed === "object") {
+      if (typeof transformed.model === "string") {
+        const lower = transformed.model.toLowerCase();
+        if (lower.includes("glm-5.3-flash")) {
+          transformed.model = "GLM-5.3-Flash";
+        } else if (lower.includes("glm-5.3")) {
+          transformed.model = "GLM-5.3";
+        }
+      }
+    }
     const aligned = alignZcodeSystem(transformed);
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
     if (resolved?.lane === "start") {
@@ -322,27 +332,37 @@ export class ZCodeExecutor extends DefaultExecutor {
       headers["x-device-mid"] = stableDeviceMid(credentials);
     }
 
-    Object.assign(headers, {
-      "Origin": "https://zcode.z.ai",
-      "Referer": "https://zcode.z.ai/",
-      "User-Agent": `ZCode/${version}`,
-      "x-zcode-app-version": version,
-      "x-title": "Z Code@electron",
-      "x-release-channel": "production",
-      "x-client-language": "en-US",
-      "x-client-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      "x-zcode-agent": "glm",
-      "x-platform": platform,
-      "x-os-category": category,
-      "x-os-version": release(),
-      "x-request-id": randomUUID(),
-      "x-device-mid": stableDeviceMid(credentials),
-      "x-zcode-session-type": "main",
-      "x-zcode-trace-id": randomUUID(),
-      "x-query-id": uuidv7(),
-      "x-zcode-query-source": "main_turn",
-      "x-session-id": sessionId,
-    });
+    if (resolved?.lane === "start") {
+      // Start Plan gateway requires the lightweight 4-header client profile with 3.16.3 UA
+      Object.assign(headers, {
+        "User-Agent": `ZCode/${version} ai-sdk/anthropic/3.0.81`,
+      });
+      // Delete any superfluous tracking headers for start-plan to prevent 3012 WAF divergence
+      delete headers["anthropic-beta"];
+      delete headers["Anthropic-Beta"];
+    } else {
+      Object.assign(headers, {
+        "Origin": "https://zcode.z.ai",
+        "Referer": "https://zcode.z.ai/",
+        "User-Agent": `ZCode/${version}`,
+        "x-zcode-app-version": version,
+        "x-title": "Z Code@electron",
+        "x-release-channel": "production",
+        "x-client-language": "en-US",
+        "x-client-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        "x-zcode-agent": "glm",
+        "x-platform": platform,
+        "x-os-category": category,
+        "x-os-version": release(),
+        "x-request-id": randomUUID(),
+        "x-device-mid": stableDeviceMid(credentials),
+        "x-zcode-session-type": "main",
+        "x-zcode-trace-id": randomUUID(),
+        "x-query-id": uuidv7(),
+        "x-zcode-query-source": "main_turn",
+        "x-session-id": sessionId,
+      });
+    }
 
     if (resolved?.headers) Object.assign(headers, resolved.headers);
     return headers;

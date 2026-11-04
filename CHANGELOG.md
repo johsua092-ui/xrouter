@@ -1,5 +1,10 @@
 # v0.0.7 (2026-11-03)
 
+- **Fix ZCode WAF 3012 by Aligning System Prefix with Proven Capture**:
+  - Restored verified `seg0` + `seg1` system prefix from `Zcode2api` research (`UPSTREAM-3012.md`), eliminating the unexpected `Gen UI` visualization block that triggered upstream template divergence.
+  - Aligned lightweight 4-header client profile (`ZCode/3.16.3 ai-sdk/anthropic/3.0.81`) for Start-Plan lane.
+  - Normalized model aliases to uppercase canonical (`GLM-5.3-Flash`, `GLM-5.3`).
+
 - **Align Start-Plan metadata.user_id with Official ZCode Specification**:
   - Implemented official JSON-serialized `metadata.user_id = {"device_id": mid, "account_uuid": "", "session_id": sid}` as proven by ZCode repo `anthropic-request-metadata.ts` to fully satisfy upstream WAF validation.
 
