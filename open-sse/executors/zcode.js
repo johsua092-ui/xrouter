@@ -4,6 +4,7 @@ import { DefaultExecutor } from "./default.js";
 import { refreshZcodeJwt, resolveZcodeAuth } from "../services/zcodePlan.js";
 import { ZCODE_SYSTEM_PROMPTS } from "../services/zcodePrompt.js";
 import { zcodeTlsFetch } from "../services/zcodeTlsClient.js";
+import { hasNativeZcodeBinary, forwardToZcodeDaemon } from "../services/zcodeServiceBridge.js";
 
 const ZCODE_APP_VERSION = "3.16.3";
 const ZCODE_THIRD_SYSTEM_BLOCK = "Follow the user's instructions and use the available tools when helpful.";
@@ -196,17 +197,38 @@ export class ZCodeExecutor extends DefaultExecutor {
         ? args.credentials.providerSpecificData.connectionProxyUrl
         : "";
 
-    let result = await super.execute({
-      ...args,
-      directFetch: (url, options, extra = {}) => zcodeTlsFetch(url, {
+    // OPTION B: If native stripped ZCode binary engine is present and no proxy required,
+    // execute via native ZCode headless daemon bridge on port 29999.
+    const customFetch = (url, options, extra = {}) => {
+      const p = extra.proxyUrl || options.proxyUrl || proxyUrl;
+      if (!p && hasNativeZcodeBinary()) {
+        return forwardToZcodeDaemon(url, options.headers, options.body, options.signal).catch((err) => {
+          console.warn("[ZCodeExecutor] Native binary daemon failed, falling back to zcodeTlsFetch:", err.message);
+          return zcodeTlsFetch(url, {
+            method: options.method,
+            headers: options.headers,
+            body: options.body,
+          }, {
+            signal: options.signal,
+            proxy: p,
+            timeoutMs: args.stream ? 0 : undefined,
+          });
+        });
+      }
+      return zcodeTlsFetch(url, {
         method: options.method,
         headers: options.headers,
         body: options.body,
       }, {
         signal: options.signal,
-        proxy: extra.proxyUrl || options.proxyUrl || proxyUrl,
+        proxy: p,
         timeoutMs: args.stream ? 0 : undefined,
-      }),
+      });
+    };
+
+    let result = await super.execute({
+      ...args,
+      directFetch: customFetch,
       directFetchProxy: true,
     });
     result.response = await normalizeStartPlanResponse(result.response);
@@ -233,15 +255,7 @@ export class ZCodeExecutor extends DefaultExecutor {
         }
         result = await super.execute({
           ...args,
-          directFetch: (url, options, extra = {}) => zcodeTlsFetch(url, {
-            method: options.method,
-            headers: options.headers,
-            body: options.body,
-          }, {
-            signal: options.signal,
-            proxy: extra.proxyUrl || options.proxyUrl || proxyUrl,
-            timeoutMs: args.stream ? 0 : undefined,
-          }),
+          directFetch: customFetch,
           directFetchProxy: true,
         });
         result.response = await normalizeStartPlanResponse(result.response);
