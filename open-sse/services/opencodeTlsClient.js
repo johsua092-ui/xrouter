@@ -291,11 +291,17 @@ export async function opencodeTlsFetch(url, init = {}, { signal, timeoutMs = DEF
     // If session had connection reset or socket error, clear cache and fail-open to fetch
     sessionCache.delete(proxyUrl || "direct");
     console.warn(`[OpenCodeTLS] Session fetch failed (${fetchErr.message}), fallback to native fetch`);
+
+    // If proxy failed with tunnel / proxy connection error, bypass dead proxy on fallback
+    const isProxyErr = /proxyconnect|tunnel error|econnrefused|unexpected end of file/i.test(fetchErr.message || "");
+    const fallbackDispatcher = isProxyErr ? undefined : (init.dispatcher || undefined);
+
     return fetch(url, {
       method: init.method || "GET",
       headers: init.headers,
       body: init.body,
       signal,
+      ...(fallbackDispatcher ? { dispatcher: fallbackDispatcher } : {}),
     });
   }
 }

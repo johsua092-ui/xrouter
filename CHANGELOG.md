@@ -1,5 +1,9 @@
 # v0.0.7 (2026-11-03)
 
+- **Fix OpenCode TLS ProxyConnect Fallback**:
+  - Added dead proxy detection on `wreq-js` tunnel/ProxyConnect failure in `opencodeTlsClient.js`.
+  - Fallback request automatically bypasses dead proxy to native direct fetch without dropping the completion turn.
+
 - **GLM Reset Card Grant Type & Cooldown Recovery (OmniRoute PR #18840 & #18864 Port)**:
   - Preserved provider `grantType` in GLM reset card parsing, request bodies, and route handlers without inventing or stripping namespaces.
   - Added automatic connection health and cooldown recovery after confirmed reset card redemption, clearing `testStatus: active`, `rateLimitedUntil: null`, and `modelLock_*` locks.
