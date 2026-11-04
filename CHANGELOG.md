@@ -1,5 +1,10 @@
 # v0.0.7 (2026-11-03)
 
+- **Port Decolua Upstream Engine Stabilizations**:
+  - **PR #5374**: Abort upstream stream controller immediately on client disconnect without 500ms lag.
+  - **PR #5431**: Drop Claude Code identity system prompt blocks on `anthropic` API key requests to prevent misleading credit error 400.
+  - **PR #5321**: Added `gemini-3.8-flash-tts` and `gemini-3.8-flash-lite-tts` models to Gemini provider registry and TTS catalog.
+
 - **Fix OpenCode TLS ProxyConnect Fallback**:
   - Added dead proxy detection on `wreq-js` tunnel/ProxyConnect failure in `opencodeTlsClient.js`.
   - Fallback request automatically bypasses dead proxy to native direct fetch without dropping the completion turn.

@@ -21,9 +21,8 @@ export function createStreamController({ onDisconnect, onError, log, provider, m
   const abortController = new AbortController();
   const startTime = Date.now();
   let disconnected = false;
-  let abortTimeout = null;
 
-  // Only abnormal terminations are logged; normal completion is covered by "📊 done".
+  // Only abnormal terminations are logged; normal completion is covered by "[done]".
   // isError uses errorLine (always shown, ignores LOG_LEVEL) so failures survive quiet levels.
   const logStream = (symbol, status, isError = false) => {
     const duration = Date.now() - startTime;
@@ -44,37 +43,25 @@ export function createStreamController({ onDisconnect, onError, log, provider, m
       disconnected = true;
 
       // Debug-only: Responses API has no [DONE] sentinel, so codex/droid close the
-      // socket on every completed request. "📊 done" is the authoritative outcome line.
+      // socket on every completed request. "[done]" is the authoritative outcome line.
       dbg("CTRL", `${provider}/${model} | disconnect=${reason} | dur=${Date.now() - startTime}ms`);
 
-      // Delay abort to allow cleanup
-      abortTimeout = setTimeout(() => {
-        abortController.abort();
-      }, 500);
+      // Stop upstream work before running disconnect observers (#4914).
+      abortController.abort();
 
       onDisconnect?.({ reason, duration: Date.now() - startTime });
     },
 
-    // Call when stream completes normally (no line here — "📊 done" is authoritative)
+    // Call on stream complete
     handleComplete: () => {
       if (disconnected) return;
       disconnected = true;
-
-      if (abortTimeout) {
-        clearTimeout(abortTimeout);
-        abortTimeout = null;
-      }
     },
 
     // Call on error
     handleError: (error) => {
       if (disconnected) return;
       disconnected = true;
-
-      if (abortTimeout) {
-        clearTimeout(abortTimeout);
-        abortTimeout = null;
-      }
 
       if (error.name === "AbortError") {
         logStream("⚡", "ABORTED");
