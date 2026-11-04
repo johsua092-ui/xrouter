@@ -329,10 +329,11 @@ export class ZCodeExecutor extends DefaultExecutor {
   async refreshCredentials(credentials, log) {
     const psd = credentials?.providerSpecificData || {};
     const family = psd.family === "bigmodel" ? "bigmodel" : "zai";
-    if (family !== "zai" || !psd.oauthAccessToken) return null;
+    const businessToken = psd.oauthAccessToken || credentials?.accessToken;
+    if (family !== "zai" || !businessToken) return null;
 
     try {
-      const refreshed = await refreshZcodeJwt(psd.oauthAccessToken, { log });
+      const refreshed = await refreshZcodeJwt(businessToken, { log });
       if (!refreshed?.zcodeJwtToken) return null;
 
       const nextPsd = { ...psd, zcodeJwtToken: refreshed.zcodeJwtToken };
@@ -348,9 +349,7 @@ export class ZCodeExecutor extends DefaultExecutor {
         providerSpecificData: { ...nextPsd, ...resolved.persist },
       };
     } catch (error) {
-      // The business token is optional for start-plan traffic; a failed
-      // rotation must not break usage/quota reads.
-      log?.debug?.("ZCODE", `credential refresh skipped: ${error?.message || error}`);
+      log?.warn?.("ZCODE", `credential refresh failed: ${error?.message || error}`);
       return null;
     }
   }

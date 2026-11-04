@@ -1,5 +1,9 @@
 # v0.0.7 (2026-11-03)
 
+- **Fix GLM & ZCode Start-Plan Base Endpoint & Business Token Refresh**:
+  - Restored Start-Plan base URLs to `https://zcode.z.ai/api/v1/zcode-plan/anthropic` to prevent 401 `token expired or incorrect` caused by Ultra Gateway rejecting start-plan JWTs.
+  - Allowed `refreshZcodeJwt` in `ZCodeExecutor.refreshCredentials` to use `credentials.accessToken` as fallback when `oauthAccessToken` is absent.
+
 - **Add Remote Proxy Test Endpoint to Go Core**:
   - Implemented `/api/test-proxy` in `internal/gateway/server.go` allowing remote diagnostic testing of proxy endpoints directly from Koyeb cloud infrastructure.
 
