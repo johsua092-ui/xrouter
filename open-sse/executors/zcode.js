@@ -198,13 +198,13 @@ export class ZCodeExecutor extends DefaultExecutor {
 
     let result = await super.execute({
       ...args,
-      directFetch: (url, options) => zcodeTlsFetch(url, {
+      directFetch: (url, options, extra = {}) => zcodeTlsFetch(url, {
         method: options.method,
         headers: options.headers,
         body: options.body,
       }, {
         signal: options.signal,
-        proxy: options.proxyUrl || proxyUrl,
+        proxy: extra.proxyUrl || options.proxyUrl || proxyUrl,
         timeoutMs: args.stream ? 0 : undefined,
       }),
       directFetchProxy: true,
@@ -233,13 +233,13 @@ export class ZCodeExecutor extends DefaultExecutor {
         }
         result = await super.execute({
           ...args,
-          directFetch: (url, options) => zcodeTlsFetch(url, {
+          directFetch: (url, options, extra = {}) => zcodeTlsFetch(url, {
             method: options.method,
             headers: options.headers,
             body: options.body,
           }, {
             signal: options.signal,
-            proxy: options.proxyUrl || proxyUrl,
+            proxy: extra.proxyUrl || options.proxyUrl || proxyUrl,
             timeoutMs: args.stream ? 0 : undefined,
           }),
           directFetchProxy: true,

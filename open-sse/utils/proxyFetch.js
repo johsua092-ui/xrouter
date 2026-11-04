@@ -421,12 +421,7 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
   if (options.directFetch) {
     if (!proxyUrl) return await options.directFetch(url, options);
     if (options.directFetchProxy) {
-      try {
-        return await options.directFetch(url, options, { proxyUrl });
-      } catch (err) {
-        if (err?.name !== "OpencodeTlsUnavailableError") throw err;
-        console.warn(`[ProxyFetch] directFetch unavailable (${err.message}); failing open to native proxied fetch`);
-      }
+      return await options.directFetch(url, options, { proxyUrl });
     }
   }
 

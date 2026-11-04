@@ -291,22 +291,10 @@ export async function opencodeTlsFetch(url, init = {}, { signal, timeoutMs = DEF
     sessionCache.delete(proxyUrl || "direct");
     console.warn(`[OpenCodeTLS] Session fetch failed (${fetchErr.message})`);
 
-    const isProxyErr = /proxyconnect|tunnel error|econnrefused|unexpected end of file|operation timed out|timed out|timeout|reset|broken pipe/i.test(fetchErr.message || "");
-    if (proxyUrl && isProxyErr) {
-      try {
-        console.warn(`[OpenCodeTLS] Proxy failed with ${fetchErr.message}, attempting direct TLS impersonation`);
-        const directSession = await getSession("");
-        const directRes = await directSession.fetch(url, options);
-        const headers = {};
-        directRes.headers?.forEach?.((value, key) => {
-          headers[key] = value;
-        });
-        return new Response(directRes.body, { status: directRes.status, statusText: directRes.statusText, headers });
-      } catch (directTlsErr) {
-        console.warn(`[OpenCodeTLS] Direct TLS impersonation also failed (${directTlsErr.message}), falling back to native fetch`);
-      }
-    } else {
-      console.warn(`[OpenCodeTLS] Falling back to native fetch`);
+    // Strict proxy mode: if a proxy was requested and failed, propagate the error so the router
+    // can rotate accounts/proxies rather than silently exposing the direct VPS IP
+    if (proxyUrl) {
+      throw fetchErr;
     }
 
     return fetch(url, {

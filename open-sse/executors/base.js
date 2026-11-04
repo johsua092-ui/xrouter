@@ -155,7 +155,7 @@ export class BaseExecutor {
         const bodyStr = JSON.stringify(transformedBody);
         const fetchT0 = Date.now();
         dbg("FETCH", `${this.provider.toUpperCase()} → ${url} | body=${bodyStr.length}B | connectTimeout=${timeoutMs}ms`);
-        const fetchFn = typeof directFetch === "function" ? directFetch : proxyAwareFetch;
+        const fetchFn = (typeof directFetch === "function" && !proxyOptions?.connectionProxyEnabled) ? directFetch : proxyAwareFetch;
         const response = await fetchFn(url, {
           method: "POST",
           headers,

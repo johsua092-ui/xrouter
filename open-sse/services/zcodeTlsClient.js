@@ -272,7 +272,12 @@ export async function zcodeTlsFetch(url, init = {}, { signal, timeoutMs = 300000
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   } catch (fetchErr) {
     sessionCache.delete(proxyUrl || "direct");
-    console.warn(`[ZcodeTLS] Session fetch failed (${fetchErr.message}), fallback to native fetch`);
+    console.warn(`[ZcodeTLS] Session fetch failed (${fetchErr.message})`);
+
+    if (proxyUrl) {
+      throw fetchErr;
+    }
+
     return fetch(url, {
       method: init.method || "GET",
       headers: init.headers,

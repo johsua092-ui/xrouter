@@ -23,7 +23,7 @@ export default {
     usage: true,
   },
   transport: {
-    baseUrl: "https://api.z.ai/api/anthropic",
+    baseUrl: "https://zcode.z.ai/api/v1/ultra-zai/anthropic",
     format: "claude",
     // Plan traffic defaults to SSE upstream; non-stream clients are converted
     // back to JSON by the forced-SSE handler.
