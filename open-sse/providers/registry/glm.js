@@ -38,7 +38,10 @@ export default {
     format: "claude",
     forceStream: true,
     urlSuffix: "?beta=true",
-    headers: { ...CLAUDE_API_HEADERS },
+    headers: {
+      "anthropic-version": "2023-06-01",
+      "User-Agent": "ZCode/3.16.3",
+    },
     auth: {
       combined: true,
       header: "x-api-key",

@@ -30,7 +30,7 @@ export default {
     forceStream: true,
     headers: {
       "anthropic-version": "2023-06-01",
-      "User-Agent": "ZCode/3.17.1",
+      "User-Agent": "ZCode/3.16.3",
     },
     auth: {
       combined: true,

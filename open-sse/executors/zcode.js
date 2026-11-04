@@ -5,7 +5,7 @@ import { refreshZcodeJwt, resolveZcodeAuth } from "../services/zcodePlan.js";
 import { ZCODE_SYSTEM_PROMPTS } from "../services/zcodePrompt.js";
 import { zcodeTlsFetch } from "../services/zcodeTlsClient.js";
 
-const ZCODE_APP_VERSION = "3.17.2";
+const ZCODE_APP_VERSION = "3.16.3";
 const ZCODE_THIRD_SYSTEM_BLOCK = "Follow the user's instructions and use the available tools when helpful.";
 
 function platformTag() {
@@ -256,6 +256,8 @@ export class ZCodeExecutor extends DefaultExecutor {
 
   buildHeaders(credentials, stream = true, url, model, body = null) {
     const headers = super.buildHeaders(credentials, stream, url, model, body);
+    delete headers["anthropic-beta"];
+    delete headers["Anthropic-Beta"];
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
     const apiKey = resolved?.apiKey || credentials?.apiKey || credentials?.accessToken;
     if (apiKey) {
