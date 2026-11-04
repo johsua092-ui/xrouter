@@ -581,6 +581,7 @@ export class OpenCodeExecutor extends BaseExecutor {
         proxy: options.proxyUrl || proxyUrl,
         timeoutMs: args.stream ? 0 : undefined,
       }),
+      directFetchProxy: true,
     });
   }
 

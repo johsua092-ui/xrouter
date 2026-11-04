@@ -1,5 +1,14 @@
 # v0.0.7 (2026-11-03)
 
+- **ZCode Native Headless Daemon Bridge (Option A)**:
+  - Added lightweight on-demand ZCode headless daemon bridge in `open-sse/services/zcodeServiceBridge.js` on localhost:28888.
+  - Implemented 10-minute idle reaper to guarantee zero background memory leaks / OOM prevention.
+  - Wired seamless routing in `open-sse/executors/zcode.js` prioritizing the local daemon with transparent fallback to direct TLS HTTP.
+
+- **OpenCode Direct Fetch Proxy & ProxyConnect Recovery**:
+  - Wired `directFetchProxy: true` in `open-sse/executors/opencode.js` so connection proxy pools correctly utilize `wreq-js` TLS impersonation instead of failing open to undici.
+  - Added direct TLS impersonation recovery on dead proxy tunnel failures in `open-sse/services/opencodeTlsClient.js`.
+
 - **Port Decolua Upstream Engine Stabilizations**:
   - **PR #5374**: Abort upstream stream controller immediately on client disconnect without 500ms lag.
   - **PR #5431**: Drop Claude Code identity system prompt blocks on `anthropic` API key requests to prevent misleading credit error 400.

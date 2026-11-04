@@ -288,20 +288,32 @@ export async function opencodeTlsFetch(url, init = {}, { signal, timeoutMs = DEF
     });
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   } catch (fetchErr) {
-    // If session had connection reset or socket error, clear cache and fail-open to fetch
     sessionCache.delete(proxyUrl || "direct");
-    console.warn(`[OpenCodeTLS] Session fetch failed (${fetchErr.message}), fallback to native fetch`);
+    console.warn(`[OpenCodeTLS] Session fetch failed (${fetchErr.message})`);
 
-    // If proxy failed with tunnel / proxy connection error, bypass dead proxy on fallback
     const isProxyErr = /proxyconnect|tunnel error|econnrefused|unexpected end of file/i.test(fetchErr.message || "");
-    const fallbackDispatcher = isProxyErr ? undefined : (init.dispatcher || undefined);
+    if (proxyUrl && isProxyErr) {
+      try {
+        console.warn(`[OpenCodeTLS] Proxy failed with ${fetchErr.message}, attempting direct TLS impersonation`);
+        const directSession = await getSession("");
+        const directRes = await directSession.fetch(url, options);
+        const headers = {};
+        directRes.headers?.forEach?.((value, key) => {
+          headers[key] = value;
+        });
+        return new Response(directRes.body, { status: directRes.status, statusText: directRes.statusText, headers });
+      } catch (directTlsErr) {
+        console.warn(`[OpenCodeTLS] Direct TLS impersonation also failed (${directTlsErr.message}), falling back to native fetch`);
+      }
+    } else {
+      console.warn(`[OpenCodeTLS] Falling back to native fetch`);
+    }
 
     return fetch(url, {
       method: init.method || "GET",
       headers: init.headers,
       body: init.body,
       signal,
-      ...(fallbackDispatcher ? { dispatcher: fallbackDispatcher } : {}),
     });
   }
 }

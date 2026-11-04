@@ -3,6 +3,7 @@ import { release } from "node:os";
 import { DefaultExecutor } from "./default.js";
 import { refreshZcodeJwt, resolveZcodeAuth } from "../services/zcodePlan.js";
 import { ZCODE_SYSTEM_PROMPTS } from "../services/zcodePrompt.js";
+import { getZcodeDaemon, isZcodeDaemonAlive } from "../services/zcodeServiceBridge.js";
 
 const ZCODE_APP_VERSION = "3.17.2";
 const ZCODE_THIRD_SYSTEM_BLOCK = "Follow the user's instructions and use the available tools when helpful.";
@@ -188,6 +189,20 @@ export class ZCodeExecutor extends DefaultExecutor {
       };
     }
 
+    try {
+      const daemon = await getZcodeDaemon();
+      if (daemon && (await isZcodeDaemonAlive(daemon))) {
+        const targetBase = resolved.baseUrl || args.credentials?.providerSpecificData?.zcodeBaseUrl || "https://zcode.z.ai/api/v1/zcode-plan/anthropic";
+        if (args.credentials) {
+          args.credentials.providerSpecificData = {
+            ...args.credentials.providerSpecificData,
+            __useZcodeDaemonUrl: `${daemon.url}/v1/messages`,
+            __daemonTargetBaseUrl: targetBase,
+          };
+        }
+      }
+    } catch {}
+
     let result = await super.execute(args);
     result.response = await normalizeStartPlanResponse(result.response);
 
@@ -219,6 +234,9 @@ export class ZCodeExecutor extends DefaultExecutor {
   }
 
   buildUrl(model, stream, urlIndex = 0, credentials = null) {
+    if (credentials?.providerSpecificData?.__useZcodeDaemonUrl) {
+      return credentials.providerSpecificData.__useZcodeDaemonUrl;
+    }
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
     const base = resolved?.baseUrl || credentials?.providerSpecificData?.zcodeBaseUrl || this.config.baseUrl;
     return `${base.replace(/\/$/, "")}/v1/messages`;
@@ -258,6 +276,12 @@ export class ZCodeExecutor extends DefaultExecutor {
     const version = resolved?.clientVersion || ZCODE_APP_VERSION;
     const { platform, category } = platformTag();
     const sessionId = sessionTag(credentials?.connectionId, credentials?.providerSpecificData?.__zcodeSessionSalt);
+
+    if (credentials?.providerSpecificData?.__daemonTargetBaseUrl) {
+      headers["x-target-base-url"] = credentials.providerSpecificData.__daemonTargetBaseUrl;
+      headers["x-user-id"] = credentials.providerSpecificData.userId || "";
+    }
+
     Object.assign(headers, {
       "HTTP-Referer": "https://zcode.z.ai",
       "User-Agent": `ZCode/${version}`,
