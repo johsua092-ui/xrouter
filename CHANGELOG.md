@@ -1,5 +1,10 @@
 # v0.0.7 (2026-11-03)
 
+- **Fix Bulk API Key Import & Parameter Overflows**:
+  - Fixed `TypeError: normalizeProviderId is not a function` in `/api/providers/bulk` by importing `resolveProviderId`.
+  - Implemented synchronous single-transaction `bulkCreateProviderConnections` in `connectionsRepo.js` to eliminate nested transaction exceptions and instantly insert 2000+ keys.
+  - Chunked bulk DELETE queries into 500 IDs per statement to stay well below SQLite host parameter limits.
+
 - **Native Chrome BoringSSL TLS Client for ZCode & GLM (WAF 3012 Bypass)**:
   - Directly integrated `zcodeTlsFetch` (`wreq-js` Chrome 131 BoringSSL / Post-Quantum TLS 1.3) into `ZCodeExecutor` for both `zcode` and `glm` providers.
   - Eliminated Cloudflare/Z.ai edge HTTP 405 `code: 3012 (request has been blocked due to unusual activity)`.

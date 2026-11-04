@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdapter } from "@/lib/db/driver.js";
-import { createProviderConnection } from "@/lib/db/repos/connectionsRepo.js";
-import { normalizeProviderId } from "@/shared/constants/providers";
+import { bulkCreateProviderConnections } from "@/lib/db/repos/connectionsRepo.js";
+import { resolveProviderId } from "@/shared/constants/providers";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const provider = normalizeProviderId(body.provider);
+    const rawProvider = String(body.provider || "").trim();
+    const provider = resolveProviderId(rawProvider) || rawProvider;
     if (!provider) {
       return NextResponse.json({ error: "Provider is required" }, { status: 400 });
     }
@@ -23,39 +24,7 @@ export async function POST(request) {
       return NextResponse.json({ error: "No keys provided" }, { status: 400 });
     }
 
-    const db = await getAdapter();
-    const created = [];
-    const failed = [];
-
-    // Atomic transaction for maximum throughput and zero disk latency
-    db.transaction(() => {
-      for (let i = 0; i < keys.length; i++) {
-        const entry = keys[i];
-        const apiKey = String(entry.apiKey || "").trim();
-        const name = String(entry.name || `Key ${i + 1}`).trim();
-        if (!apiKey) {
-          failed.push({ index: i, error: "Empty API key" });
-          continue;
-        }
-
-        try {
-          const newConn = createProviderConnection({
-            provider,
-            authType: "apikey",
-            name,
-            apiKey,
-            priority: 1,
-            isActive: true,
-            testStatus: "unknown",
-            providerSpecificData: entry.providerSpecificData || {},
-            allowOverwrite: true,
-          });
-          created.push(newConn.id);
-        } catch (err) {
-          failed.push({ index: i, error: err?.message || "Failed to create" });
-        }
-      }
-    });
+    const { created, failed } = await bulkCreateProviderConnections(provider, keys);
 
     return NextResponse.json({
       success: true,
@@ -65,13 +34,13 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error("Error bulk creating provider keys:", error);
-    return NextResponse.json({ error: "Failed to bulk create provider keys" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to bulk create provider keys: " + error.message }, { status: 500 });
   }
 }
 
 /**
  * DELETE /api/providers/bulk
- * Bulk deletes provider connections in a single atomic database query.
+ * Bulk deletes provider connections in chunks of 500 inside a single atomic database query.
  * Body: { ids: Array<string> }
  */
 export async function DELETE(request) {
@@ -86,9 +55,13 @@ export async function DELETE(request) {
     let deletedCount = 0;
 
     db.transaction(() => {
-      const placeholders = ids.map(() => "?").join(",");
-      const res = db.run(`DELETE FROM providerConnections WHERE id IN (${placeholders})`, ids);
-      deletedCount = res?.changes ?? 0;
+      // Chunk to 500 IDs per statement to stay well below SQLite host parameter limits
+      for (let i = 0; i < ids.length; i += 500) {
+        const chunk = ids.slice(i, i + 500);
+        const placeholders = chunk.map(() => "?").join(",");
+        const res = db.run(`DELETE FROM providerConnections WHERE id IN (${placeholders})`, chunk);
+        deletedCount += res?.changes ?? 0;
+      }
     });
 
     return NextResponse.json({
@@ -98,6 +71,6 @@ export async function DELETE(request) {
     });
   } catch (error) {
     console.error("Error bulk deleting provider connections:", error);
-    return NextResponse.json({ error: "Failed to bulk delete provider connections" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to bulk delete provider connections: " + error.message }, { status: 500 });
   }
 }
