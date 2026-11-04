@@ -1,5 +1,8 @@
 # v0.0.7 (2026-11-03)
 
+- **Add Remote Proxy Test Endpoint to Go Core**:
+  - Implemented `/api/test-proxy` in `internal/gateway/server.go` allowing remote diagnostic testing of proxy endpoints directly from Koyeb cloud infrastructure.
+
 - **Add Lightweight Dockerfile.go for Koyeb & Container Deployments**:
   - Created multi-stage `Dockerfile.go` for static Zero-CGO compilation with minimal ~25MB Alpine runner image.
   - Set default `GOMEMLIMIT=128MiB` and non-root execution for 24/7 cloud stability without OOM.

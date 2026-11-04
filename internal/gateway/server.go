@@ -3,7 +3,9 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"runtime"
 	"time"
 
@@ -58,6 +60,9 @@ func (g *Gateway) registerRoutes() {
 		r.Post("/chat/completions", g.handleChatCompletions)
 	})
 
+	// Diagnostic & Proxy Test Utility
+	g.mux.Get("/api/test-proxy", g.handleTestProxy)
+
 	// Connection & Telegram Bot Controller
 	g.mux.Route("/api/connection", func(r chi.Router) {
 		r.Get("/", g.handleGetConnection)
@@ -78,6 +83,70 @@ func (g *Gateway) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"version":   g.cfg.Version,
 		"port":      g.cfg.Port,
 		"memory_mb": fmt.Sprintf("%.2f MB", allocMb),
+	})
+}
+
+func (g *Gateway) handleTestProxy(w http.ResponseWriter, r *http.Request) {
+	proxyRaw := r.URL.Query().Get("proxy")
+	target := r.URL.Query().Get("target")
+	if target == "" {
+		target = "https://opencode.ai/inference/v1/models"
+	}
+
+	transport := &http.Transport{
+		DisableKeepAlives: true,
+	}
+
+	if proxyRaw != "" {
+		proxyURL, err := url.Parse(proxyRaw)
+		if err != nil {
+			jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
+				"ok":    false,
+				"error": fmt.Sprintf("invalid proxy url: %v", err),
+			})
+			return
+		}
+		transport.Proxy = http.ProxyURL(proxyURL)
+	}
+
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   6 * time.Second,
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), "GET", target, nil)
+	if err != nil {
+		jsonResponse(w, http.StatusInternalServerError, map[string]interface{}{"error": err.Error()})
+		return
+	}
+	req.Header.Set("User-Agent", "opencode/latest/2.0.26/cli")
+	req.Header.Set("Authorization", "Bearer public")
+
+	t0 := time.Now()
+	resp, err := client.Do(req)
+	duration := time.Since(t0).Milliseconds()
+
+	if err != nil {
+		jsonResponse(w, http.StatusOK, map[string]interface{}{
+			"ok":          false,
+			"target":      target,
+			"proxy":       proxyRaw,
+			"duration_ms": duration,
+			"error":       err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+
+	jsonResponse(w, http.StatusOK, map[string]interface{}{
+		"ok":          resp.StatusCode >= 200 && resp.StatusCode < 400,
+		"status":      resp.StatusCode,
+		"target":      target,
+		"proxy":       proxyRaw,
+		"duration_ms": duration,
+		"body":        string(bodyBytes),
 	})
 }
 
