@@ -212,10 +212,10 @@ export class ZCodeExecutor extends DefaultExecutor {
     result.response = await normalizeStartPlanResponse(result.response);
 
     // The edge occasionally answers a legitimate start-plan request with a
-    // transient 405/3012 anti-abuse block. Retry twice with backoff and a fresh
-    // session id so a session-keyed window clears without touching the body.
+    // transient 405/3012 anti-abuse block. Retry with backoff and a fresh
+    // session id and device mid.
     if (resolved.lane === "start") {
-      const backoffMs = [2000, 8000];
+      const backoffMs = [1000, 3000, 6000];
       for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
         if (!(await isGatewayActivityBlock(result.response))) break;
         try {
@@ -228,9 +228,22 @@ export class ZCodeExecutor extends DefaultExecutor {
           args.credentials.providerSpecificData = {
             ...(args.credentials.providerSpecificData || {}),
             __zcodeSessionSalt: randomBytes(8).toString("hex"),
+            userId: randomUUID(),
           };
         }
-        result = await super.execute(args);
+        result = await super.execute({
+          ...args,
+          directFetch: (url, options) => zcodeTlsFetch(url, {
+            method: options.method,
+            headers: options.headers,
+            body: options.body,
+          }, {
+            signal: options.signal,
+            proxy: options.proxyUrl || proxyUrl,
+            timeoutMs: args.stream ? 0 : undefined,
+          }),
+          directFetchProxy: true,
+        });
         result.response = await normalizeStartPlanResponse(result.response);
       }
     }
@@ -288,7 +301,8 @@ export class ZCodeExecutor extends DefaultExecutor {
     }
 
     Object.assign(headers, {
-      "HTTP-Referer": "https://zcode.z.ai",
+      "Origin": "https://zcode.z.ai",
+      "Referer": "https://zcode.z.ai/",
       "User-Agent": `ZCode/${version}`,
       "x-zcode-app-version": version,
       "x-title": "Z Code@electron",
