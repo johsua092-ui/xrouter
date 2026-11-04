@@ -1,5 +1,8 @@
 # v0.0.7 (2026-11-03)
 
+- **Harden OpenCode Proxy Error Pattern Matching**:
+  - Expanded `isProxyErr` in `opencodeTlsClient.js` to catch `operation timed out`, `timed out`, `timeout`, and `broken pipe` so slow or dead proxies immediately trigger direct TLS failover.
+
 - **Fix ZCode WAF 3012 TLS Cipher Fingerprint & Header Alignment**:
   - Upgraded `zcodeTlsClient.js` to `chrome_133` BoringSSL cipher list with strict Post-Quantum key exchange emulation.
   - Replaced `HTTP-Referer` with standard browser `Origin: https://zcode.z.ai` and `Referer: https://zcode.z.ai/`.

@@ -291,7 +291,7 @@ export async function opencodeTlsFetch(url, init = {}, { signal, timeoutMs = DEF
     sessionCache.delete(proxyUrl || "direct");
     console.warn(`[OpenCodeTLS] Session fetch failed (${fetchErr.message})`);
 
-    const isProxyErr = /proxyconnect|tunnel error|econnrefused|unexpected end of file/i.test(fetchErr.message || "");
+    const isProxyErr = /proxyconnect|tunnel error|econnrefused|unexpected end of file|operation timed out|timed out|timeout|reset|broken pipe/i.test(fetchErr.message || "");
     if (proxyUrl && isProxyErr) {
       try {
         console.warn(`[OpenCodeTLS] Proxy failed with ${fetchErr.message}, attempting direct TLS impersonation`);
