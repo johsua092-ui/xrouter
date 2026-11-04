@@ -1,5 +1,8 @@
 # v0.0.7 (2026-11-03)
 
+- **Align Start-Plan metadata.user_id with Official ZCode Specification**:
+  - Implemented official JSON-serialized `metadata.user_id = {"device_id": mid, "account_uuid": "", "session_id": sid}` as proven by ZCode repo `anthropic-request-metadata.ts` to fully satisfy upstream WAF validation.
+
 - **Option B Native ZCode Electron Engine (Stripped Headless Daemon)**:
   - Integrated native headless ZCode binary (`/opt/zcode-engine/zcode`) running `bridge-worker.mjs` on localhost:29999.
   - Automatically auto-spawns on demand with a 10-minute idle reaper (RSS ~85MB, 0% GUI/GPU overhead).

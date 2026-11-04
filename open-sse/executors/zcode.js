@@ -85,13 +85,19 @@ function alignZcodeSystem(body) {
 
 // Carry the account identity on the start-plan body (the thinking shape and
 // output_config.effort are produced by the unified thinking translator).
-function withStartPlanOptions(body, accountUserId) {
+function withStartPlanOptions(body, accountUserId, deviceMid = "", sessionId = "") {
   if (!body || typeof body !== "object" || Array.isArray(body)) return body;
   const metadata = body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
     ? { ...body.metadata }
     : {};
-  if (accountUserId) metadata.user_id = accountUserId;
-  return Object.keys(metadata).length ? { ...body, metadata } : body;
+
+  metadata.user_id = JSON.stringify({
+    device_id: deviceMid || accountUserId || "unknown",
+    account_uuid: "",
+    session_id: sessionId || "",
+  });
+
+  return { ...body, metadata };
 }
 
 // The start-plan gateway fingerprints the stock ZCode system prompt and rejects
@@ -276,7 +282,9 @@ export class ZCodeExecutor extends DefaultExecutor {
     const aligned = alignZcodeSystem(transformed);
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
     if (resolved?.lane === "start") {
-      return withStartPlanOptions(aligned, credentials?.providerSpecificData?.userId);
+      const mid = stableDeviceMid(credentials);
+      const sid = sessionTag(credentials?.connectionId, credentials?.providerSpecificData?.__zcodeSessionSalt);
+      return withStartPlanOptions(aligned, credentials?.providerSpecificData?.userId, mid, sid);
     }
     return aligned;
   }
