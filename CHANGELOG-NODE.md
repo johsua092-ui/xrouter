@@ -1,5 +1,9 @@
 # v0.0.7 (2026-11-03)
 
+- **Add Lightweight Dockerfile.go for Koyeb & Container Deployments**:
+  - Created multi-stage `Dockerfile.go` for static Zero-CGO compilation with minimal ~25MB Alpine runner image.
+  - Set default `GOMEMLIMIT=128MiB` and non-root execution for 24/7 cloud stability without OOM.
+
 - **Migrate ZCode & GLM Default Base to Ultra Gateway**:
   - Switched default start-plan and registry base URLs from deprecated `/api/v1/zcode-plan/anthropic` to official ZCode v3.17 Ultra Gateway (`https://zcode.z.ai/api/v1/ultra-zai/anthropic`), completely bypassing legacy 3012 WAF edge blocks.
   - Enforced strict proxy mode in `opencodeTlsClient.js` and `zcodeTlsClient.js`: when a proxy is configured, requests strictly route through the proxy with zero silent direct IP leakages.
