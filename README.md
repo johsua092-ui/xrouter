@@ -131,12 +131,14 @@ Every client API key features a live animated quota progress bar in the dashboar
 Run the production setup wizard directly on your server with one command:
 
 ```bash
-# Interactive setup wizard (prompts for port, password, and generates secure keys)
+# Interactive setup wizard (prompts for port, password, and deployment mode)
 curl -fsSL https://raw.githubusercontent.com/johsua092-ui/x-router/main/install.sh | bash
 
 # Or non-interactive one-liner with flags
-bash install.sh --port 8080 --password "MySecretPass" --jwt-secret auto --salt auto -y
+bash install.sh --port 8080 --password "MySecretPass" -y
 ```
+
+> **Note on Security Secrets:** When running `install.sh`, all core cryptographic secrets (`JWT_SECRET`, `MACHINE_ID_SALT`, and `API_KEY_SECRET`) are automatically generated with secure random hex tokens. You do not need to enter or configure them manually. If you prefer custom secrets, you can still override them via CLI flags (`--jwt-secret`, `--salt`, `--api-key-secret`) or edit `.env` directly.
 
 ### 2. Global NPM Install
 

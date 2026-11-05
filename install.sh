@@ -157,13 +157,6 @@ if [ "$NON_INTERACTIVE" = false ]; then
 
     read -p "Require API key for all AI endpoints? (true/false) [${REQUIRE_API_KEY}]: " INPUT_REQ_KEY
     REQUIRE_API_KEY="${INPUT_REQ_KEY:-$REQUIRE_API_KEY}"
-
-    echo ""
-    read -p "JWT Secret [Enter for auto-generated 64-char hex]: " INPUT_JWT
-    JWT_SECRET="${INPUT_JWT:-}"
-
-    read -p "Machine ID Salt [Enter for auto-generated 32-char hex]: " INPUT_SALT
-    MACHINE_SALT="${INPUT_SALT:-}"
 fi
 
 # Resolve Base URL

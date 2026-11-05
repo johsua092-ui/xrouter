@@ -1,5 +1,9 @@
 # v0.0.7 (2026-11-04)
 
+- **Automated Security Secret Generation in Setup Wizard**:
+  - Configured `install.sh` to automatically generate `JWT_SECRET` (64-char hex) and `MACHINE_ID_SALT` (32-char hex) alongside `API_KEY_SECRET` without requiring interactive manual prompts.
+  - Documented automatic secret generation behavior in `README.md` while maintaining support for explicit CLI flag overrides.
+
 - **CodeBuddy / WorkBuddy Support & Hunyuan hy4 Model Addition**:
   - Registered `hy4` alongside `hy4-preview` in `codebuddy-cn` and `codebuddy-intl` registries, capability mapping, and thinking levels.
   - Added `workbuddy` / `workbuddy-cn` and `workbuddy-ai` / `workbuddy-intl` provider aliases across gateway registries and Go Core model listing.
