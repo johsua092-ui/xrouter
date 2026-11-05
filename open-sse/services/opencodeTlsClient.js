@@ -229,7 +229,9 @@ async function getSession(proxyUrl = "") {
       },
     };
 
-    if (proxyUrl) {
+    // Only forward real forward proxies (http/https/socks5). Serverless relays (workers/vercel)
+    // do not support TCP CONNECT tunneling for TLS impersonation.
+    if (proxyUrl && !/workers\.dev|vercel\.app|pages\.dev|deno\.dev/i.test(proxyUrl)) {
       sessionOpts.proxy = proxyUrl;
     }
 

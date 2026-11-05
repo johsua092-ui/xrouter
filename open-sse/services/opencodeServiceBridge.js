@@ -480,10 +480,15 @@ class OpenCodeClientMcpRelay {
       this.reconnectTimer = null;
     }
     this.openPromise = (async () => {
-      const nativeDynamicImport = new Function("s", "return import(s)");
-      const wsModule = await nativeDynamicImport("ws");
-      const WebSocketImpl = wsModule.WebSocket || wsModule.default;
-      if (!WebSocketImpl) throw new Error("OpenCode MCP relay requires the ws package");
+      let WebSocketImpl = globalThis.WebSocket;
+      try {
+        const nativeDynamicImport = new Function("s", "return import(s)");
+        const wsModule = await nativeDynamicImport("ws");
+        if (wsModule?.WebSocket || wsModule?.default) {
+          WebSocketImpl = wsModule.WebSocket || wsModule.default;
+        }
+      } catch {}
+      if (!WebSocketImpl) throw new Error("OpenCode MCP relay requires WebSocket support");
 
       const wsUrl = new URL(`${this.service.url.replace(/^http/, "ws")}/api/experimental/client-mcp`);
       wsUrl.searchParams.set("name", this.name);
