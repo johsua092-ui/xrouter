@@ -135,18 +135,70 @@ const ZCODE_RESET_USE_URL = "https://zcode.z.ai/api/v1/coding-plan/reset/use";
 const ZCODE_INCENTIVE_SUMMARY_URL = "https://zcode.z.ai/api/v1/incentive/referral/summary";
 const ZCODE_INCENTIVE_BIND_CODE_URL = "https://zcode.z.ai/api/v1/incentive/referral/bind-code";
 const ZCODE_MARKETING_TOUCH_URL = "https://zcode.z.ai/api/v1/marketing/touch";
-const ZCODE_APP_VERSION = "3.16.3";
+const ZCODE_APP_VERSION = "3.17.1";
 const ZCODE_PLATFORM = "linux-x64";
+export const ZCODE_START_PLAN_ID = "zcode-v3-start-plan-0817";
+
+/**
+ * Perform the sequential 4-step handshake required to activate and provision
+ * the ZCode Start Plan free tier quota (8M tokens: 3M GLM-5.3 + 5M GLM-5.3-Flash).
+ */
+export async function checkAndClaimZcodeStartPlan(token, deviceMid = "9ac46470-9bda-419a-baf9-924143aa6a04", proxyOptions = null) {
+  if (typeof token !== "string" || !token.trim()) return null;
+  const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
+  const headers = {
+    Authorization: `Bearer ${cleanToken}`,
+    "X-Device-Mid": deviceMid,
+    "X-ZCode-App-Version": ZCODE_APP_VERSION,
+    "User-Agent": `ZCode/${ZCODE_APP_VERSION}`,
+    Accept: "application/json",
+  };
+
+  const steps = [
+    `${ZCODE_MARKETING_TOUCH_URL}?seq=1`,
+    ZCODE_INCENTIVE_SUMMARY_URL,
+    `${ZCODE_PLAN_PREVIEW_URL}?app_version=${ZCODE_APP_VERSION}`,
+    `${ZCODE_PLAN_BALANCE_URL}?app_version=${ZCODE_APP_VERSION}`,
+  ];
+
+  let balancePayload = null;
+  for (const url of steps) {
+    try {
+      const res = await proxyAwareFetch(url, { method: "GET", headers, signal: AbortSignal.timeout(10000) }, proxyOptions);
+      if (res && res.ok && url.includes("/billing/balance")) {
+        balancePayload = await res.json().catch(() => null);
+      }
+    } catch {}
+  }
+
+  const data = balancePayload?.data || {};
+  const plans = Array.isArray(data.plans) ? data.plans : [];
+  const activePlan = plans.find(
+    (p) => p.plan_id === ZCODE_START_PLAN_ID || p.planId === ZCODE_START_PLAN_ID || (p.name && p.name.includes("Start Plan"))
+  );
+  const hasStartPlan = Boolean(activePlan && activePlan.status?.toLowerCase() === "active");
+
+  return {
+    ok: hasStartPlan,
+    hasStartPlan,
+    planId: ZCODE_START_PLAN_ID,
+    plan: activePlan || null,
+    plans,
+    balances: data.balances || [],
+    serverTime: data.server_time,
+  };
+}
 
 /**
  * Fetch active ZCode plan token balances & gift grants (e.g. 500M Weekend Build).
- * Hits GET https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=3.16.3
+ * Hits GET https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=3.17.1
  */
-export async function getGlmBalance(token, proxyOptions = null) {
+export async function getGlmBalance(token, proxyOptions = null, options = {}) {
   if (typeof token !== "string" || !token.trim()) return null;
   const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
   const url = new URL(ZCODE_PLAN_BALANCE_URL);
   url.searchParams.set("app_version", ZCODE_APP_VERSION);
+  const deviceMid = options?.deviceMid || options?.userId || "9ac46470-9bda-419a-baf9-924143aa6a04";
 
   try {
     const response = await proxyAwareFetch(
@@ -157,6 +209,8 @@ export async function getGlmBalance(token, proxyOptions = null) {
           Authorization: `Bearer ${cleanToken}`,
           Accept: "application/json",
           "X-ZCode-App-Version": ZCODE_APP_VERSION,
+          "User-Agent": `ZCode/${ZCODE_APP_VERSION}`,
+          "X-Device-Mid": deviceMid,
           "X-Platform": ZCODE_PLATFORM,
         },
         signal: AbortSignal.timeout(12000),
@@ -542,6 +596,32 @@ export async function claimGlmPlan(token, planId, proxyOptions = null, captcha =
 
   const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
   const deviceMid = captcha?.deviceMid || "9ac46470-9bda-419a-baf9-924143aa6a04";
+
+  // Auto-Resolution: Handle ZCode Start Plan Free Tier Quota Activation via Handshake
+  if (
+    planId === ZCODE_START_PLAN_ID ||
+    planId.toLowerCase() === "start" ||
+    planId.toLowerCase() === "start-plan" ||
+    planId.toLowerCase() === "auto"
+  ) {
+    const handshakeResult = await checkAndClaimZcodeStartPlan(token, deviceMid, proxyOptions);
+    if (handshakeResult?.hasStartPlan) {
+      return {
+        ok: true,
+        status: 200,
+        code: "SUCCESS",
+        plan: handshakeResult.plan || { plan_id: ZCODE_START_PLAN_ID, name: "ZCode Start Plan" },
+        message: "ZCode Start Plan free tier quota activated via handshake.",
+      };
+    }
+    return {
+      ok: false,
+      status: 400,
+      code: "start_plan_not_active",
+      message: "ZCode Start Plan not active for this account after handshake.",
+      data: handshakeResult,
+    };
+  }
 
   // Auto-Resolution: Handle Referral / Weekend Task Auto-Unlock
   if (planId.startsWith("incentive_") || planId.includes("referral") || planId.includes("-wk")) {

@@ -1,3 +1,15 @@
+# v0.0.8 (2026-11-05)
+
+- **ZCode Start Plan Free Tier Handshake Activation & Connection Sweep**:
+  - Implemented 4-step sequential handshake in `open-sse/services/usage/glm.js` (`checkAndClaimZcodeStartPlan`):
+    - `GET /api/v1/marketing/touch?seq=1`
+    - `GET /api/v1/incentive/referral/summary`
+    - `GET /api/v1/zcode-plan/billing/preview?app_version=3.17.1`
+    - `GET /api/v1/zcode-plan/billing/balance?app_version=3.17.1`
+  - Added support for auto-provisioned Start Plan ID `zcode-v3-start-plan-0817` (8M tokens: 3M GLM-5.3 + 5M GLM-5.3-Flash).
+  - Added GLM connection sweep & sync endpoint in `src/app/api/usage/[connectionId]/glm-claim/route.js` to automatically set `isActive = true` when `zcode-v3-start-plan-0817` is present, or `isActive = false` when empty/exhausted to avoid 1005 loop.
+  - Bumped gateway and CLI package versions to `0.0.8`.
+
 # v0.0.7 (2026-11-04)
 
 - **ZCode & GLM Stability Overhaul (Anti-405/3012 & Anti-3009 Concurrency Pacing)**:

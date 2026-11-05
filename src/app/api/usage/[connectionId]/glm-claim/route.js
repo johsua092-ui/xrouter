@@ -1,6 +1,6 @@
 import "open-sse/index.js";
-import { getProviderConnectionById } from "@/lib/db/index.js";
-import { getGlmClaimablePlans, claimGlmPlan, getGlmBalance } from "open-sse/services/usage.js";
+import { getProviderConnectionById, getProviderConnections, updateProviderConnection } from "@/lib/db/index.js";
+import { getGlmClaimablePlans, claimGlmPlan, getGlmBalance, checkAndClaimZcodeStartPlan, ZCODE_START_PLAN_ID } from "open-sse/services/usage.js";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { refreshAndUpdateCredentials } from "../route.js";
 
@@ -162,6 +162,42 @@ export async function POST(request, { params }) {
     }
 
     const { connectionId } = params;
+
+    // Sweep & sync mode: check all GLM connections for ZCode Start Plan
+    if (connectionId === "sync" || body.action === "sync_all" || planId === "sync") {
+      const connections = await getProviderConnections({ provider: "glm" });
+      const results = [];
+      for (const conn of connections) {
+        const token = resolveToken(conn, request);
+        const deviceMid = conn.providerSpecificData?.userId || "9ac46470-9bda-419a-baf9-924143aa6a04";
+        const proxyOptions = {
+          ...(await resolveConnectionProxyConfig(conn.providerSpecificData)),
+          strictProxy: false,
+        };
+        const handshake = await checkAndClaimZcodeStartPlan(token, deviceMid, proxyOptions);
+        const isActive = Boolean(handshake?.hasStartPlan);
+        await updateProviderConnection(conn.id, {
+          isActive,
+          testStatus: isActive ? "active" : "exhausted",
+          lastTested: new Date().toISOString(),
+        });
+        results.push({
+          id: conn.id,
+          name: conn.name,
+          isActive,
+          hasStartPlan: handshake?.hasStartPlan || false,
+          plansCount: handshake?.plans?.length || 0,
+        });
+      }
+      return Response.json({
+        ok: true,
+        message: `Synced ${results.length} GLM connections for ZCode Start Plan.`,
+        activeCount: results.filter((r) => r.isActive).length,
+        exhaustedCount: results.filter((r) => !r.isActive).length,
+        results,
+      });
+    }
+
     lockKey = `${connectionId}:claim:${planId}`;
     if (inFlight.has(lockKey)) {
       return failure("concurrent_request", "A claim request is already in progress for this plan.", 409);
@@ -189,6 +225,9 @@ export async function POST(request, { params }) {
     }
 
     if (result?.ok) {
+      try {
+        await updateProviderConnection(connectionId, { isActive: true, testStatus: "active" });
+      } catch {}
       return Response.json(result);
     }
     return failure(result?.code || "claim_failed", result?.message || "Failed to claim GLM plan.", result?.status || 502, result);
