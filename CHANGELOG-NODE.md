@@ -1,5 +1,9 @@
 # v0.0.7 (2026-11-04)
 
+- **CodeBuddy / WorkBuddy Support & Hunyuan hy4 Model Addition**:
+  - Registered `hy4` alongside `hy4-preview` in `codebuddy-cn` and `codebuddy-intl` registries, capability mapping, and thinking levels.
+  - Added `workbuddy` / `workbuddy-cn` and `workbuddy-ai` / `workbuddy-intl` provider aliases across gateway registries and Go Core model listing.
+
 - **Port PR #5459: Track and Display Separate Gemini 4 Argon Quota**:
   - Added dedicated `/argon/i` matcher in `open-sse/services/usage/antigravity-weekly.js` to extract `gemini_argon_weekly` and `gemini_argon_session` independently from Gemini (Flash / Pro).
   - Isolated `argonModels` from regular Gemini session exhaustion in `open-sse/services/usage/google.js`.

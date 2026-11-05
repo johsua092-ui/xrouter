@@ -3,11 +3,12 @@ export default {
   // Short model prefix (cbcn/glm-5.2). "cbcn" = CodeBuddy CN; reserve "cbai"
   // for a future codebuddy-ai (intl) provider. The full id still resolves.
   alias: "cbcn",
+  aliases: ["workbuddy", "workbuddy-cn"],
   uiAlias: "cbcn",
   hidden: false,
   priority: 90,
   display: {
-    name: "CodeBuddy CN",
+    name: "CodeBuddy CN / WorkBuddy",
     icon: "smart_toy",
     color: "#006EFF",
     website: "https://copilot.tencent.com",
@@ -65,6 +66,7 @@ export default {
     // "-x" suffix = paid tier of the same model (free id rides the promo quota).
     { id: "hy3", name: "Hy3" },
     { id: "hy4-preview", name: "Hy4-Preview" },
+    { id: "hy4", name: "Hy4" },
     { id: "glm-5.3", name: "GLM-5.3" },
     { id: "glm-5.3-flash", name: "GLM-5.3-Flash" },
     { id: "kimi-k3-1", name: "Kimi-K3" },
