@@ -211,7 +211,11 @@ async function getWreqModule() {
 }
 
 async function getSession(proxyUrl = "") {
-  const cacheKey = proxyUrl || "direct";
+  let normalizedProxy = proxyUrl ? String(proxyUrl).trim() : "";
+  if (normalizedProxy && !/^[a-zA-Z0-9+.-]+:\/\//.test(normalizedProxy)) {
+    normalizedProxy = `http://${normalizedProxy}`;
+  }
+  const cacheKey = normalizedProxy || "direct";
   if (sessionCache.has(cacheKey)) {
     return sessionCache.get(cacheKey);
   }
@@ -231,8 +235,8 @@ async function getSession(proxyUrl = "") {
 
     // Only forward real forward proxies (http/https/socks5). Serverless relays (workers/vercel)
     // do not support TCP CONNECT tunneling for TLS impersonation.
-    if (proxyUrl && !/workers\.dev|vercel\.app|pages\.dev|deno\.dev/i.test(proxyUrl)) {
-      sessionOpts.proxy = proxyUrl;
+    if (normalizedProxy && !/workers\.dev|vercel\.app|pages\.dev|deno\.dev/i.test(normalizedProxy)) {
+      sessionOpts.proxy = normalizedProxy;
     }
 
     return await wreq.createSession(sessionOpts);

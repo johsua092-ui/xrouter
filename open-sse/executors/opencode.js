@@ -525,33 +525,38 @@ export class OpenCodeExecutor extends BaseExecutor {
       const isAlive = await isOpencodeServiceAlive(daemon);
 
       if (isAlive) {
-        const directory = resolveClientWorkingDirectory(credentials, body, body?.messages);
-        const timeStr = new Date().toLocaleTimeString("en-GB");
-        console.log(`[${timeStr}] [BRIDGE] OPENCODE | ${model} | daemon=${daemon?.url || "127.0.0.1"}`);
+        try {
+          const directory = resolveClientWorkingDirectory(credentials, body, body?.messages);
+          const timeStr = new Date().toLocaleTimeString("en-GB");
+          console.log(`[${timeStr}] [BRIDGE] OPENCODE | ${model} | daemon=${daemon?.url || "127.0.0.1"}`);
 
-        const messages = prepareServiceMessages(body);
-        const serviceResponse = await executeServiceStream({
-          model,
-          body,
-          messages,
-          tools: body?.tools || [],
-          toolChoice: prepareServiceToolChoice(body?.tool_choice),
-          credentials: this.prepareRequestCredentials({ body, credentials }),
-          proxyUrl,
-          proxyNoProxy,
-          signal,
-        });
-        const session = credentials?.[SESSION_FIELD] || resolveOpencodeSession(body, credentials);
-        return {
-          response: serviceResponse,
-          url: "http://127.0.0.1/api/session/prompt",
-          headers: {
-            "Content-Type": "text/event-stream",
-            "x-opencode-session": session,
-          },
-          transformedBody: body,
-          responseFormat: FORMATS.OPENAI,
-        };
+          const messages = prepareServiceMessages(body);
+          const serviceResponse = await executeServiceStream({
+            model,
+            body,
+            messages,
+            tools: body?.tools || [],
+            toolChoice: prepareServiceToolChoice(body?.tool_choice),
+            credentials: this.prepareRequestCredentials({ body, credentials }),
+            proxyUrl,
+            proxyNoProxy,
+            signal,
+          });
+          const session = credentials?.[SESSION_FIELD] || resolveOpencodeSession(body, credentials);
+          return {
+            response: serviceResponse,
+            url: "http://127.0.0.1/api/session/prompt",
+            headers: {
+              "Content-Type": "text/event-stream",
+              "x-opencode-session": session,
+            },
+            transformedBody: body,
+            responseFormat: FORMATS.OPENAI,
+          };
+        } catch (daemonErr) {
+          const timeStr = new Date().toLocaleTimeString("en-GB");
+          console.warn(`[${timeStr}] [BRIDGE] OPENCODE daemon stream failed (${daemonErr?.message || daemonErr}) — falling back to TLS HTTP`);
+        }
       }
       const timeStr = new Date().toLocaleTimeString("en-GB");
       console.log(`[${timeStr}] [BRIDGE] OPENCODE daemon unreachable — falling back to TLS HTTP`);

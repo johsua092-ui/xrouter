@@ -107,51 +107,54 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
               connectionNoProxy: "",
               connectionProxyPoolId: null,
               vercelRelayUrl: "",
+              useServiceDaemon: override.useServiceDaemon !== false,
             },
-          };
-        }
-      } else {
-        // Proxy is OFF: use direct VPS connection as usual
-        return {
-          id: "noauth-direct",
-          connectionId: "noauth-direct",
-          connectionName: "Public (Direct)",
-          isActive: true,
-          accessToken: "public",
-          providerSpecificData: {
+            };
+            }
+            } else {
+            // Proxy is OFF: use direct VPS connection as usual
+            return {
+            id: "noauth-direct",
+            connectionId: "noauth-direct",
+            connectionName: "Public (Direct)",
+            isActive: true,
+            accessToken: "public",
+            providerSpecificData: {
             connectionProxyEnabled: false,
             connectionProxyUrl: "",
             connectionNoProxy: "",
             connectionProxyPoolId: null,
             vercelRelayUrl: "",
-          },
-        };
-      }
+            useServiceDaemon: override.useServiceDaemon !== false,
+            },
+            };
+            }
 
-      const resolvedProxy = await resolveConnectionProxyConfig({ proxyPoolId: pickedId });
-      // Special rule: opencode should NEVER be forced to vercel-relay unless explicitly configured
-      // Cloudflare blocks Vercel server IP ranges from accessing OpenCode free models
-      if (providerId === "opencode" && resolvedProxy.vercelRelayUrl) {
-        resolvedProxy.vercelRelayUrl = "";
-      }
+            const resolvedProxy = await resolveConnectionProxyConfig({ proxyPoolId: pickedId });
+            // Special rule: opencode should NEVER be forced to vercel-relay unless explicitly configured
+            // Cloudflare blocks Vercel server IP ranges from accessing OpenCode free models
+            if (providerId === "opencode" && resolvedProxy.vercelRelayUrl) {
+            resolvedProxy.vercelRelayUrl = "";
+            }
 
-      const hasProxy = Boolean(resolvedProxy.connectionProxyUrl || resolvedProxy.vercelRelayUrl);
-      const connId = hasProxy ? `noauth-proxy:${pickedId}` : "noauth-direct";
+            const hasProxy = Boolean(resolvedProxy.connectionProxyUrl || resolvedProxy.vercelRelayUrl);
+            const connId = hasProxy ? `noauth-proxy:${pickedId}` : "noauth-direct";
 
-      return {
-        id: connId,
-        connectionId: connId,
-        connectionName: hasProxy ? "Public (Proxy)" : "Public (Direct)",
-        isActive: true,
-        accessToken: "public",
-        providerSpecificData: {
-          connectionProxyEnabled: resolvedProxy.connectionProxyEnabled,
-          connectionProxyUrl: resolvedProxy.connectionProxyUrl,
-          connectionNoProxy: resolvedProxy.connectionNoProxy,
-          connectionProxyPoolId: resolvedProxy.proxyPoolId || pickedId || null,
-          vercelRelayUrl: resolvedProxy.vercelRelayUrl || "",
-        },
-      };
+            return {
+            id: connId,
+            connectionId: connId,
+            connectionName: hasProxy ? "Public (Proxy)" : "Public (Direct)",
+            isActive: true,
+            accessToken: "public",
+            providerSpecificData: {
+            connectionProxyEnabled: resolvedProxy.connectionProxyEnabled,
+            connectionProxyUrl: resolvedProxy.connectionProxyUrl,
+            connectionNoProxy: resolvedProxy.connectionNoProxy,
+            connectionProxyPoolId: resolvedProxy.proxyPoolId || pickedId || null,
+            vercelRelayUrl: resolvedProxy.vercelRelayUrl || "",
+            useServiceDaemon: override.useServiceDaemon !== false,
+            },
+            };
     }
 
     const connections = await getProviderConnections({ provider: providerId, isActive: true });
@@ -382,15 +385,20 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
       (errorText && (
         errorText.includes("Abuse") ||
         errorText.includes("timeout") ||
+        errorText.includes("timed out") ||
         errorText.includes("524") ||
         errorText.includes("FreeTierError") ||
         errorText.includes("FreeUsageLimitError") ||
-        errorText.includes("Rate limit exceeded")
+        errorText.includes("Rate limit exceeded") ||
+        errorText.includes("ProxyConnect") ||
+        errorText.includes("tunnel error") ||
+        errorText.includes("ECONNRESET") ||
+        errorText.includes("ECONNREFUSED")
       ));
     if (isProxyFailure) {
       const parts = connectionId.split(":");
       if (parts[1]) {
-        quarantineProxy(parts[1], 15 * 60 * 1000);
+        quarantineProxy(parts[1], 3 * 60 * 1000);
       }
     }
     // A proxy failure on a free no-auth provider should rotate IMMEDIATELY (0ms) to another proxy in pool!

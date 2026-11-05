@@ -217,10 +217,16 @@ export function buildOpenCodeServiceEnv({ baseEnv = process.env, proxyUrl = "", 
     no_proxy: normalizedNoProxy,
   };
   if (proxyUrl) {
-    env.HTTP_PROXY = proxyUrl;
-    env.HTTPS_PROXY = proxyUrl;
-    env.http_proxy = proxyUrl;
-    env.https_proxy = proxyUrl;
+    let normalized = String(proxyUrl).trim();
+    if (!/^[a-zA-Z0-9+.-]+:\/\//.test(normalized)) {
+      normalized = `http://${normalized}`;
+    }
+    env.HTTP_PROXY = normalized;
+    env.HTTPS_PROXY = normalized;
+    env.http_proxy = normalized;
+    env.https_proxy = normalized;
+    env.ALL_PROXY = normalized;
+    env.all_proxy = normalized;
   }
   if (apiKey !== undefined) env.OPENCODE_API_KEY = apiKey;
   if (env.NODE_ENV !== "production") env.OPENCODE_LOG_LEVEL = "DEBUG";
