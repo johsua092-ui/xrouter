@@ -2085,6 +2085,21 @@ export default function ProviderLimits() {
                   No active claimable event gift card found for this account right now.
                 </div>
               )}
+
+              <div className="pt-2 border-t border-border-subtle">
+                <div className="text-xs font-medium text-text-muted mb-2">Activate Start Plan via Handshake</div>
+                <button
+                  type="button"
+                  onClick={() => handleExecuteGlmClaim("zcode-v3-start-plan-0817")}
+                  disabled={glmClaimModal.claiming}
+                  className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-500 transition-colors disabled:opacity-50"
+                >
+                  {glmClaimModal.claiming && (
+                    <span className="material-symbols-outlined animate-spin text-[14px]">progress_activity</span>
+                  )}
+                  <span>Activate Start Plan (8M Token Free Tier)</span>
+                </button>
+              </div>
             </div>
 
             <div className="flex justify-between items-center gap-2 border-t border-black/10 bg-black/[0.02] px-4 py-2.5 dark:border-white/10 dark:bg-white/[0.02]">

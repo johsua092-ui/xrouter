@@ -1,5 +1,8 @@
 # v0.0.8 (2026-11-05)
 
+- **UI Button for Start Plan Free Tier Handshake**:
+  - Added dedicated one-click button in `ProviderLimits/index.js` ("Activate Start Plan (8M Token Free Tier)") to trigger the 4-step handshake directly from the UI without needing external captcha.
+
 - **ZCode Start Plan Free Tier Handshake Activation & Connection Sweep**:
   - Implemented 4-step sequential handshake in `open-sse/services/usage/glm.js` (`checkAndClaimZcodeStartPlan`):
     - `GET /api/v1/marketing/touch?seq=1`
