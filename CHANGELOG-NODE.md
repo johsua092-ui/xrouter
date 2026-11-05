@@ -1,5 +1,12 @@
 # v0.0.7 (2026-11-04)
 
+- **ZCode & GLM Stability Overhaul (Anti-405/3012 & Anti-3009 Concurrency Pacing)**:
+  - Implemented `KeyedMutex` in `ZCodeExecutor` enforcing strict 1-concurrency per account with 1500ms post-stream pacing delay to eliminate upstream `429 code 3009` and prevent subsequent `405 code 3012` softblocks.
+  - Added stream release hook (`hookStreamRelease`) to safely unlock account mutex on stream completion or client disconnect.
+  - Added comprehensive OpenAI-to-Anthropic tool and message normalizers (`normalizeZcodeTools`, `normalizeZcodeToolChoice`, and `normalizeZcodeMessages` with strict user/assistant role alternation).
+  - Enhanced `normalizeStartPlanResponse` mapping both code 1005 (quota) and code 3009 (concurrency limit) to HTTP 429 for seamless multi-account rotation.
+  - Fixed `extra?.proxyUrl` null-reference bug during directFetch proxy resolution.
+
 - **Automated Security Secret Generation in Setup Wizard**:
   - Configured `install.sh` to automatically generate `JWT_SECRET` (64-char hex) and `MACHINE_ID_SALT` (32-char hex) alongside `API_KEY_SECRET` without requiring interactive manual prompts.
   - Documented automatic secret generation behavior in `README.md` while maintaining support for explicit CLI flag overrides.

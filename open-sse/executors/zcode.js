@@ -5,6 +5,7 @@ import { refreshZcodeJwt, resolveZcodeAuth } from "../services/zcodePlan.js";
 import { ZCODE_SYSTEM_PROMPTS } from "../services/zcodePrompt.js";
 import { zcodeTlsFetch } from "../services/zcodeTlsClient.js";
 import { hasNativeZcodeBinary, forwardToZcodeDaemon } from "../services/zcodeServiceBridge.js";
+import { FORMATS } from "../translator/formats.js";
 
 const ZCODE_APP_VERSION = "3.16.3";
 const ZCODE_THIRD_SYSTEM_BLOCK = "Follow the user's instructions and use the available tools when helpful.";
@@ -38,6 +39,155 @@ function uuidv7() {
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = bytes.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// Convert OpenAI-style tools to Anthropic-style tools
+function normalizeZcodeTools(tools) {
+  if (!Array.isArray(tools) || tools.length === 0) return undefined;
+  const result = [];
+  for (const tool of tools) {
+    if (!tool || typeof tool !== "object") continue;
+    const fn = tool.function || (tool.type === "function" ? tool : null);
+    const name = (fn?.name || tool.name || "").trim();
+    if (!name) continue;
+    const description = fn?.description || tool.description || "";
+    const rawSchema = fn?.parameters || tool.input_schema || tool.parameters || { type: "object", properties: {} };
+    const input_schema = typeof rawSchema === "object" && rawSchema !== null ? { ...rawSchema } : { type: "object", properties: {} };
+    delete input_schema.strict;
+    delete input_schema.$schema;
+
+    result.push({
+      name,
+      ...(description ? { description } : {}),
+      input_schema,
+    });
+  }
+  return result.length > 0 ? result : undefined;
+}
+
+// Convert OpenAI tool_choice to Anthropic tool_choice
+function normalizeZcodeToolChoice(toolChoice) {
+  if (!toolChoice) return undefined;
+  if (typeof toolChoice === "string") {
+    if (toolChoice === "auto") return { type: "auto" };
+    if (toolChoice === "required") return { type: "any" };
+    if (toolChoice === "none") return undefined;
+    return undefined;
+  }
+  if (typeof toolChoice === "object" && !Array.isArray(toolChoice)) {
+    if (toolChoice.type === "function" && (toolChoice.function?.name || toolChoice.name)) {
+      return { type: "tool", name: toolChoice.function?.name || toolChoice.name };
+    }
+    if (toolChoice.type === "tool" && toolChoice.name) {
+      return toolChoice;
+    }
+    if (["auto", "any"].includes(toolChoice.type)) {
+      return toolChoice;
+    }
+  }
+  return undefined;
+}
+
+// Convert OpenAI tool messages & assistant tool_calls to Anthropic blocks
+function normalizeZcodeMessages(messages) {
+  if (!Array.isArray(messages)) return messages;
+  const result = [];
+
+  for (const msg of messages) {
+    if (!msg || typeof msg !== "object") continue;
+
+    // Preserve system messages for alignZcodeSystem
+    if (msg.role === "system") {
+      result.push(msg);
+      continue;
+    }
+
+    // Role: 'tool' (OpenAI tool output) -> Anthropic user message with tool_result block
+    if (msg.role === "tool") {
+      const toolUseId = msg.tool_call_id || msg.id || "call_unknown";
+      let content = msg.content;
+      if (typeof content !== "string") {
+        try {
+          content = JSON.stringify(content ?? "");
+        } catch {
+          content = String(content ?? "");
+        }
+      }
+      result.push({
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: toolUseId,
+            content,
+          },
+        ],
+      });
+      continue;
+    }
+
+    // Role: 'assistant' with tool_calls
+    if (msg.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+      const blocks = [];
+      if (typeof msg.content === "string" && msg.content) {
+        blocks.push({ type: "text", text: msg.content });
+      } else if (Array.isArray(msg.content)) {
+        for (const part of msg.content) {
+          if (part && typeof part === "object") blocks.push(part);
+        }
+      }
+
+      for (const tc of msg.tool_calls) {
+        const fn = tc.function || tc;
+        let input = {};
+        if (typeof fn.arguments === "string") {
+          try {
+            input = JSON.parse(fn.arguments);
+          } catch {
+            input = { raw: fn.arguments };
+          }
+        } else if (typeof fn.arguments === "object" && fn.arguments !== null) {
+          input = fn.arguments;
+        }
+        blocks.push({
+          type: "tool_use",
+          id: tc.id || `call_${randomUUID().slice(0, 8)}`,
+          name: fn.name || "unknown_tool",
+          input,
+        });
+      }
+
+      result.push({
+        role: "assistant",
+        content: blocks,
+      });
+      continue;
+    }
+
+    result.push(msg);
+  }
+
+  // Anthropic requires strictly alternating user/assistant messages after system is stripped
+  const merged = [];
+  for (const msg of result) {
+    if (msg.role === "system") {
+      merged.push(msg);
+      continue;
+    }
+    const last = merged[merged.length - 1];
+    if (last && last.role === msg.role && last.role !== "system") {
+      const toBlocks = (c) => {
+        if (typeof c === "string") return [{ type: "text", text: c }];
+        if (Array.isArray(c)) return c;
+        return [{ type: "text", text: String(c ?? "") }];
+      };
+      last.content = [...toBlocks(last.content), ...toBlocks(msg.content)];
+    } else {
+      merged.push(msg);
+    }
+  }
+
+  return merged;
 }
 
 // The plan gateway only accepts the desktop client's three-block system shape;
@@ -100,50 +250,6 @@ function withStartPlanOptions(body, accountUserId, deviceMid = "", sessionId = "
   return { ...body, metadata };
 }
 
-// The start-plan gateway fingerprints the stock ZCode system prompt and rejects
-// other shapes with HTTP 405 "unusual activity". Prepend the real blocks while
-// keeping the caller's own system content after them, and keep the thinking
-// shape identical to the desktop client ({"type":"enabled"}, no budget/display).
-function withStartPlanSystem(body, accountUserId) {
-  if (!body || typeof body !== "object" || Array.isArray(body)) return body;
-  const blocks = ZCODE_SYSTEM_PROMPTS.map((text) => ({ type: "text", text }));
-  const existing = body.system;
-
-  let next = body;
-  if (Array.isArray(existing)) {
-    const present = new Set(
-      existing
-        .map((entry) => (typeof entry === "string" ? entry : entry?.text))
-        .filter((text) => typeof text === "string")
-    );
-    if (!ZCODE_SYSTEM_PROMPTS.every((text) => present.has(text))) {
-      next = { ...body, system: [...blocks, ...existing] };
-    }
-  } else if (typeof existing === "string" && existing.trim()) {
-    next = { ...body, system: [...blocks, { type: "text", text: existing }] };
-  } else if (!Array.isArray(existing)) {
-    next = { ...body, system: blocks };
-  }
-
-  const thinking = next.thinking;
-  if (thinking && typeof thinking === "object" && !Array.isArray(thinking)) {
-    const type = String(thinking.type || "").toLowerCase();
-    if (type === "enabled" || type === "adaptive") next = { ...next, thinking: { type: "enabled" } };
-    else if (type === "disabled") next = { ...next, thinking: { type: "disabled" } };
-  }
-
-  // The desktop body carries the account identity and a max effort hint; both
-  // are part of what the edge sees on genuine traffic.
-  const metadata = next.metadata && typeof next.metadata === "object" && !Array.isArray(next.metadata)
-    ? { ...next.metadata }
-    : {};
-  if (accountUserId) metadata.user_id = accountUserId;
-  if (Object.keys(metadata).length) next = { ...next, metadata };
-  if (next.output_config === undefined) next = { ...next, output_config: { effort: "max" } };
-
-  return next;
-}
-
 function isGatewayActivityBlock(response) {
   if (response?.status !== 405) return false;
   return response
@@ -175,10 +281,123 @@ export function normalizeStartPlanResponse(response) {
       const failed = (code !== null && code !== 0 && code !== 200) || json?.success === false || json?.type === "error";
       if (!failed) return response;
       const message = json?.msg || json?.message || json?.error?.message || text;
-      const status = code === 1005 ? 429 : code === 3006 || code === 3001 ? 400 : 502;
+      // Map 1005 (quota) AND 3009 (concurrency limit) to 429 so router fails over
+      const status = (code === 1005 || code === 3009) ? 429 : code === 3006 || code === 3001 ? 400 : 502;
       return new Response(text, { status, statusText: String(message).slice(0, 120), headers: response.headers });
     })
     .catch(() => response);
+}
+
+class KeyedMutex {
+  constructor() {
+    this.chains = new Map();
+  }
+
+  async acquire(key, signal) {
+    if (signal?.aborted) {
+      throw new Error("Request aborted before acquiring lock");
+    }
+
+    let releaseCurrent;
+    const currentPromise = new Promise((resolve) => {
+      releaseCurrent = resolve;
+    });
+
+    const previousPromise = this.chains.get(key) || Promise.resolve();
+    this.chains.set(key, previousPromise.then(() => currentPromise, () => currentPromise));
+
+    let abortListener;
+    try {
+      if (signal) {
+        await Promise.race([
+          previousPromise,
+          new Promise((_, reject) => {
+            abortListener = () => reject(new Error("Request aborted in queue"));
+            signal.addEventListener("abort", abortListener, { once: true });
+          }),
+        ]);
+      } else {
+        await previousPromise;
+      }
+    } catch (err) {
+      releaseCurrent();
+      if (this.chains.get(key) === currentPromise) {
+        this.chains.delete(key);
+      }
+      throw err;
+    } finally {
+      if (signal && abortListener) {
+        signal.removeEventListener("abort", abortListener);
+      }
+    }
+
+    let released = false;
+    return () => {
+      if (!released) {
+        released = true;
+        // Pacing delay 1500ms before next queued request can acquire
+        setTimeout(() => {
+          releaseCurrent();
+          if (this.chains.get(key) === currentPromise) {
+            this.chains.delete(key);
+          }
+        }, 1500);
+      }
+    };
+  }
+}
+
+const zcodeMutex = new KeyedMutex();
+
+function hookStreamRelease(response, release, abortCtrl) {
+  const body = response?.body;
+  if (!body || typeof body.getReader !== "function") {
+    release();
+    return response;
+  }
+
+  const reader = body.getReader();
+  let doneOrCancelled = false;
+
+  const doRelease = () => {
+    if (!doneOrCancelled) {
+      doneOrCancelled = true;
+      release();
+    }
+  };
+
+  const hookedBody = new ReadableStream({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          doRelease();
+          controller.close();
+          return;
+        }
+        controller.enqueue(value);
+      } catch (err) {
+        doRelease();
+        controller.error(err);
+      }
+    },
+    async cancel(reason) {
+      try {
+        abortCtrl?.abort(reason || "client_cancelled");
+        await reader.cancel(reason);
+      } catch {
+        // ignore
+      } finally {
+        doRelease();
+      }
+    }
+  });
+
+  return new Response(hookedBody, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
 }
 
 export class ZCodeExecutor extends DefaultExecutor {
@@ -187,88 +406,127 @@ export class ZCodeExecutor extends DefaultExecutor {
   }
 
   async execute(args) {
-    const resolved = await resolveZcodeAuth(args.credentials, { log: args.log });
-    if (args.credentials) {
-      args.credentials.providerSpecificData = {
-        ...(args.credentials.providerSpecificData || {}),
-        ...resolved.persist,
-        __zcodeAuth: resolved,
-      };
+    const lockKey = String(
+      args.credentials?.providerSpecificData?.userId ||
+      args.credentials?.providerSpecificData?.zcodeJwtToken ||
+      args.credentials?.accessToken ||
+      args.credentials?.apiKey ||
+      args.credentials?.connectionId ||
+      "zcode_default"
+    );
+
+    const upstreamAbortCtrl = new AbortController();
+    if (args.signal) {
+      if (args.signal.aborted) {
+        upstreamAbortCtrl.abort(args.signal.reason);
+      } else {
+        args.signal.addEventListener("abort", () => upstreamAbortCtrl.abort(args.signal.reason), { once: true });
+      }
     }
 
-    const proxyOptions = args.proxyOptions;
-    const proxyUrl = (proxyOptions?.connectionProxyEnabled && proxyOptions?.connectionProxyUrl)
-      ? proxyOptions.connectionProxyUrl
-      : (args.credentials?.providerSpecificData?.connectionProxyEnabled && args.credentials?.providerSpecificData?.connectionProxyUrl)
-        ? args.credentials.providerSpecificData.connectionProxyUrl
-        : "";
-
-    // OPTION B: If native stripped ZCode binary engine is present and no proxy required,
-    // execute via native ZCode headless daemon bridge on port 29999.
-    const customFetch = (url, options, extra = {}) => {
-      const p = extra.proxyUrl || options.proxyUrl || proxyUrl;
-      if (!p && hasNativeZcodeBinary()) {
-        return forwardToZcodeDaemon(url, options.headers, options.body, options.signal).catch((err) => {
-          console.warn("[ZCodeExecutor] Native binary daemon failed, falling back to zcodeTlsFetch:", err.message);
-          return zcodeTlsFetch(url, {
-            method: options.method,
-            headers: options.headers,
-            body: options.body,
-          }, {
-            signal: options.signal,
-            proxy: p,
-            timeoutMs: args.stream ? 0 : undefined,
-          });
-        });
+    const releaseLock = await zcodeMutex.acquire(lockKey, upstreamAbortCtrl.signal);
+    let releaseCalled = false;
+    const safeRelease = () => {
+      if (!releaseCalled) {
+        releaseCalled = true;
+        releaseLock();
       }
-      return zcodeTlsFetch(url, {
-        method: options.method,
-        headers: options.headers,
-        body: options.body,
-      }, {
-        signal: options.signal,
-        proxy: p,
-        timeoutMs: args.stream ? 0 : undefined,
-      });
     };
 
-    let result = await super.execute({
-      ...args,
-      directFetch: customFetch,
-      directFetchProxy: true,
-    });
-    result.response = await normalizeStartPlanResponse(result.response);
-
-    // The edge occasionally answers a legitimate start-plan request with a
-    // transient 405/3012 anti-abuse block. Retry with backoff and a fresh
-    // session id and device mid.
-    if (resolved.lane === "start") {
-      const backoffMs = [1000, 3000, 6000];
-      for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
-        if (!(await isGatewayActivityBlock(result.response))) break;
-        try {
-          await result.response.body?.cancel?.();
-        } catch {
-          // Already consumed/closed.
-        }
-        await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
-        if (args.credentials) {
-          args.credentials.providerSpecificData = {
-            ...(args.credentials.providerSpecificData || {}),
-            __zcodeSessionSalt: randomBytes(8).toString("hex"),
-            userId: randomUUID(),
-          };
-        }
-        result = await super.execute({
-          ...args,
-          directFetch: customFetch,
-          directFetchProxy: true,
-        });
-        result.response = await normalizeStartPlanResponse(result.response);
+    try {
+      const resolved = await resolveZcodeAuth(args.credentials, { log: args.log });
+      if (args.credentials) {
+        args.credentials.providerSpecificData = {
+          ...(args.credentials.providerSpecificData || {}),
+          ...resolved.persist,
+          __zcodeAuth: resolved,
+        };
       }
-    }
 
-    return result;
+      const proxyOptions = args.proxyOptions;
+      const proxyUrl = (proxyOptions?.connectionProxyEnabled && proxyOptions?.connectionProxyUrl)
+        ? proxyOptions.connectionProxyUrl
+        : (args.credentials?.providerSpecificData?.connectionProxyEnabled && args.credentials?.providerSpecificData?.connectionProxyUrl)
+          ? args.credentials.providerSpecificData.connectionProxyUrl
+          : "";
+
+      // OPTION B: If native stripped ZCode binary engine is present and no proxy required,
+      // execute via native ZCode headless daemon bridge on port 29999.
+      const customFetch = (url, options, extra = {}) => {
+        const p = extra?.proxyUrl || options?.proxyUrl || proxyUrl;
+        if (!p && hasNativeZcodeBinary()) {
+          return forwardToZcodeDaemon(url, options.headers, options.body, options.signal).catch((err) => {
+            console.warn("[ZCodeExecutor] Native binary daemon failed, falling back to zcodeTlsFetch:", err.message);
+            return zcodeTlsFetch(url, {
+              method: options.method,
+              headers: options.headers,
+              body: options.body,
+            }, {
+              signal: options.signal,
+              proxy: p,
+              timeoutMs: args.stream ? 0 : undefined,
+            });
+          });
+        }
+        return zcodeTlsFetch(url, {
+          method: options.method,
+          headers: options.headers,
+          body: options.body,
+        }, {
+          signal: options.signal,
+          proxy: p,
+          timeoutMs: args.stream ? 0 : undefined,
+        });
+      };
+
+      const execArgs = {
+        ...args,
+        signal: upstreamAbortCtrl.signal,
+        directFetch: customFetch,
+        directFetchProxy: true,
+      };
+
+      let result = await super.execute(execArgs);
+      result.response = await normalizeStartPlanResponse(result.response);
+      result.responseFormat = FORMATS.CLAUDE;
+
+      // The edge occasionally answers a legitimate start-plan request with a
+      // transient 405/3012 anti-abuse block. Retry with backoff and a fresh
+      // session id and device mid.
+      if (resolved.lane === "start") {
+        const backoffMs = [2000, 6000];
+        for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
+          if (!(await isGatewayActivityBlock(result.response))) break;
+          try {
+            await result.response.body?.cancel?.();
+          } catch {
+            // Already consumed/closed.
+          }
+          await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
+          if (args.credentials) {
+            args.credentials.providerSpecificData = {
+              ...(args.credentials.providerSpecificData || {}),
+              __zcodeSessionSalt: randomBytes(8).toString("hex"),
+              userId: randomUUID(),
+            };
+          }
+          result = await super.execute(execArgs);
+          result.response = await normalizeStartPlanResponse(result.response);
+          result.responseFormat = FORMATS.CLAUDE;
+        }
+      }
+
+      if (!result?.response?.ok) {
+        safeRelease();
+        return result;
+      }
+
+      result.response = hookStreamRelease(result.response, safeRelease, upstreamAbortCtrl);
+      return result;
+    } catch (err) {
+      safeRelease();
+      throw err;
+    }
   }
 
   buildUrl(model, stream, urlIndex = 0, credentials = null) {
@@ -280,16 +538,48 @@ export class ZCodeExecutor extends DefaultExecutor {
   transformRequest(model, body, stream, credentials) {
     const transformed = super.transformRequest(model, body, stream, credentials);
     if (transformed && typeof transformed === "object") {
-      if (typeof transformed.model === "string") {
-        const lower = transformed.model.toLowerCase();
-        if (lower.includes("glm-5.3-flash")) {
-          transformed.model = "GLM-5.3-Flash";
-        } else if (lower.includes("glm-5.3")) {
-          transformed.model = "GLM-5.3";
-        }
+      const rawModel = transformed?.model || model || "GLM-5.3-Flash";
+      if (typeof rawModel === "string") {
+        const lower = rawModel.toLowerCase();
+        if (lower.includes("flash")) transformed.model = "GLM-5.3-Flash";
+        else if (lower.includes("5.2")) transformed.model = "GLM-5.2";
+        else if (lower.includes("turbo")) transformed.model = "GLM-5-Turbo";
+        else if (lower.includes("5.3")) transformed.model = "GLM-5.3";
+        else transformed.model = "GLM-5.3-Flash";
       }
     }
+
+    // Normalize messages if needed (tool results, assistant tool_calls, alternating roles)
+    if (Array.isArray(transformed.messages)) {
+      transformed.messages = normalizeZcodeMessages(transformed.messages);
+    }
+
     const aligned = alignZcodeSystem(transformed);
+    delete aligned.context_management;
+
+    // Normalize tools to Anthropic schema
+    if (Array.isArray(aligned.tools)) {
+      aligned.tools = normalizeZcodeTools(aligned.tools);
+    }
+
+    // Normalize tool_choice
+    if (aligned.tool_choice) {
+      aligned.tool_choice = normalizeZcodeToolChoice(aligned.tool_choice);
+    }
+
+    // Anthropic requirement: max_tokens must be set
+    aligned.max_tokens = aligned.max_tokens || aligned.max_completion_tokens || 4096;
+    delete aligned.max_completion_tokens;
+
+    // Strip OpenAI-only fields
+    delete aligned.stream_options;
+    delete aligned.presence_penalty;
+    delete aligned.frequency_penalty;
+    delete aligned.logit_bias;
+    delete aligned.user;
+    delete aligned.n;
+    delete aligned.seed;
+
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
     if (resolved?.lane === "start") {
       const mid = stableDeviceMid(credentials);
@@ -307,12 +597,9 @@ export class ZCodeExecutor extends DefaultExecutor {
     const apiKey = resolved?.apiKey || credentials?.apiKey || credentials?.accessToken;
     if (apiKey) {
       if (resolved?.lane === "start") {
-        // The plan gateway expects the raw zcode JWT as a Bearer token only;
-        // an extra x-api-key is answered with the same 405 block as unknown clients.
         delete headers["x-api-key"];
         headers.Authorization = `Bearer ${apiKey}`;
       } else {
-        // Project tokens are accepted with both headers on api.z.ai and Ultra Gateway.
         headers["x-api-key"] = apiKey;
         headers.Authorization = `Bearer ${apiKey}`;
         const zcodeJwt = credentials?.providerSpecificData?.zcodeJwtToken;
@@ -337,7 +624,6 @@ export class ZCodeExecutor extends DefaultExecutor {
       Object.assign(headers, {
         "User-Agent": `ZCode/${version} ai-sdk/anthropic/3.0.81`,
       });
-      // Delete any superfluous tracking headers for start-plan to prevent 3012 WAF divergence
       delete headers["anthropic-beta"];
       delete headers["Anthropic-Beta"];
     } else {
@@ -385,8 +671,6 @@ export class ZCodeExecutor extends DefaultExecutor {
       );
 
       return {
-        // chatCore only retries after a refresh that carries a token; the
-        // access token itself is unchanged, the refreshed zcode JWT rides in psd.
         accessToken: credentials.accessToken,
         providerSpecificData: { ...nextPsd, ...resolved.persist },
       };
