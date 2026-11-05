@@ -280,6 +280,9 @@ curl -N https://your-domain.com/v1/chat/completions \
 - **Current Runtime**: Node.js 26 (ESM) + Next.js 14.2 (App Router + Standalone)
 - **Database**: SQLite WAL via `node:sqlite` / `better-sqlite3` (Schema v14)
 - **Planned Architecture**: Single-repo Hybrid Golang Core with embedded Next.js static dashboard ([Read the Migration Plan](./docs/ROADMAP_GO_MIGRATION.md)).
+- **Low-Spec Optimization (1GB RAM / 1 Core / 1GB Disk)**:
+  - **Go Core (`Dockerfile.go`)**: Ultra-lightweight container with pure Zero-CGO, runtime memory footprint ~15-30 MB, image size ~25 MB, ideal for minimal cloud tiers (e.g. Koyeb 512MB RAM, 1GB VPS).
+  - **Node Gateway**: Configured with `--expose-gc --max-old-space-size=512` and automatic heap reclamation to prevent OOM on budget VPS nodes.
 - **Styling**: Tailwind CSS + Material Symbols + Semantic Color Tokens
 - **State Management**: Zustand stores (Session, Tasks, Notifications)
 

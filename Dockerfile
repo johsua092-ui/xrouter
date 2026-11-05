@@ -52,7 +52,7 @@ ENV PORT=20128
 ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATA_DIR=/app/data
-ENV NODE_OPTIONS="--max-old-space-size=384"
+ENV NODE_OPTIONS="--expose-gc --max-old-space-size=256"
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/static ./.next/static

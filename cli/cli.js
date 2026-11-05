@@ -642,7 +642,10 @@ function startServer(updatePromise) {
   function spawnServer() {
     serverStartTime = Date.now();
     crashLog = [];
-    const child = spawn(RUNTIME, ["--dns-result-order=ipv4first", "--max-old-space-size=6144", serverPath], {
+    // Default max-old-space-size to 512MB for 1GB RAM low-spec VPS/containers,
+    // while allowing NODE_OPTIONS or MAX_OLD_SPACE_SIZE environment variable overrides.
+    const maxMemory = process.env.MAX_OLD_SPACE_SIZE || "512";
+    const child = spawn(RUNTIME, ["--dns-result-order=ipv4first", `--max-old-space-size=${maxMemory}`, serverPath], {
       cwd: standaloneDir,
       stdio: showLog ? "inherit" : ["ignore", "ignore", "pipe"],
       detached: true,

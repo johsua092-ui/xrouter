@@ -58,7 +58,11 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("failed to create db directory: %w", err)
 	}
 
-	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=cache_size(-2000)&_pragma=temp_store(MEMORY)", dbPath)
+	// Optimize SQLite cache and memory footprint for low-spec hosts (1GB RAM, 1 Core):
+	// - WAL mode & busy_timeout
+	// - cache_size(-1000): limit page cache to ~1MB
+	// - mmap_size(0): disable memory-mapped I/O to avoid virtual memory ballooning
+	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=cache_size(-1000)&_pragma=temp_store(MEMORY)&_pragma=mmap_size(0)", dbPath)
 	sqlDB, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite database: %w", err)
