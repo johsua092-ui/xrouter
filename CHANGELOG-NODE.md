@@ -1,5 +1,11 @@
 # v0.0.7 (2026-11-04)
 
+- **Port PR #5459: Track and Display Separate Gemini 4 Argon Quota**:
+  - Added dedicated `/argon/i` matcher in `open-sse/services/usage/antigravity-weekly.js` to extract `gemini_argon_weekly` and `gemini_argon_session` independently from Gemini (Flash / Pro).
+  - Isolated `argonModels` from regular Gemini session exhaustion in `open-sse/services/usage/google.js`.
+  - Added dashboard representation and sort mapping for `gemini_argon` / `gemini_argon_session` in `ProviderLimits/utils.js`.
+  - Implemented `gemini_argon` model family support and `getAntigravityModelQuota` resolver in `src/sse/services/antigravityQuota.js` and `auth.js`.
+
 - **Harden OpenCode Proxy Resilience & Failover**:
   - Added seamless try/catch daemon failover to Direct TLS client (`opencodeTlsFetch`) in `OpenCodeExecutor.execute` to prevent 502 crashes during proxy network glitches.
   - Enabled SOCKS5 proxy support in daemon environment (`ALL_PROXY` / `all_proxy`) and added auto-protocol normalization for raw host:port proxies.
