@@ -1,5 +1,9 @@
 # v0.0.8 (2026-11-05)
 
+- **Antigravity Fatal Account State & Ban Detection**:
+  - Added explicit error mapping rules in `errorConfig.js` for Google Antigravity fatal codes: `TOS_VIOLATION`, `ACCOUNT_STATE_INVALID`, `RESTRICTED_AGE`, `VALIDATION_REQUIRED`, and location restrictions.
+  - Automatically locks and isolates banned/suspended accounts to avoid polling dead credentials.
+
 - **Fix OpenCode MiMo Tool Call Unaliasing (`run_command` -> original tool name)**:
   - Added `state.toolNameMap` unaliasing resolution in `openai-to-claude.js` response translator so concealed caller tools (e.g. `run_command` aliased from client terminal tools) are accurately restored before sending back to Claude Code / Roo / Cline, eliminating `Model generated invalid tool call: run_command` errors.
 
