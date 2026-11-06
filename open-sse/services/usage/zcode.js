@@ -30,12 +30,15 @@ export function parseZcodeStartPlanBalance(json) {
   const plans = Array.isArray(data.plans) ? data.plans : [];
   const balances = Array.isArray(data.balances) ? data.balances : [];
 
-  const activePlan = plans.find((plan) => {
+  let activePlan = plans.find((plan) => {
     if (String(plan?.status || "").toLowerCase() !== "active") return false;
     const identity = `${plan?.plan_id || ""} ${plan?.name || ""}`.toLowerCase();
-    return identity.includes("start-plan") || identity.includes("start plan");
+    return identity.includes("start-plan") || identity.includes("start plan") || identity.includes("build") || identity.includes("gift");
   });
-  if (!activePlan) return { message: "No active ZCode Start Plan." };
+  if (!activePlan && plans.length > 0) {
+    activePlan = plans.find((p) => String(p?.status || "").toLowerCase() === "active") || plans[0];
+  }
+  if (!activePlan && balances.length === 0) return { message: "No active ZCode Start Plan." };
 
   const quotas = {};
   for (const balance of balances) {
@@ -60,6 +63,8 @@ export function parseZcodeStartPlanBalance(json) {
     quotas[name] = {
       used: Number.isFinite(used) ? used : 0,
       total: Number.isFinite(total) ? total : 0,
+      totalTokens: Number.isFinite(total) ? total : 0,
+      usedTokens: Number.isFinite(used) ? used : 0,
       remaining: Number.isFinite(total) && total > 0 && Number.isFinite(remaining) ? Math.round((remaining / total) * 100) : 100,
       // Remaining share with decimals so small usage is not rounded up to 100%.
       ...(Number.isFinite(total) && total > 0 && Number.isFinite(remaining)
@@ -75,7 +80,7 @@ export function parseZcodeStartPlanBalance(json) {
   }
 
   if (!Object.keys(quotas).length) return { message: "ZCode Start Plan has no usage buckets." };
-  return { plan: activePlan.name || activePlan.plan_id || "Start Plan", quotas };
+  return { plan: activePlan?.name || activePlan?.plan_id || "Start Plan", quotas };
 }
 
 export function buildZcodeBalanceRequest(connection) {

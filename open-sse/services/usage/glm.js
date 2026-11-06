@@ -456,6 +456,12 @@ export async function getGlmUsage(apiKey, provider, proxyOptions = null, provide
     } catch {}
   }
 
+  // If we have active quotas (such as gift cards, Start Plan, or MAAS limits),
+  // suppress the "0 kuota / belum memiliki paket" notice so the quota card displays cleanly.
+  if (Object.keys(quotas).length > 0 && message && message.includes("0 kuota")) {
+    message = "";
+  }
+
   return { plan, quotas, ...(message ? { message } : {}), resetCards };
 }
 
