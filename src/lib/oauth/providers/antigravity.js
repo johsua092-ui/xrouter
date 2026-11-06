@@ -58,7 +58,7 @@ const antigravity = {
 
     // Load Code Assist to get project ID and tier
     let projectId = "";
-    let tierId = "legacy-tier";
+    let tierId = "free-tier";
     try {
       const loadRes = await fetch(ANTIGRAVITY_CONFIG.loadCodeAssistEndpoint, {
         method: "POST",
@@ -81,10 +81,46 @@ const antigravity = {
       console.log("Failed to load code assist:", e);
     }
 
-    // Fire-and-forget onboarding — does not block DB save
-    if (projectId) {
+    // Auto-Onboard: if account is new or has no project, trigger onboardUser polling
+    // to provision cloudaicompanionProject from Google automatically (Haizhu flow)
+    if (!projectId) {
+      try {
+        const onboardPayload = {
+          tierId: tierId || "free-tier",
+          metadata: {
+            ideType: "ANTIGRAVITY",
+            ideName: "antigravity",
+            ideVersion: "1.107.0",
+            ...metadata,
+          },
+        };
+        for (let i = 0; i < 8; i++) {
+          const onboardRes = await fetch(ANTIGRAVITY_CONFIG.onboardUserEndpoint, {
+            method: "POST",
+            headers: loadHeaders,
+            body: JSON.stringify(onboardPayload),
+          });
+          if (onboardRes.ok) {
+            const result = await onboardRes.json();
+            if (result.done === true) {
+              const respProject = result.response?.cloudaicompanionProject;
+              if (typeof respProject === "string") {
+                projectId = respProject.trim();
+              } else if (respProject?.id) {
+                projectId = respProject.id.trim();
+              }
+              if (projectId) break;
+            }
+          }
+          await new Promise((resolve) => setTimeout(resolve, 4000));
+        }
+      } catch (err) {
+        console.warn("Auto-onboarding new Antigravity account failed:", err?.message || err);
+      }
+    } else {
+      // Background ping if already has project ID to keep onboarding healthy
       const doOnboard = async () => {
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 3; i++) {
           try {
             const onboardRes = await fetch(ANTIGRAVITY_CONFIG.onboardUserEndpoint, {
               method: "POST",
@@ -95,10 +131,8 @@ const antigravity = {
               const result = await onboardRes.json();
               if (result.done === true) break;
             }
-          } catch (e) {
-            break;
-          }
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          } catch {}
+          await new Promise((resolve) => setTimeout(resolve, 5000));
         }
       };
       doOnboard().catch(() => {});

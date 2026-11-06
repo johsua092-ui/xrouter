@@ -1,5 +1,10 @@
 # v0.0.8 (2026-11-05)
 
+- **Antigravity Auto-Onboarding for New Accounts (Haizhu Protocol)**:
+  - Fixed inverted `if (projectId)` condition in `src/lib/oauth/providers/antigravity.js` so un-onboarded accounts automatically poll `onboardUser` to provision a `cloudaicompanionProject` on first login.
+  - Aligned onboarding payload with Google Antigravity v1.107.0 specifications (`ideType: ANTIGRAVITY`, `ideName: antigravity`, `ideVersion: 1.107.0`) in `open-sse/services/projectId.js`.
+  - Tuned onboarding polling parameters to 6 attempts with 5-second intervals for fast, reliable project ID resolution.
+
 - **Sync ZCode Allowed Models (Clean Stale Legacy Models)**:
   - Removed deprecated `GLM-5.2` and `GLM-5-Turbo` from ZCode registry and `ZCODE_START_MODELS` list. Upstream ZCode Start Plan now strictly allows only `GLM-5.3` and `GLM-5.3-Flash`, preventing upstream `400 code 3006 model not allowed` errors during model testing and routing.
 
