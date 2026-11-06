@@ -433,7 +433,16 @@ export async function getGlmUsage(apiKey, provider, proxyOptions = null, provide
         const remainingPct = totalUnits > 0 ? Math.min(100, Math.max(0, Math.round((remainingUnits / totalUnits) * 100))) : 100;
         const usedPct = 100 - remainingPct;
 
-        const quotaKey = `${showName} (grant)`;
+        const associatedPlan = (balanceData.plans || []).find((p) => p.plan_id === b.plan_id || p.user_plan_id === b.user_plan_id);
+        const planName = associatedPlan?.name || "";
+        const isStartPlan = !planName || /start[- ]?plan/i.test(planName);
+
+        let quotaKey = !isStartPlan && planName ? `${showName} (${planName})` : `${showName} (grant)`;
+        if (quotas[quotaKey]) {
+          const totalM = Math.round(totalUnits / 1000000);
+          quotaKey = `${showName} (${planName || "grant"} ${totalM > 0 ? `${totalM}M` : totalUnits})`;
+        }
+
         quotas[quotaKey] = {
           used: usedPct,
           total: 100,

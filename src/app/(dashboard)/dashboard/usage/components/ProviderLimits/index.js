@@ -1370,6 +1370,13 @@ export default function ProviderLimits() {
                           {getConnectionSecondaryLabel(conn)}
                         </p>
                       ) : null}
+                      {isGlm && quota?.plan && quota.plan !== "None" ? (
+                        <div className="mt-0.5">
+                          <span className="inline-flex items-center rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            {quota.plan}
+                          </span>
+                        </div>
+                      ) : null}
                       {conn.provider === "kiro" && (
                         <div className="mt-1 flex flex-wrap items-center gap-1">
                           <span className="rounded-full bg-brand-500/10 px-2 py-0.5 text-[10px] font-semibold text-brand-600 dark:text-brand-300">

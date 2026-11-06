@@ -1,7 +1,12 @@
 # v0.0.8 (2026-11-05)
 
-- **Adjust README Contributor Ordering**:
-  - Positioned Naub (`naummi`) at #3 with title: *Lead System Architect, Core Model Reverse-Engineering, Protocol Decryption, and Frontier Gateway Intelligence*, while preserving foundational credits for decolua (#1) and seren (#2).
+- **Fix GLM & ZCode Event Gift Card Balance Overwrite Bug**:
+  - Fixed dictionary key collision in `parseZcodeStartPlanBalance` (`zcode.js`) and `getGlmUsage` (`glm.js`) where multiple entitlements sharing model name `GLM-5.3-Flash` (such as 500M Weekend Build / 300M Global Build and 5M Start Plan) overwrote each other.
+  - Distinctly labels event gift bansos buckets with associated plan names (e.g. `GLM-5.3-Flash (ZCODE WEEKEND BUILD)`), displaying both massive gift card balances and daily start plan quotas in full.
+  - Added active plan badge to connection header on the Quota Tracker card.
+
+- **Update Contributor Credits in README & CHANGELOG**:
+  - Cleaned up contributor credits: Naub (`naummi`) is designated as Lead System Architect, Core Model Reverse-Engineering, Protocol Decryption, and Frontier Gateway Intelligence alongside decolua and Bayu.
 
 - **Update README Contributor Rankings**:
   - Elevated Naub (`naummi`) to position #1 with elite title: *Lead System Architect, Core Model Reverse-Engineering, Protocol Decryption, and Frontier Gateway Intelligence*.

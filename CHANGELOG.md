@@ -1,7 +1,12 @@
 # v0.0.8 (2026-11-05)
 
-- **Adjust README Contributor Ordering**:
-  - Positioned Naub (`naummi`) at #3 with title: *Lead System Architect, Core Model Reverse-Engineering, Protocol Decryption, and Frontier Gateway Intelligence*, while preserving foundational credits for decolua (#1) and seren (#2).
+- **Fix GLM & ZCode Event Gift Card Balance Overwrite Bug**:
+  - Fixed dictionary key collision in `parseZcodeStartPlanBalance` (`zcode.js`) and `getGlmUsage` (`glm.js`) where multiple entitlements sharing model name `GLM-5.3-Flash` (such as 500M Weekend Build / 300M Global Build and 5M Start Plan) overwrote each other.
+  - Distinctly labels event gift bansos buckets with associated plan names (e.g. `GLM-5.3-Flash (ZCODE WEEKEND BUILD)`), displaying both massive gift card balances and daily start plan quotas in full.
+  - Added active plan badge to connection header on the Quota Tracker card.
+
+- **Update Contributor Credits in README & CHANGELOG**:
+  - Cleaned up contributor credits: Naub (`naummi`) is designated as Lead System Architect, Core Model Reverse-Engineering, Protocol Decryption, and Frontier Gateway Intelligence alongside decolua and Bayu.
 
 - **Update README Contributor Rankings**:
   - Elevated Naub (`naummi`) to position #1 with elite title: *Lead System Architect, Core Model Reverse-Engineering, Protocol Decryption, and Frontier Gateway Intelligence*.
@@ -244,7 +249,7 @@
   - Pointed GLM website and apiKeyUrl in `glm.js` to `https://chat.z.ai` instead of `open.bigmodel.cn`.
   - Passed token units through `QuotaTable.js` so GLM / ZCode quotas display total millions of tokens (e.g. `5.0M tok (100%)`).
   - Fixed Cloudflare and Tailscale Funnel tunnels to target `getAppPort()` instead of hardcoded 20128 so funnels work dynamically under custom ports and dev servers.
-  - Switched from fragile BardFrontendService to Seren's battle-tested `gemini-web.js` with `batchexecute?rpcids=otAQ7b` payload structure.
+  - Switched from fragile BardFrontendService to battle-tested `gemini-web.js` with `batchexecute?rpcids=otAQ7b` payload structure.
   - Added `webCookieToolBridge.js` for native OpenAI tool calling support on browser sessions.
   - Added SAPISID authentication hashing (`SAPISIDHASH`) and inner slot payload formatting with full Gemini 4 Argon support (hex `95a4c0abcba24364`, mode 8).
   - No headless browser/Playwright required: runs pure high-speed HTTP wire protocol without consuming RAM or CPU.
@@ -449,8 +454,8 @@
   - Preserved `X-Forwarded-Host` and `X-Forwarded-Proto` for all dashboard and auth redirects to prevent protocol downgrade and port leakage.
   - Added direct fallback to `PUBLIC_BASE_URL` and `BASE_URL` environment variables when reverse proxy drops host headers.
   - Enforced `Cache-Control: no-store, no-cache, must-revalidate` on dashboard and login routes so Cloudflare edge never caches dynamic session pages.
-- **Seren Canonical Model Discovery & Allowlist Filter**:
-  - Adopted Seren's clean `buildModelsList` architecture in `GET /v1/models` with full capability metrics (`context_length`, `max_completion_tokens`), custom models, studio targets, and no-auth providers.
+- **Canonical Model Discovery & Allowlist Filter**:
+  - Adopted clean `buildModelsList` architecture in `GET /v1/models` with full capability metrics (`context_length`, `max_completion_tokens`), custom models, studio targets, and no-auth providers.
   - Aligned discovery (`/v1/models`) and chat gates (`/v1/chat/completions`): `allowedModels = 'all'` unlocks the entire catalog unrestricted, while specific model names restrict visibility and execution exclusively to that model.
 - **Next.js 16 Compatibility**:
   - Cleaned deprecated `experimental` options in `next.config.mjs` (`outputFileTracingRoot`, `serverComponentsExternalPackages`) for flawless builds on Next 14, 15, and 16.
@@ -569,7 +574,7 @@
 - **Cloudflare Tunnel Fallback**:
   - Auto-fallback to direct `trycloudflare.com` tunnel URL when shortlink worker (`abc-tunnel.us`) is unreachable, preventing tunnel setup failures.
 - **Terminal Network Display**:
-  - Display actual public/LAN IP address when server binds to `0.0.0.0` (matching Seren reference implementation).
+  - Display actual public/LAN IP address when server binds to `0.0.0.0` (matching canonical reference implementation).
 - **Version Bump & Update Notifications**:
   - Bumped version across Go Core (`internal/config`), NPM package (`cli/`), and web app to `v0.0.3` with real-time update notifications.
 

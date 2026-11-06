@@ -50,7 +50,21 @@ export function parseZcodeStartPlanBalance(json) {
       .map((capability) => String(capability).trim())
       .filter((capability) => capability.toLowerCase().startsWith("model:"))
       .map((capability) => capability.slice(6).trim());
-    const name = balance?.show_name || models.join(", ") || balance?.entitlement_id || balance?.meter || "Quota";
+    const baseName = balance?.show_name || models.join(", ") || balance?.entitlement_id || balance?.meter || "Quota";
+
+    // Disambiguate by matching plan to avoid overwriting identical show_names (e.g. 500M Weekend Build vs 5M Start Plan)
+    const associatedPlan = plans.find((p) => p.plan_id === balance.plan_id || p.user_plan_id === balance.user_plan_id);
+    const planName = associatedPlan?.name || "";
+    const isStartPlan = !planName || /start[- ]?plan/i.test(planName);
+
+    let name = baseName;
+    if (!isStartPlan && planName) {
+      name = `${baseName} (${planName})`;
+    } else if (quotas[name]) {
+      const totalM = Math.round(total / 1000000);
+      name = `${baseName} (${totalM > 0 ? `${totalM}M` : total})`;
+    }
+
     const expiresAt = Number(balance?.expires_at);
     const resetAt = Number.isFinite(expiresAt) && expiresAt > 0 ? new Date(expiresAt * 1000).toISOString() : null;
     const remainingUnits = Number(balance?.remaining_units);
