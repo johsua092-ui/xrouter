@@ -1,5 +1,8 @@
 # v0.0.8 (2026-11-05)
 
+- **Adjust README Contributor Ordering**:
+  - Positioned Naub (`naummi`) at #3 with title: *Lead System Architect, Core Model Reverse-Engineering, Protocol Decryption, and Frontier Gateway Intelligence*, while preserving foundational credits for decolua (#1) and seren (#2).
+
 - **Update README Contributor Rankings**:
   - Elevated Naub (`naummi`) to position #1 with elite title: *Lead System Architect, Core Model Reverse-Engineering, Protocol Decryption, and Frontier Gateway Intelligence*.
 - **Streamline ZCode Web Bridge**:
