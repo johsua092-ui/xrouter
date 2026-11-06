@@ -166,17 +166,21 @@ export const LOAD_CODE_ASSIST_HEADERS = {
   "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
 };
 
-// Real Antigravity IDE doesn't send X-Goog-Api-Client/Client-Metadata on loadCodeAssist/onboardUser —
-// Google's backend fingerprints those and silently refuses to provision a cloudaicompanionProject.
 export const ANTIGRAVITY_LOAD_CODE_ASSIST_HEADERS = {
   "Content-Type": "application/json",
-  "User-Agent": ANTIGRAVITY_IDE_USER_AGENT,
+  "Accept": "*/*",
+  "User-Agent": "antigravity/1.107.0 windows/amd64",
+  "Client-Metadata": JSON.stringify({
+    ideType: "ANTIGRAVITY",
+    platform: "PLATFORM_UNSPECIFIED",
+    pluginType: "GEMINI",
+  }),
 };
 
 export const LOAD_CODE_ASSIST_METADATA = {
   ideType: "ANTIGRAVITY",
-  ideVersion: "1.2.10",
-  platform: "DARWIN_ARM64",
+  platform: "PLATFORM_UNSPECIFIED",
+  pluginType: "GEMINI",
 };
 
 // System prompts

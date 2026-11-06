@@ -1,5 +1,9 @@
 # v0.0.8 (2026-11-05)
 
+- **Google Server-Side Antigravity Project ID Provisioning (True Haizhu Protocol)**:
+  - Eliminated client-side random project string generation (`cloudaicompanion-proj-...`).
+  - Implemented true server-side provisioning flow matching `HaizhuAntigravity`: sends `Client-Metadata` headers and triggers `onboardUser` polling followed by `loadCodeAssist` re-fetch to extract the genuine Google-assigned project ID.
+
 - **Fix GLM Quota Card Display for Bansos & Event Gifts**:
   - Fixed condition in `ProviderLimits/index.js` where `quota.message` was intercepting and suppressing `QuotaTable`, hiding claimed event gift tokens and bansos balances.
   - Enhanced `open-sse/services/usage/glm.js` and `open-sse/services/usage/zcode.js` to ensure token grant balances (e.g. 300M / 500M gifts) properly set `totalTokens` and `usedTokens` and render in the quota card.

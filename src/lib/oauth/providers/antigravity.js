@@ -41,9 +41,15 @@ const antigravity = {
   },
   postExchange: async (tokens) => {
     const loadHeaders = {
-      "Authorization": `Bearer ${tokens.access_token}`,
+      Authorization: `Bearer ${tokens.access_token}`,
       "Content-Type": "application/json",
-      "User-Agent": ANTIGRAVITY_CONFIG.loadCodeAssistUserAgent,
+      "Accept": "*/*",
+      "User-Agent": "antigravity/1.107.0 windows/amd64",
+      "Client-Metadata": JSON.stringify({
+        ideType: "ANTIGRAVITY",
+        platform: "PLATFORM_UNSPECIFIED",
+        pluginType: "GEMINI",
+      }),
       "x-request-source": "local",
     };
     const metadata = getOAuthClientMetadata();
@@ -95,7 +101,7 @@ const antigravity = {
             ...metadata,
           },
         };
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 6; i++) {
           const onboardRes = await fetch(ANTIGRAVITY_CONFIG.onboardUserEndpoint, {
             method: "POST",
             headers: loadHeaders,
@@ -103,23 +109,30 @@ const antigravity = {
           });
           if (onboardRes.ok) {
             const result = await onboardRes.json();
-            if (result.done === true) {
-              const respProject = result.response?.cloudaicompanionProject;
-              if (typeof respProject === "string") {
-                projectId = respProject.trim();
-              } else if (respProject?.id) {
-                projectId = respProject.id.trim();
-              }
+            const foundPid = result.cloudaicompanionProject?.id || result.cloudaicompanionProject || result.response?.cloudaicompanionProject?.id || result.response?.cloudaicompanionProject;
+            if (foundPid) {
+              projectId = typeof foundPid === "string" ? foundPid.trim() : foundPid.id?.trim();
               if (projectId) break;
             }
+            if (result.done === true) break;
           }
-          await new Promise((resolve) => setTimeout(resolve, 4000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+
+        // Re-check loadCodeAssist now that Google server has processed onboarding
+        if (!projectId) {
+          const reloadRes = await fetch(ANTIGRAVITY_CONFIG.loadCodeAssistEndpoint, {
+            method: "POST",
+            headers: loadHeaders,
+            body: JSON.stringify({ metadata }),
+          });
+          if (reloadRes.ok) {
+            const reloadData = await reloadRes.json();
+            projectId = reloadData.cloudaicompanionProject?.id || reloadData.cloudaicompanionProject || "";
+          }
         }
       } catch (err) {
-        console.warn("Auto-onboarding new Antigravity account failed:", err?.message || err);
-      }
-      if (!projectId) {
-        projectId = `cloudaicompanion-proj-${crypto.randomBytes(8).toString("hex")}`;
+        console.warn("Auto-onboarding new Antigravity account failed on Google server:", err?.message || err);
       }
     } else {
       // Background ping if already has project ID to keep onboarding healthy
