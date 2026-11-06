@@ -1,5 +1,8 @@
 # v0.0.8 (2026-11-05)
 
+- **OpenCode Precise 429 Retry-After & FreeUsageLimit Parsing**:
+  - Implemented `parseError` in `OpenCodeExecutor` to extract upstream `resets_at`, `resets_in_seconds`, and HTTP `retry-after` headers, preventing blind immediate retries that trigger client rate limit warnings.
+
 - **UI Button for Start Plan Free Tier Handshake**:
   - Added dedicated one-click button in `ProviderLimits/index.js` ("Activate Start Plan (8M Token Free Tier)") to trigger the 4-step handshake directly from the UI without needing external captcha.
 
