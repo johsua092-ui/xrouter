@@ -156,8 +156,8 @@ export async function POST(request, { params }) {
       return failure("invalid_body", "Request body must be a JSON object.");
     }
 
-    const planId = typeof body.planId === "string" ? body.planId.trim() : "";
-    if (!planId) {
+    let planId = typeof body.planId === "string" ? body.planId.trim() : "";
+    if (!planId && body.action !== "claim_auto") {
       return failure("missing_plan_id", "planId is required.");
     }
 
@@ -209,9 +209,25 @@ export async function POST(request, { params }) {
 
     const captcha = body.captcha || {
       captchaVerifyParam: body.captchaVerifyParam,
-      captchaRegion: body.captchaRegion,
+      captchaRegion: body.captchaRegion || "sgp",
       deviceMid: resolved.connection?.providerSpecificData?.userId || "9ac46470-9bda-419a-baf9-924143aa6a04",
     };
+
+    // Auto-discover claimable plan if action is claim_auto or planId is generic
+    if (body.action === "claim_auto" || !planId || planId === "auto" || planId === "gift") {
+      try {
+        const available = await getGlmClaimablePlans(resolved.token, resolved.proxyOptions, { deviceMid: captcha.deviceMid });
+        const claimablePlan = (available?.plans || []).find((p) => p.claimable && p.planId !== ZCODE_START_PLAN_ID);
+        if (claimablePlan?.planId) {
+          planId = claimablePlan.planId;
+        } else {
+          // Fallback to weekend build / global build / start-plan-0817
+          planId = "zcode-v3-start-plan-1030-wk";
+        }
+      } catch {
+        planId = "zcode-v3-start-plan-1030-wk";
+      }
+    }
 
     let result = await claimGlmPlan(resolved.token, planId, resolved.proxyOptions, captcha);
 

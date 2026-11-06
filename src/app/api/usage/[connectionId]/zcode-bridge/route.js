@@ -223,6 +223,22 @@ export async function GET(request, { params }) {
       Halaman Rewards ZCode memerlukan sesi login di browser kamu. Ikuti 2 langkah mudah di bawah untuk membukanya langsung:
     </div>
 
+    <!-- Step 0: Auto Traceless Captcha Solver -->
+    <div class="step-box" style="border: 1px solid #10B981; background: rgba(16, 185, 129, 0.05);">
+      <div class="step-header">
+        <span class="step-num" style="background: #10B981;">⚡</span>
+        <span class="step-title" style="color: #34D399;">1-Click Auto Claim (Bypass Aliyun Traceless Captcha)</span>
+      </div>
+      <p class="step-desc">
+        Menggunakan engine resmi Aliyun Web SDK Traceless Captcha (Scene <code>11xygtvd</code>). Verifikasi berlangsung di background browser kamu tanpa puzzle geser manual:
+      </p>
+      <div id="captcha-element"></div>
+      <button type="button" id="btnAutoClaim" class="btn btn-green" onclick="startOneClickClaim()">
+        Klaim Semua Gift Voucher (300M / 500M)
+      </button>
+      <div id="claimStatus" style="font-size: 11px; margin-top: 8px; text-align: center; color: #94A3B8;"></div>
+    </div>
+
     <!-- Step 1 -->
     <div class="step-box">
       <div class="step-header">
@@ -264,8 +280,75 @@ export async function GET(request, { params }) {
     </div>
   </div>
 
+  <script src="https://o.alicdn.com/captcha-frontend/aliyunCaptcha/AliyunCaptcha.js"></script>
   <script>
     const consoleSnippet = ${JSON.stringify(consoleSnippet)};
+    const connectionId = ${JSON.stringify(connectionId)};
+
+    let aliyunCaptchaInstance = null;
+
+    async function initTraceless() {
+      if (!window.initAliyunCaptcha) return;
+      try {
+        window.initAliyunCaptcha({
+          SceneId: "11xygtvd",
+          prefix: "no8xfe",
+          mode: "popup",
+          element: "#captcha-element",
+          button: "#btnAutoClaim",
+          captchaVerifyCallback: async function(captchaVerifyParam) {
+            const statusEl = document.getElementById("claimStatus");
+            statusEl.textContent = "Captcha lolos! Mengklaim ke server ZCode...";
+            statusEl.style.color = "#34D399";
+            try {
+              const res = await fetch("/api/usage/" + connectionId + "/glm-claim", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: "claim_auto",
+                  captchaVerifyParam: captchaVerifyParam,
+                  captchaRegion: "sgp"
+                })
+              });
+              const data = await res.json();
+              if (data.success || data.code === "SUCCESS" || data.ok) {
+                statusEl.textContent = "BERHASIL KLAIM! " + (data.message || "Voucher aktif.");
+                statusEl.style.color = "#10B981";
+              } else {
+                statusEl.textContent = "Klaim selesai: " + (data.message || data.error || JSON.stringify(data));
+                statusEl.style.color = "#F59E0B";
+              }
+            } catch (err) {
+              statusEl.textContent = "Gagal memanggil endpoint klaim: " + err.message;
+              statusEl.style.color = "#EF4444";
+            }
+          },
+          onBizResultCallback: function() {},
+          getInstance: function(instance) {
+            aliyunCaptchaInstance = instance;
+          },
+          region: "sgp",
+          language: "en"
+        });
+      } catch (e) {
+        console.warn("AliyunCaptcha init error:", e);
+      }
+    }
+
+    function startOneClickClaim() {
+      const statusEl = document.getElementById("claimStatus");
+      statusEl.textContent = "Menghubungi engine Aliyun Captcha...";
+      statusEl.style.color = "#60A5FA";
+      if (!aliyunCaptchaInstance) {
+        initTraceless();
+      }
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initTraceless);
+    } else {
+      initTraceless();
+    }
 
     function copyConsoleSnippet() {
       navigator.clipboard.writeText(consoleSnippet).then(() => {
