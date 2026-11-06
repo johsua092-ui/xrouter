@@ -26,7 +26,7 @@ const INDIVIDUAL_BASE = {
 };
 
 export const ZCODE_START_BASE = "https://zcode.z.ai/api/v1/zcode-plan/anthropic";
-export const ZCODE_START_MODELS = ["GLM-5.3-Flash", "GLM-5.2", "GLM-5-Turbo"];
+export const ZCODE_START_MODELS = ["GLM-5.3-Flash", "GLM-5.3"];
 export const ZCODE_CODING_PLAN_MODELS = ["GLM-5.3", "GLM-5.3-Flash"];
 
 const resolveCache = new Map();

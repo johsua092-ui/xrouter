@@ -1,5 +1,8 @@
 # v0.0.8 (2026-11-05)
 
+- **Sync ZCode Allowed Models (Clean Stale Legacy Models)**:
+  - Removed deprecated `GLM-5.2` and `GLM-5-Turbo` from ZCode registry and `ZCODE_START_MODELS` list. Upstream ZCode Start Plan now strictly allows only `GLM-5.3` and `GLM-5.3-Flash`, preventing upstream `400 code 3006 model not allowed` errors during model testing and routing.
+
 - **OpenCode Precise 429 Retry-After & FreeUsageLimit Parsing**:
   - Implemented `parseError` in `OpenCodeExecutor` to extract upstream `resets_at`, `resets_in_seconds`, and HTTP `retry-after` headers, preventing blind immediate retries that trigger client rate limit warnings.
 
