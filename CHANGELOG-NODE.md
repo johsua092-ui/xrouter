@@ -1,5 +1,10 @@
 # v0.0.8 (2026-11-05)
 
+- **Update README Contributor Rankings**:
+  - Elevated Naub (`naummi`) to position #1 with elite title: *Lead System Architect, Core Model Reverse-Engineering, Protocol Decryption, and Frontier Gateway Intelligence*.
+- **Streamline ZCode Web Bridge**:
+  - Removed obsolete Step 2 manual rewards link in favor of 1-Click Auto Claim with Aliyun Traceless Captcha bypass.
+
 - **Google Server-Side Antigravity Project ID Provisioning (True Haizhu Protocol)**:
   - Eliminated client-side random project string generation (`cloudaicompanion-proj-...`).
   - Implemented true server-side provisioning flow matching `HaizhuAntigravity`: sends `Client-Metadata` headers and triggers `onboardUser` polling followed by `loadCodeAssist` re-fetch to extract the genuine Google-assigned project ID.

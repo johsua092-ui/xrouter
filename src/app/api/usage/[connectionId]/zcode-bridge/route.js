@@ -253,20 +253,6 @@ export async function GET(request, { params }) {
       </a>
     </div>
 
-    <!-- Step 2 -->
-    <div class="step-box">
-      <div class="step-header">
-        <span class="step-num">2</span>
-        <span class="step-title">Buka Halaman Rewards & Voucher</span>
-      </div>
-      <p class="step-desc">
-        Setelah login di Langkah 1 selesai, buka halaman Rewards. Popup tiket 500M / reward task akan langsung muncul dan siap diklaim:
-      </p>
-      <a href="https://zcode.z.ai/en/rewards?embedded=app&theme=zai-dark" target="_blank" rel="noopener noreferrer" class="btn btn-green">
-        Buka Halaman Rewards & Voucher 500M
-      </a>
-    </div>
-
     <div class="divider">PENGGUNA PC / LAPTOP</div>
 
     <div style="background:#0F1622;border:1px solid #233045;border-radius:10px;padding:12px;">
