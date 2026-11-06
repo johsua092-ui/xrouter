@@ -129,11 +129,7 @@ export function generateSessionId() {
 
 // Generate project ID
 export function generateProjectId() {
-  const adjectives = ["useful", "bright", "swift", "calm", "bold"];
-  const nouns = ["fuze", "wave", "spark", "flow", "core"];
-  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const noun = nouns[Math.floor(Math.random() * nouns.length)];
-  return `${adj}-${noun}-${crypto.randomUUID().slice(0, 5)}`;
+  return `cloudaicompanion-proj-${crypto.randomBytes(8).toString("hex")}`;
 }
 
 // Helper: Remove unsupported keywords recursively from object/array

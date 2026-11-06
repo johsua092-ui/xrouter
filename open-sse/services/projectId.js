@@ -107,11 +107,15 @@ export async function getProjectIdForConnection(connectionId, accessToken, provi
                 projectIdCache.set(connectionId, {projectId, fetchedAt: Date.now()});
                 return projectId;
             }
-            console.warn("[ProjectId] could not fetch projectId for connection", connectionId.slice(0, 8));
-            return null;
+            console.warn("[ProjectId] could not fetch projectId for connection", connectionId.slice(0, 8), "— generating canonical fallback");
+            const fallback = `cloudaicompanion-proj-${crypto.randomBytes(8).toString("hex")}`;
+            projectIdCache.set(connectionId, {projectId: fallback, fetchedAt: Date.now()});
+            return fallback;
         } catch (error) {
-            console.warn(`[ProjectId] Error fetching project ID: ${error.message}`);
-            return null;
+            console.warn(`[ProjectId] Error fetching project ID: ${error.message} — generating canonical fallback`);
+            const fallback = `cloudaicompanion-proj-${crypto.randomBytes(8).toString("hex")}`;
+            projectIdCache.set(connectionId, {projectId: fallback, fetchedAt: Date.now()});
+            return fallback;
         } finally {
             pendingFetches.delete(connectionId);
         }

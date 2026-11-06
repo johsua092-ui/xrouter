@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { ANTIGRAVITY_CONFIG, getOAuthClientMetadata } from "../constants/oauth.js";
 
 const antigravity = {
@@ -116,6 +117,9 @@ const antigravity = {
         }
       } catch (err) {
         console.warn("Auto-onboarding new Antigravity account failed:", err?.message || err);
+      }
+      if (!projectId) {
+        projectId = `cloudaicompanion-proj-${crypto.randomBytes(8).toString("hex")}`;
       }
     } else {
       // Background ping if already has project ID to keep onboarding healthy

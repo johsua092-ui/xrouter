@@ -416,9 +416,7 @@ export class AntigravityExecutor extends BaseExecutor {
   }
 
   generateProjectId() {
-    const adj = ["useful", "bright", "swift", "calm", "bold"][Math.floor(Math.random() * 5)];
-    const noun = ["fuze", "wave", "spark", "flow", "core"][Math.floor(Math.random() * 5)];
-    return `${adj}-${noun}-${crypto.randomUUID().slice(0, 5)}`;
+    return `cloudaicompanion-proj-${crypto.randomBytes(8).toString("hex")}`;
   }
 
   generateSessionId() {
