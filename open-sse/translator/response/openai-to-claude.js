@@ -194,7 +194,9 @@ export function openaiToClaudeResponse(chunk, state) {
 
         // Strip prefix from tool name for response
         let toolName = tc.function?.name || "";
-        if (toolName.startsWith(CLAUDE_OAUTH_TOOL_PREFIX)) {
+        if (state.toolNameMap?.has(toolName)) {
+          toolName = state.toolNameMap.get(toolName);
+        } else if (toolName.startsWith(CLAUDE_OAUTH_TOOL_PREFIX)) {
           toolName = toolName.slice(CLAUDE_OAUTH_TOOL_PREFIX.length);
         }
 
