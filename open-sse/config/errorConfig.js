@@ -75,6 +75,11 @@ export const ERROR_RULES = [
   { provider: "antigravity", text: "VALIDATION_REQUIRED", cooldownMs: COOLDOWN.long, lock: true },
   { provider: "antigravity", text: "User location is not supported", cooldownMs: COOLDOWN.long, lock: true },
 
+  // --- OpenCode Free Tier Quota Classification (Ported from PR #5120) ---
+  { provider: "opencode", text: "FreeUsageLimitError", backoff: true },
+  { provider: "opencode", text: "free usage limit reached", backoff: true },
+  { provider: "opencode", text: "AI_APICallError", backoff: true },
+
   // --- Text-based rules (checked first, order = priority) ---
   { provider: "codex", text: "model is not supported when using codex with a chatgpt account", cooldownMs: MAX_RATE_LIMIT_COOLDOWN_MS },
   // Intl gateway blocks affect the account/IP, so let the connection back off.
