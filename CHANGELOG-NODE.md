@@ -1,5 +1,9 @@
 # v0.1.0 (2026-11-05)
 
+- **Fix Keyless Models Internal Ping Authorization**:
+  - Suppressed Bearer injection on internal health test probes for keyless models (`ovh/*`, `koma/*`, `opensatan/*`) in `ping.js`.
+  - Added team API key authentication support in `validateApiKey` (`apiKeysRepo.js`).
+
 - **Integrate Standard Categorized ModelSelectModal in Teams Page**:
   - Replaced ad-hoc model list with standard system `ModelSelectModal` (same component used in Endpoint & Combos) supporting categorized provider tabs, live search, prefix tags, and batch selection.
 

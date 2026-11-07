@@ -38,6 +38,7 @@ const PUBLIC_API_PATHS = [
   "/api/connection/telegram/webhook",
   "/api/connection/telegram/command",
   "/api/models",
+  "/api/models/test",
   "/api/model",
   "/api/usage",
 ];
