@@ -518,7 +518,10 @@ function checkForUpdate() {
       res.on("end", () => {
         try {
           const latest = JSON.parse(data);
-          if (latest.version && compareVersions(latest.version, pkg.version) > 0) {
+          // If the published npm package is an older legacy series (e.g. 0.6.x) while local package
+          // is in the new clean SemVer series (e.g. 0.1.0), do not trigger a false downgrade prompt.
+          const isLegacySeries = latest.version && latest.version.startsWith("0.6.") && !pkg.version.startsWith("0.6.");
+          if (latest.version && !isLegacySeries && compareVersions(latest.version, pkg.version) > 0) {
             done(latest.version);
           } else {
             done(null);

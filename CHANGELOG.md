@@ -1,5 +1,8 @@
 # v0.1.0 (2026-11-05)
 
+- **Fix NPM CLI Update Check False Downgrade Prompt**:
+  - Filtered legacy `0.6.x` published registry versions in `cli/cli.js` from triggering an update prompt when running the new `0.1.0` series locally.
+
 - **Version Bump to v0.1.0 (Node.js) & v0.0.1 (Go Core)**:
   - Advanced package version to `0.1.0` in `package.json` and `cli/package.json` for major feature milestone.
   - Reset Go Core micro-gateway version to `0.0.1` in `internal/config/config.go`.
