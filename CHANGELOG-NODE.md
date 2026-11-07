@@ -1,5 +1,8 @@
 # v0.1.0 (2026-11-05)
 
+- **Register Gemini Web in Go Core Models Catalog**:
+  - Registered `gemini-web/gemini-2.5-flash` and `gemini-web/gemini-2.5-pro` in Go Core `handleModels` catalog.
+
 - **Align Go Core Diagnostic Proxy Subpath**:
   - Aligned default target in `handleTestProxy` (`internal/gateway/server.go`) to canonical `/inference/openai/v1/models`.
 

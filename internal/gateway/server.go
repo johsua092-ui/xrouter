@@ -165,6 +165,8 @@ func (g *Gateway) handleModels(w http.ResponseWriter, r *http.Request) {
 		{"id": "oc/glm-5.3-flash-free", "object": "model", "owned_by": "opencode"},
 		{"id": "oc/deepseek-v4.1-flash-free", "object": "model", "owned_by": "opencode"},
 		{"id": "ag/gemini-3.8-flash-high", "object": "model", "owned_by": "antigravity"},
+		{"id": "gemini-web/gemini-2.5-flash", "object": "model", "owned_by": "gemini-web"},
+		{"id": "gemini-web/gemini-2.5-pro", "object": "model", "owned_by": "gemini-web"},
 		{"id": "cbai/deepseek-v4.1-flash", "object": "model", "owned_by": "codebuddy"},
 		{"id": "cbcn/hy4", "object": "model", "owned_by": "codebuddy"},
 		{"id": "cbcn/hy4-preview", "object": "model", "owned_by": "codebuddy"},
