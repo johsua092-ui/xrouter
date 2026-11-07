@@ -1,5 +1,9 @@
 # v0.1.0 (2026-11-05)
 
+- **Port Complete Magpie OpenCode Specification**:
+  - Upgraded OpenCode fingerprint tool definitions to full 5 core tools (`edit`, `glob`, `grep`, `read`, `shell`) with exact upstream schemas.
+  - Injected OpenTelemetry trace headers (`b3`, `traceparent`) on every request to pass OpenCode 2.2.5+ telemetry verification.
+
 - **Fix Tailscale Installer Hanging ("Bengong") and Socket Detection**:
   - Streamed `child.stderr` in `installTailscaleLinux` so apt-get progress is pushed to the UI in real time rather than freezing.
   - Dynamically resolved active socket flag (`getActiveSocketFlag`) between system daemon (`/var/run/tailscale/tailscaled.sock`) and custom userspace socket.

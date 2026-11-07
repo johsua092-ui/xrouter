@@ -20,15 +20,59 @@
 import os from "node:os";
 import path from "node:path";
 
-/** Names required by the upstream free-tier gate. */
-export const OPENCODE_FINGERPRINT_TOOLS = ["read", "shell"];
+/** Names required by the upstream free-tier gate: edit, glob, grep, read, shell */
+export const OPENCODE_FINGERPRINT_TOOLS = ["edit", "glob", "grep", "read", "shell"];
 
 export const GATED_TOOL_NAME_RE = /terminal/i;
 const GATED_TOOL_ALIAS = "run_command";
 
-// Verbatim from the OpenCode v2.0.26 CLI. Upstream compares description and
+// Verbatim from the OpenCode v2.2.5+ CLI / Magpie specification. Upstream compares description and
 // parameters, so do not reword or reformat these.
 export const FINGERPRINT_TOOL_DEFINITIONS = {
+  edit: {
+    description: "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. Write line breaks as \\n; the file's existing CRLF or LF line endings are matched and preserved. To change line endings themselves, make oldString and newString differ only in \\r; that edit applies to the exact bytes. If there is no exact match, the edit retries while ignoring typographic quote, dash, and space variants, then trailing whitespace on each line. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "File to edit" },
+        oldString: { type: "string", description: "Exact text to find and replace" },
+        newString: { type: "string", description: "Text to replace oldString with (must differ from oldString)" },
+        replaceAll: { type: "boolean", description: "Whether to replace every occurrence of oldString. When false, oldString must match exactly once. Defaults to false." }
+      },
+      required: ["path", "oldString", "newString"],
+      additionalProperties: false
+    }
+  },
+  glob: {
+    description: "Find files matching a glob pattern relative to a directory. Output is a list of file paths. Always use forward slashes (/) as path separators even on Windows. The pattern supports standard glob features: * matches characters within a directory, ** matches across directories, ? matches a single character, and [abc] matches a character set. Prefer specific patterns over broad ones.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", description: "Glob pattern to match files against" },
+        path: { type: "string", description: "Directory to search. Defaults to the current working directory." },
+        hidden: { type: "boolean", description: "Include hidden files and directories (default: false)." },
+        limit: { type: "integer", exclusiveMinimum: 0, description: "Maximum number of matching files to return (default: 100)" }
+      },
+      required: ["pattern"],
+      additionalProperties: false
+    }
+  },
+  grep: {
+    description: "Search for a regular expression pattern within files. Lines are returned with 1-based line numbers. By default, searches recursively from the working directory. Output is sorted by file path and line number.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", minLength: 1, description: "Regular expression or literal text to match in file contents." },
+        path: { type: "string", description: "File or directory to search. Defaults to the current working directory." },
+        include: { type: "string", description: "Glob pattern to filter files (for example, \"*.js\" or \"*.{ts,tsx}\")" },
+        literal: { type: "boolean", description: "Treat pattern as exact text instead of a regular expression (default: false)." },
+        caseSensitive: { type: "boolean", description: "Use case-sensitive matching (default: true)." },
+        limit: { type: "integer", exclusiveMinimum: 0, description: "Maximum number of matching lines to return (default: 100)" }
+      },
+      required: ["pattern"],
+      additionalProperties: false
+    }
+  },
   read: {
     description: "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
     parameters: {

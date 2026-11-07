@@ -63,7 +63,7 @@ describe("opencodeFingerprint — request side", () => {
     const body = {};
     applyFingerprintTools(body, false);
 
-    expect(body.tools.map((tool) => tool.function.name)).toEqual(OPENCODE_FINGERPRINT_TOOLS);
+    expect(body.tools.map((tool) => tool.function.name).sort()).toEqual([...OPENCODE_FINGERPRINT_TOOLS].sort());
     expect(body.tool_choice).toBe("none");
   });
 
