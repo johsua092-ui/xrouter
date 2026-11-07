@@ -392,7 +392,7 @@ function CustomModelsTab({
   );
 }
 
-/** Model Masking & Anti-Probe Tab (Znyth's Request + Seren's BazaarLink Hardening) */
+/** Model Masking & Anti-Probe Tab (Znyth's Request + BazaarLink Hardening) */
 function ModelMaskingTab({
   models,
   providerNodes,

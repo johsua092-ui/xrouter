@@ -2219,7 +2219,7 @@ export default function ProfilePage() {
         label="Repository (owner/repo)"
         value={tgForm.ghRepo}
         onChange={(e) => updateTgForm({ ghRepo: e.target.value })}
-        placeholder="e.g. serenhope/xrouter-backups"
+        placeholder="e.g. naummi/xrouter-backups"
         />
         </div>
         )}

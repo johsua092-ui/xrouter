@@ -1,7 +1,7 @@
 // Update detection for the running install. Two independent signals, because the
 // app is deployed in ways that break one of them:
 //
-//   1. git: how many commits is this checkout behind serenhope/xrouter master.
+//   1. git: how many commits is this checkout behind upstream master.
 //      Only works when the deploy ships git history.
 //   2. release: the newest version heading in the repository changelog compared
 //      with the version this build was made from. Works everywhere, including
