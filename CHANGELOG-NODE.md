@@ -1,3 +1,10 @@
+# v0.1.0 (2026-11-05)
+
+- **Version Bump to v0.1.0 (Node.js) & v0.0.1 (Go Core)**:
+  - Advanced package version to `0.1.0` in `package.json` and `cli/package.json` for major feature milestone.
+  - Reset Go Core micro-gateway version to `0.0.1` in `internal/config/config.go`.
+  - Full feature parity between Go Core and Node.js runtime.
+
 # v0.0.8 (2026-11-05)
 
 - **Port Go Core Diagnostic Proxy Test to Node.js Gateway**:
