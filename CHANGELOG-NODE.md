@@ -1,5 +1,8 @@
 # v0.1.0 (2026-11-05)
 
+- **Integrate Standard Categorized ModelSelectModal in Teams Page**:
+  - Replaced ad-hoc model list with standard system `ModelSelectModal` (same component used in Endpoint & Combos) supporting categorized provider tabs, live search, prefix tags, and batch selection.
+
 - **Upgrade Teams Governance with Auto-Key (`xteam-*`) and Model Picker**:
   - Implemented automatic high-entropy `xteam-*` API key generation with 1-click clipboard copy.
   - Added interactive search & multi-checkbox model picker to whitelist specific catalog models per team.

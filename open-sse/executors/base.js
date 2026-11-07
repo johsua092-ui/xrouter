@@ -49,6 +49,12 @@ export class BaseExecutor {
       ...this.config.headers
     };
 
+    if (this.provider === "ovh" || this.config.authType === "none" || this.config.noAuth) {
+      delete headers["Authorization"];
+      delete headers["authorization"];
+      return headers;
+    }
+
     if (this.provider?.startsWith?.("anthropic-compatible-")) {
       // Anthropic-compatible providers use x-api-key header
       if (credentials.apiKey) {

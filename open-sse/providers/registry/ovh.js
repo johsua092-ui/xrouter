@@ -22,16 +22,19 @@ export default {
   transport: {
     baseUrl: "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
     format: "openai",
+    headers: {
+      "Authorization": "",
+    },
   },
   models: [
-    { id: "ovh/Qwen3.6-27B", name: "Qwen3.6 27B (262K)", contextLength: 262144 },
-    { id: "ovh/Qwen3.8-27B", name: "Qwen3.8 27B (262K)", contextLength: 262144 },
-    { id: "ovh/Qwen3.5-397B-A17B", name: "Qwen3.5 397B A17B (262K)", contextLength: 262144 },
-    { id: "ovh/gpt-oss-120b", name: "GPT-OSS 120B (131K)", contextLength: 131072 },
-    { id: "ovh/gpt-oss-20b", name: "GPT-OSS 20B (131K)", contextLength: 131072 },
-    { id: "ovh/Mistral-Small-3.2-24B-Instruct-2506", name: "Mistral Small 3.2 24B (131K)", contextLength: 131072 },
-    { id: "ovh/Meta-Llama-3_3-70B-Instruct", name: "Llama 3.3 70B (131K)", contextLength: 131072 },
-    { id: "ovh/Qwen2.5-VL-72B-Instruct", name: "Qwen2.5 VL 72B (Vision)", contextLength: 32768 },
+    { id: "Qwen3.6-27B", name: "Qwen3.6 27B (262K)", contextLength: 262144 },
+    { id: "Qwen3.8-27B", name: "Qwen3.8 27B (262K)", contextLength: 262144 },
+    { id: "Qwen3.5-397B-A17B", name: "Qwen3.5 397B A17B (262K)", contextLength: 262144 },
+    { id: "gpt-oss-120b", name: "GPT-OSS 120B (131K)", contextLength: 131072 },
+    { id: "gpt-oss-20b", name: "GPT-OSS 20B (131K)", contextLength: 131072 },
+    { id: "Mistral-Small-3.2-24B-Instruct-2506", name: "Mistral Small 3.2 24B (131K)", contextLength: 131072 },
+    { id: "Meta-Llama-3_3-70B-Instruct", name: "Llama 3.3 70B (131K)", contextLength: 131072 },
+    { id: "Qwen2.5-VL-72B-Instruct", name: "Qwen2.5 VL 72B (Vision)", contextLength: 32768 },
   ],
   passthroughModels: true,
 };

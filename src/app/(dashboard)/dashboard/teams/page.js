@@ -9,19 +9,23 @@ import {
   Modal,
   CardSkeleton,
   Toggle,
-  ConfirmModal
+  ConfirmModal,
+  ModelSelectModal,
 } from "@/shared/components";
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState([]);
-  const [allModels, setAllModels] = useState([]);
+  const [activeProviders, setActiveProviders] = useState([]);
+  const [modelAliases, setModelAliases] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [busy, setBusy] = useState(false);
   const [copiedKey, setCopiedKey] = useState(null);
-  const [modelSearch, setModelSearch] = useState("");
+
+  // Model Selector Modal State
+  const [showModelPicker, setShowModelPicker] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -41,9 +45,10 @@ export default function TeamsPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [teamsRes, modelsRes] = await Promise.all([
+      const [teamsRes, providersRes, aliasRes] = await Promise.all([
         fetch("/api/teams", { cache: "no-store" }),
-        fetch("/api/models", { cache: "no-store" }).catch(() => ({ ok: false }))
+        fetch("/api/providers", { cache: "no-store" }).catch(() => ({ ok: false })),
+        fetch("/api/models/alias", { cache: "no-store" }).catch(() => ({ ok: false })),
       ]);
 
       const teamsData = await teamsRes.json();
@@ -53,10 +58,14 @@ export default function TeamsPage() {
         setError(teamsData.error || "Failed to load teams");
       }
 
-      if (modelsRes.ok) {
-        const modelsData = await modelsRes.json();
-        const list = Array.isArray(modelsData) ? modelsData : (modelsData.models || modelsData.data || []);
-        setAllModels(list.map(m => typeof m === "string" ? { id: m, name: m } : { id: m.id, name: m.name || m.id }));
+      if (providersRes.ok) {
+        const pData = await providersRes.json();
+        setActiveProviders(pData.connections || []);
+      }
+
+      if (aliasRes.ok) {
+        const aData = await aliasRes.json();
+        setModelAliases(aData.aliases || {});
       }
     } catch (err) {
       setError(err.message || "Failed to load teams");
@@ -70,7 +79,6 @@ export default function TeamsPage() {
   }, []);
 
   const handleOpenCreate = () => {
-    // Generate dynamic preview key
     const previewHex = Math.random().toString(16).substring(2, 10) + Math.random().toString(16).substring(2, 10);
     setFormData({
       id: null,
@@ -85,7 +93,6 @@ export default function TeamsPage() {
       dailySpendLimitUsd: "",
       monthlySpendLimitUsd: "",
     });
-    setModelSearch("");
     setShowModal(true);
   };
 
@@ -103,7 +110,6 @@ export default function TeamsPage() {
       dailySpendLimitUsd: team.dailySpendLimitUsd ? String(team.dailySpendLimitUsd) : "",
       monthlySpendLimitUsd: team.monthlySpendLimitUsd ? String(team.monthlySpendLimitUsd) : "",
     });
-    setModelSearch("");
     setShowModal(true);
   };
 
@@ -130,14 +136,29 @@ export default function TeamsPage() {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleToggleModelSelection = (modelId) => {
+  const handleSelectModelFromModal = (model) => {
+    const modelVal = model?.value || model?.name || model;
+    if (!modelVal) return;
     setFormData((prev) => {
-      const exists = prev.allowedModels.includes(modelId);
-      const next = exists
-        ? prev.allowedModels.filter((id) => id !== modelId)
-        : [...prev.allowedModels, modelId];
-      return { ...prev, allowedModels: next };
+      if (prev.allowedModels.includes(modelVal)) return prev;
+      return { ...prev, allowedModels: [...prev.allowedModels, modelVal] };
     });
+  };
+
+  const handleDeselectModelFromModal = (model) => {
+    const modelVal = model?.value || model?.name || model;
+    if (!modelVal) return;
+    setFormData((prev) => ({
+      ...prev,
+      allowedModels: prev.allowedModels.filter((m) => m !== modelVal),
+    }));
+  };
+
+  const handleRemoveModelTag = (modelVal) => {
+    setFormData((prev) => ({
+      ...prev,
+      allowedModels: prev.allowedModels.filter((m) => m !== modelVal),
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -195,14 +216,6 @@ export default function TeamsPage() {
     }
   };
 
-  const filteredCatalogModels = useMemo(() => {
-    if (!modelSearch.trim()) return allModels;
-    const q = modelSearch.toLowerCase();
-    return allModels.filter(
-      (m) => m.id.toLowerCase().includes(q) || (m.name && m.name.toLowerCase().includes(q))
-    );
-  }, [allModels, modelSearch]);
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -210,7 +223,7 @@ export default function TeamsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Teams & Quota Governance</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Create multi-tenant teams with auto-generated <span className="font-mono text-primary font-semibold">xteam-*</span> API keys, granular model pickers, and spending caps.
+            Create multi-tenant teams with auto-generated <span className="font-mono text-primary font-semibold">xteam-*</span> API keys, categorized provider model selector, and spend caps.
           </p>
         </div>
         <Button onClick={handleOpenCreate} icon="add">
@@ -347,7 +360,7 @@ export default function TeamsPage() {
                       {team.allowedModels.map((m) => (
                         <span
                           key={m}
-                          className="px-1.5 py-0.5 rounded bg-background border border-border/70 text-[10px] font-mono text-muted-foreground"
+                          className="px-1.5 py-0.5 rounded bg-background border border-border/70 text-[10px] font-mono text-primary font-medium"
                         >
                           {m}
                         </span>
@@ -355,7 +368,7 @@ export default function TeamsPage() {
                     </div>
                   ) : (
                     <span className="text-[11px] text-muted-foreground italic">
-                      Full access to all catalog models
+                      Full access to all catalog models (*)
                     </span>
                   )}
                 </div>
@@ -490,60 +503,51 @@ export default function TeamsPage() {
               </div>
             </div>
 
-            {/* Granular Model Picker */}
+            {/* Standard Model Selector Component with Categorized Providers & Prefix */}
             <div className="pt-2">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Allowed Models ({formData.allowedModels.length ? `${formData.allowedModels.length} selected` : "All models (*)"})
                 </label>
-                {formData.allowedModels.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, allowedModels: [] }))}
-                    className="text-[11px] text-primary hover:underline"
-                  >
-                    Reset to All
-                  </button>
-                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon="add"
+                  type="button"
+                  onClick={() => setShowModelPicker(true)}
+                >
+                  Select Models
+                </Button>
               </div>
 
-              <Input
-                placeholder="Search models to filter..."
-                value={modelSearch}
-                onChange={(e) => setModelSearch(e.target.value)}
-                className="mb-2 text-xs"
-              />
-
-              <div className="max-h-48 overflow-y-auto border border-border rounded-xl p-2 bg-muted/20 space-y-1">
-                {filteredCatalogModels.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-4">No models found</p>
-                ) : (
-                  filteredCatalogModels.map((m) => {
-                    const isSelected = formData.allowedModels.includes(m.id);
-                    return (
-                      <div
-                        key={m.id}
-                        onClick={() => handleToggleModelSelection(m.id)}
-                        className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-xs ${
-                          isSelected
-                            ? "bg-primary/10 border border-primary/30 text-primary font-medium"
-                            : "hover:bg-muted/50 border border-transparent text-muted-foreground"
-                        }`}
+              {formData.allowedModels.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border border-border bg-muted/20 max-h-36 overflow-y-auto">
+                  {formData.allowedModels.map((m) => (
+                    <span
+                      key={m}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-primary font-mono text-xs font-medium"
+                    >
+                      {m}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveModelTag(m)}
+                        className="hover:text-destructive transition-colors ml-0.5"
                       >
-                        <div className="min-w-0 pr-2">
-                          <span className="font-mono block truncate">{m.id}</span>
-                          {m.name && m.name !== m.id && (
-                            <span className="text-[10px] text-muted-foreground block truncate">{m.name}</span>
-                          )}
-                        </div>
-                        <span className="material-symbols-outlined text-base">
-                          {isSelected ? "check_box" : "check_box_outline_blank"}
-                        </span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+                        <span className="material-symbols-outlined text-[14px]">close</span>
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div
+                  onClick={() => setShowModelPicker(true)}
+                  className="p-4 rounded-xl border border-dashed border-border text-center cursor-pointer hover:border-primary/50 transition-colors bg-muted/10"
+                >
+                  <p className="text-xs text-muted-foreground">
+                    All models allowed by default (*). Click <span className="text-primary font-semibold">Select Models</span> to open the provider model selector.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t border-border">
@@ -556,6 +560,22 @@ export default function TeamsPage() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* Official Standard Categorized ModelSelectModal (Same as Endpoint & Combos) */}
+      {showModelPicker && (
+        <ModelSelectModal
+          isOpen={showModelPicker}
+          onClose={() => setShowModelPicker(false)}
+          onSelect={handleSelectModelFromModal}
+          onDeselect={handleDeselectModelFromModal}
+          activeProviders={activeProviders}
+          modelAliases={modelAliases}
+          showStudioTargets={true}
+          title="Select Team Models"
+          addedModelValues={formData.allowedModels}
+          closeOnSelect={false}
+        />
       )}
 
       {/* Delete Confirm */}
