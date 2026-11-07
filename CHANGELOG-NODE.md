@@ -1,5 +1,13 @@
 # v0.1.0 (2026-11-05)
 
+- **Add Free Keyless Provider OVH Cloud (Kepler AI)**:
+  - Registered `ovh` (`open-sse/providers/registry/ovh.js`) with keyless access to high-context reasoning models: `Qwen3.6-27B` (262K context), `Qwen3.8-27B` (262K context), `gpt-oss-120b` (131K context), and `Mistral-Small` (131K context).
+  - Verified 100% native OpenAI tool calling & streaming compatibility.
+
+- **Port Multi-Tenant Teams Schema & Endpoints to Go Core**:
+  - Implemented `teams` SQLite database schema in `internal/database/db.go` with multi-tier quota limits (RPM, daily/monthly spend in USD, model whitelisting).
+  - Implemented `/admin/v1/teams` REST endpoints in Go Core (`internal/gateway/server.go`) for team governance.
+
 - **Register Gemini Web in Go Core Models Catalog**:
   - Registered `gemini-web/gemini-2.5-flash` and `gemini-web/gemini-2.5-pro` in Go Core `handleModels` catalog.
 

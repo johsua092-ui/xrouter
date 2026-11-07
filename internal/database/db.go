@@ -137,6 +137,22 @@ func (d *DB) initSchema() error {
 		createdAt TEXT NOT NULL,
 		updatedAt TEXT NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS teams (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		enabled INTEGER DEFAULT 1,
+		description TEXT,
+		allowedModels TEXT,
+		allowedProviders TEXT,
+		rpmLimit INTEGER DEFAULT 0,
+		dailyLimit INTEGER DEFAULT 0,
+		monthlyLimit INTEGER DEFAULT 0,
+		dailySpendLimitUsd REAL DEFAULT 0,
+		monthlySpendLimitUsd REAL DEFAULT 0,
+		createdAt TEXT NOT NULL,
+		updatedAt TEXT NOT NULL
+	);
 	`
 	_, err := d.sqlDB.Exec(schema)
 	return err

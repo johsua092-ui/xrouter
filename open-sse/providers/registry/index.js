@@ -147,6 +147,7 @@ import p150 from "./opensatan.js";
 import p151 from "./koma-free.js";
 import p153 from "./ptero.js";
 import p154 from "./zcode.js";
+import p155 from "./ovh.js";
 
 export default [
   p0,
@@ -298,4 +299,5 @@ export default [
   p151,
   p153,
   p154,
+  p155,
 ];

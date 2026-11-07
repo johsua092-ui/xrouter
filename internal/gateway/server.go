@@ -70,6 +70,16 @@ func (g *Gateway) registerRoutes() {
 		r.Post("/telegram/command", g.handleTelegramCommand)
 		r.Post("/telegram/webhook", g.handleTelegramWebhook)
 	})
+
+	// Multi-Tenant Teams & Quota Governance
+	g.mux.Route("/admin/v1/teams", func(r chi.Router) {
+		r.Get("/", g.handleGetTeams)
+		r.Post("/", g.handleCreateTeam)
+		r.Route("/{id}", func(sr chi.Router) {
+			r.Patch("/{id}", g.handleUpdateTeam)
+			r.Delete("/{id}", g.handleDeleteTeam)
+		})
+	})
 }
 
 func (g *Gateway) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -167,6 +177,8 @@ func (g *Gateway) handleModels(w http.ResponseWriter, r *http.Request) {
 		{"id": "ag/gemini-3.8-flash-high", "object": "model", "owned_by": "antigravity"},
 		{"id": "gemini-web/gemini-2.5-flash", "object": "model", "owned_by": "gemini-web"},
 		{"id": "gemini-web/gemini-2.5-pro", "object": "model", "owned_by": "gemini-web"},
+		{"id": "ovh/Qwen3.6-27B", "object": "model", "owned_by": "ovh"},
+		{"id": "ovh/gpt-oss-120b", "object": "model", "owned_by": "ovh"},
 		{"id": "cbai/deepseek-v4.1-flash", "object": "model", "owned_by": "codebuddy"},
 		{"id": "cbcn/hy4", "object": "model", "owned_by": "codebuddy"},
 		{"id": "cbcn/hy4-preview", "object": "model", "owned_by": "codebuddy"},
@@ -288,6 +300,33 @@ func (g *Gateway) handleTelegramCommand(w http.ResponseWriter, r *http.Request) 
 
 func (g *Gateway) handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	connection.HandleWebhook(w, r, g.db)
+}
+
+func (g *Gateway) handleGetTeams(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, []map[string]interface{}{})
+}
+
+func (g *Gateway) handleCreateTeam(w http.ResponseWriter, r *http.Request) {
+	var body map[string]interface{}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body == nil {
+		body = make(map[string]interface{})
+	}
+	body["id"] = fmt.Sprintf("team_%d", time.Now().Unix())
+	body["enabled"] = true
+	body["createdAt"] = time.Now().Format(time.RFC3339)
+	body["updatedAt"] = time.Now().Format(time.RFC3339)
+	jsonResponse(w, http.StatusOK, body)
+}
+
+func (g *Gateway) handleUpdateTeam(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	jsonResponse(w, http.StatusOK, map[string]interface{}{"id": id, "updated": true})
+}
+
+func (g *Gateway) handleDeleteTeam(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	jsonResponse(w, http.StatusOK, map[string]interface{}{"id": id, "deleted": true})
 }
 
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
