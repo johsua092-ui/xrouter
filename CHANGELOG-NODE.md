@@ -1,5 +1,13 @@
 # v0.1.0 (2026-11-05)
 
+- **Upgrade Teams Governance with Auto-Key (`xteam-*`) and Model Picker**:
+  - Implemented automatic high-entropy `xteam-*` API key generation with 1-click clipboard copy.
+  - Added interactive search & multi-checkbox model picker to whitelist specific catalog models per team.
+  - Linked virtual team authentication in `apiKeysRepo.js` so client requests with `xteam-*` authenticate automatically.
+
+- **Fix Keyless Provider Base Executor Authorization**:
+  - Automatically stripped `Authorization: Bearer` headers for `ovh` in `open-sse/executors/base.js` and `ping.js` to fix HTTP 403 error.
+
 - **Dedicated Teams Governance Tab & UI in Dashboard**:
   - Added modern Next.js UI tab `/dashboard/teams` in sidebar and navigation with cards, live toggles, and edit modal for group spend/rate limits.
   - Connected `/api/teams` REST endpoints backed by local SQLite `teams` table.

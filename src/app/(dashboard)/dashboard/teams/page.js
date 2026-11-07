@@ -14,19 +14,23 @@ import {
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState([]);
+  const [allModels, setAllModels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(null);
+  const [modelSearch, setModelSearch] = useState("");
 
   // Form State
   const [formData, setFormData] = useState({
     id: null,
     name: "",
+    apiKey: "",
     description: "",
-    allowedModels: "",
-    allowedProviders: "",
+    allowedModels: [],
+    allowedProviders: [],
     rpmLimit: "",
     dailyLimit: "",
     monthlyLimit: "",
@@ -34,15 +38,25 @@ export default function TeamsPage() {
     monthlySpendLimitUsd: "",
   });
 
-  const loadTeams = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/teams", { cache: "no-store" });
-      const data = await res.json();
-      if (res.ok) {
-        setTeams(data.teams || []);
+      const [teamsRes, modelsRes] = await Promise.all([
+        fetch("/api/teams", { cache: "no-store" }),
+        fetch("/api/models", { cache: "no-store" }).catch(() => ({ ok: false }))
+      ]);
+
+      const teamsData = await teamsRes.json();
+      if (teamsRes.ok) {
+        setTeams(teamsData.teams || []);
       } else {
-        setError(data.error || "Failed to load teams");
+        setError(teamsData.error || "Failed to load teams");
+      }
+
+      if (modelsRes.ok) {
+        const modelsData = await modelsRes.json();
+        const list = Array.isArray(modelsData) ? modelsData : (modelsData.models || modelsData.data || []);
+        setAllModels(list.map(m => typeof m === "string" ? { id: m, name: m } : { id: m.id, name: m.name || m.id }));
       }
     } catch (err) {
       setError(err.message || "Failed to load teams");
@@ -52,22 +66,26 @@ export default function TeamsPage() {
   };
 
   useEffect(() => {
-    loadTeams();
+    loadData();
   }, []);
 
   const handleOpenCreate = () => {
+    // Generate dynamic preview key
+    const previewHex = Math.random().toString(16).substring(2, 10) + Math.random().toString(16).substring(2, 10);
     setFormData({
       id: null,
       name: "",
+      apiKey: `xteam-${previewHex}`,
       description: "",
-      allowedModels: "",
-      allowedProviders: "",
+      allowedModels: [],
+      allowedProviders: [],
       rpmLimit: "",
       dailyLimit: "",
       monthlyLimit: "",
       dailySpendLimitUsd: "",
       monthlySpendLimitUsd: "",
     });
+    setModelSearch("");
     setShowModal(true);
   };
 
@@ -75,15 +93,17 @@ export default function TeamsPage() {
     setFormData({
       id: team.id,
       name: team.name || "",
+      apiKey: team.apiKey || "",
       description: team.description || "",
-      allowedModels: Array.isArray(team.allowedModels) ? team.allowedModels.join(", ") : "",
-      allowedProviders: Array.isArray(team.allowedProviders) ? team.allowedProviders.join(", ") : "",
+      allowedModels: Array.isArray(team.allowedModels) ? team.allowedModels : [],
+      allowedProviders: Array.isArray(team.allowedProviders) ? team.allowedProviders : [],
       rpmLimit: team.rpmLimit ? String(team.rpmLimit) : "",
       dailyLimit: team.dailyLimit ? String(team.dailyLimit) : "",
       monthlyLimit: team.monthlyLimit ? String(team.monthlyLimit) : "",
       dailySpendLimitUsd: team.dailySpendLimitUsd ? String(team.dailySpendLimitUsd) : "",
       monthlySpendLimitUsd: team.monthlySpendLimitUsd ? String(team.monthlySpendLimitUsd) : "",
     });
+    setModelSearch("");
     setShowModal(true);
   };
 
@@ -104,6 +124,22 @@ export default function TeamsPage() {
     }
   };
 
+  const handleCopyKey = (key) => {
+    navigator.clipboard.writeText(key);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleToggleModelSelection = (modelId) => {
+    setFormData((prev) => {
+      const exists = prev.allowedModels.includes(modelId);
+      const next = exists
+        ? prev.allowedModels.filter((id) => id !== modelId)
+        : [...prev.allowedModels, modelId];
+      return { ...prev, allowedModels: next };
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
@@ -111,13 +147,10 @@ export default function TeamsPage() {
     try {
       const payload = {
         name: formData.name.trim(),
+        apiKey: formData.apiKey.trim(),
         description: formData.description.trim(),
-        allowedModels: formData.allowedModels.trim()
-          ? formData.allowedModels.split(",").map((s) => s.trim()).filter(Boolean)
-          : [],
-        allowedProviders: formData.allowedProviders.trim()
-          ? formData.allowedProviders.split(",").map((s) => s.trim()).filter(Boolean)
-          : [],
+        allowedModels: formData.allowedModels,
+        allowedProviders: formData.allowedProviders,
         rpmLimit: formData.rpmLimit ? parseInt(formData.rpmLimit, 10) : 0,
         dailyLimit: formData.dailyLimit ? parseInt(formData.dailyLimit, 10) : 0,
         monthlyLimit: formData.monthlyLimit ? parseInt(formData.monthlyLimit, 10) : 0,
@@ -136,7 +169,7 @@ export default function TeamsPage() {
 
       if (res.ok) {
         setShowModal(false);
-        loadTeams();
+        loadData();
       } else {
         const data = await res.json();
         alert(data.error || "Failed to save team");
@@ -162,6 +195,14 @@ export default function TeamsPage() {
     }
   };
 
+  const filteredCatalogModels = useMemo(() => {
+    if (!modelSearch.trim()) return allModels;
+    const q = modelSearch.toLowerCase();
+    return allModels.filter(
+      (m) => m.id.toLowerCase().includes(q) || (m.name && m.name.toLowerCase().includes(q))
+    );
+  }, [allModels, modelSearch]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -169,7 +210,7 @@ export default function TeamsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Teams & Quota Governance</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Group access control, rate limits, spending caps (USD), and model permissions per team.
+            Create multi-tenant teams with auto-generated <span className="font-mono text-primary font-semibold">xteam-*</span> API keys, granular model pickers, and spending caps.
           </p>
         </div>
         <Button onClick={handleOpenCreate} icon="add">
@@ -193,7 +234,7 @@ export default function TeamsPage() {
           <span className="material-symbols-outlined text-4xl text-muted-foreground mb-2">groups</span>
           <h3 className="text-lg font-semibold">No teams configured yet</h3>
           <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-            Organize users and API keys into dedicated teams with custom rate limits and budget controls.
+            Organize users into dedicated teams with custom <span className="font-mono text-primary">xteam-*</span> keys and model permissions.
           </p>
           <Button onClick={handleOpenCreate} icon="add" className="mt-4">
             Create First Team
@@ -204,7 +245,7 @@ export default function TeamsPage() {
           {teams.map((team) => (
             <Card
               key={team.id}
-              className={`flex flex-col justify-between transition-all duration-200 hover:border-primary/50 ${
+              className={`flex flex-col justify-between transition-all duration-200 hover:border-primary/50 relative overflow-hidden ${
                 !team.enabled ? "opacity-60" : ""
               }`}
             >
@@ -226,6 +267,31 @@ export default function TeamsPage() {
                   />
                 </div>
 
+                {/* Team API Key Badge Box */}
+                {team.apiKey && (
+                  <div className="mt-3.5 p-2.5 rounded-lg bg-muted/50 border border-border/60 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                        Team API Key
+                      </span>
+                      <code className="text-xs font-mono font-medium text-primary truncate block mt-0.5">
+                        {team.apiKey}
+                      </code>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 shrink-0"
+                      onClick={() => handleCopyKey(team.apiKey)}
+                      title="Copy Key"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">
+                        {copiedKey === team.apiKey ? "check" : "content_copy"}
+                      </span>
+                    </Button>
+                  </div>
+                )}
+
                 {team.description && (
                   <p className="text-xs text-muted-foreground mt-3 line-clamp-2">
                     {team.description}
@@ -233,7 +299,7 @@ export default function TeamsPage() {
                 )}
 
                 {/* Quota & Limits Badges */}
-                <div className="flex flex-wrap gap-1.5 mt-4">
+                <div className="flex flex-wrap gap-1.5 mt-3.5">
                   {team.rpmLimit > 0 && (
                     <Badge variant="outline" className="text-[11px] font-mono">
                       {team.rpmLimit} RPM
@@ -266,14 +332,32 @@ export default function TeamsPage() {
                   )}
                 </div>
 
-                {/* Models Policy */}
+                {/* Selected Models Summary */}
                 <div className="mt-4 pt-3 border-t border-border/50 text-xs">
-                  <span className="text-muted-foreground">Allowed Models: </span>
-                  <span className="font-medium text-foreground">
-                    {Array.isArray(team.allowedModels) && team.allowedModels.length
-                      ? team.allowedModels.join(", ")
-                      : "All models (*)"}
-                  </span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-muted-foreground">Permitted Models:</span>
+                    <span className="font-semibold text-primary">
+                      {Array.isArray(team.allowedModels) && team.allowedModels.length > 0
+                        ? `${team.allowedModels.length} models selected`
+                        : "All Models (*)"}
+                    </span>
+                  </div>
+                  {Array.isArray(team.allowedModels) && team.allowedModels.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto pr-1">
+                      {team.allowedModels.map((m) => (
+                        <span
+                          key={m}
+                          className="px-1.5 py-0.5 rounded bg-background border border-border/70 text-[10px] font-mono text-muted-foreground"
+                        >
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground italic">
+                      Full access to all catalog models
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -309,7 +393,7 @@ export default function TeamsPage() {
           onClose={() => setShowModal(false)}
           title={formData.id ? "Edit Team" : "Create New Team"}
         >
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 max-h-[80vh] overflow-y-auto px-1 pr-2">
             <div>
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Team Name <span className="text-destructive">*</span>
@@ -317,10 +401,25 @@ export default function TeamsPage() {
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. Core Engineering, VIP Agents"
+                placeholder="e.g. VIP Agents, Frontend Team"
                 required
                 className="mt-1.5"
               />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Team API Key (Prefix: xteam-*)
+              </label>
+              <Input
+                value={formData.apiKey}
+                onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+                placeholder="xteam-..."
+                className="mt-1.5 font-mono text-xs text-primary"
+              />
+              <span className="text-[11px] text-muted-foreground mt-1 block">
+                Auto-assigned with high-entropy token. Clients can authenticate with this key directly.
+              </span>
             </div>
 
             <div>
@@ -391,16 +490,60 @@ export default function TeamsPage() {
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Allowed Models (comma separated)
-              </label>
+            {/* Granular Model Picker */}
+            <div className="pt-2">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Allowed Models ({formData.allowedModels.length ? `${formData.allowedModels.length} selected` : "All models (*)"})
+                </label>
+                {formData.allowedModels.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFormData((prev) => ({ ...prev, allowedModels: [] }))}
+                    className="text-[11px] text-primary hover:underline"
+                  >
+                    Reset to All
+                  </button>
+                )}
+              </div>
+
               <Input
-                value={formData.allowedModels}
-                onChange={(e) => setFormData({ ...formData, allowedModels: e.target.value })}
-                placeholder="Leave blank for all models (*)"
-                className="mt-1.5 font-mono text-xs"
+                placeholder="Search models to filter..."
+                value={modelSearch}
+                onChange={(e) => setModelSearch(e.target.value)}
+                className="mb-2 text-xs"
               />
+
+              <div className="max-h-48 overflow-y-auto border border-border rounded-xl p-2 bg-muted/20 space-y-1">
+                {filteredCatalogModels.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">No models found</p>
+                ) : (
+                  filteredCatalogModels.map((m) => {
+                    const isSelected = formData.allowedModels.includes(m.id);
+                    return (
+                      <div
+                        key={m.id}
+                        onClick={() => handleToggleModelSelection(m.id)}
+                        className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-xs ${
+                          isSelected
+                            ? "bg-primary/10 border border-primary/30 text-primary font-medium"
+                            : "hover:bg-muted/50 border border-transparent text-muted-foreground"
+                        }`}
+                      >
+                        <div className="min-w-0 pr-2">
+                          <span className="font-mono block truncate">{m.id}</span>
+                          {m.name && m.name !== m.id && (
+                            <span className="text-[10px] text-muted-foreground block truncate">{m.name}</span>
+                          )}
+                        </div>
+                        <span className="material-symbols-outlined text-base">
+                          {isSelected ? "check_box" : "check_box_outline_blank"}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t border-border">

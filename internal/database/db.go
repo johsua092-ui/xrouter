@@ -141,6 +141,7 @@ func (d *DB) initSchema() error {
 	CREATE TABLE IF NOT EXISTS teams (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,
+		apiKey TEXT UNIQUE,
 		enabled INTEGER DEFAULT 1,
 		description TEXT,
 		allowedModels TEXT,

@@ -64,7 +64,39 @@ export async function getApiKeyById(id) {
 export async function getApiKeyByKey(key) {
   const db = await getAdapter();
   const row = db.get(`SELECT * FROM apiKeys WHERE key = ?`, [key]);
-  return rowToKey(row);
+  if (row) return rowToKey(row);
+
+  // Fallback: check if this is an xteam key from teams table
+  if (key && (key.startsWith("xteam-") || key.startsWith("team_"))) {
+    try {
+      const teamRow = db.get(`SELECT * FROM teams WHERE apiKey = ? AND enabled = 1`, [key]);
+      if (teamRow) {
+        return {
+          id: teamRow.id,
+          key: teamRow.apiKey,
+          name: `[Team] ${teamRow.name}`,
+          machineId: "team-virtual",
+          isActive: true,
+          createdAt: teamRow.createdAt,
+          tokenLimit: 0,
+          usedTokens: 0,
+          resetInterval: "never",
+          lastResetAt: null,
+          allowedModels: teamRow.allowedModels || "*",
+          rpmLimit: teamRow.rpmLimit || 0,
+          tpmLimit: 0,
+          ipWhitelist: "",
+          expiresAt: null,
+          systemPrompt: "",
+          permissions: { ...DEFAULT_PERMISSIONS },
+          createdBy: "team",
+          isTeamKey: true,
+          teamId: teamRow.id,
+        };
+      }
+    } catch {}
+  }
+  return null;
 }
 
 export async function createApiKey(name, machineId, options = {}) {

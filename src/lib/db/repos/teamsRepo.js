@@ -24,6 +24,7 @@ function rowToTeam(row) {
   return {
     id: row.id,
     name: row.name,
+    apiKey: row.apiKey || "",
     enabled: row.enabled === 1 || row.enabled === true,
     description: row.description || "",
     allowedModels,
@@ -53,6 +54,7 @@ export async function getTeamById(id) {
 
 export async function createTeam({
   name,
+  apiKey = "",
   description = "",
   allowedModels = [],
   allowedProviders = [],
@@ -66,18 +68,26 @@ export async function createTeam({
   const id = `team_${uuidv4().replace(/-/g, "").slice(0, 16)}`;
   const now = new Date().toISOString();
 
+  // Auto-generate high-prestige team API key with prefix xteam- if not provided
+  let finalKey = apiKey && apiKey.trim() ? apiKey.trim() : "";
+  if (!finalKey) {
+    const randomHex = uuidv4().replace(/-/g, "").slice(0, 24);
+    finalKey = `xteam-${randomHex}`;
+  }
+
   const modelsStr = Array.isArray(allowedModels) && allowedModels.length ? JSON.stringify(allowedModels) : "*";
   const providersStr = Array.isArray(allowedProviders) && allowedProviders.length ? JSON.stringify(allowedProviders) : "*";
 
   await db.run(
     `INSERT INTO teams (
-      id, name, enabled, description, allowedModels, allowedProviders,
+      id, name, apiKey, enabled, description, allowedModels, allowedProviders,
       rpmLimit, dailyLimit, monthlyLimit, dailySpendLimitUsd, monthlySpendLimitUsd,
       createdAt, updatedAt
-    ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       name.trim(),
+      finalKey,
       description.trim(),
       modelsStr,
       providersStr,
@@ -105,6 +115,10 @@ export async function updateTeam(id, updates = {}) {
   if (typeof updates.name === "string" && updates.name.trim()) {
     fields.push("name = ?");
     values.push(updates.name.trim());
+  }
+  if (typeof updates.apiKey === "string" && updates.apiKey.trim()) {
+    fields.push("apiKey = ?");
+    values.push(updates.apiKey.trim());
   }
   if (typeof updates.enabled === "boolean") {
     fields.push("enabled = ?");
