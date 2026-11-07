@@ -90,7 +90,7 @@ func (g *Gateway) handleTestProxy(w http.ResponseWriter, r *http.Request) {
 	proxyRaw := r.URL.Query().Get("proxy")
 	target := r.URL.Query().Get("target")
 	if target == "" {
-		target = "https://opencode.ai/inference/v1/models"
+		target = "https://opencode.ai/inference/openai/v1/models"
 	}
 
 	transport := &http.Transport{

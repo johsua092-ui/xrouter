@@ -1,5 +1,8 @@
 # v0.1.0 (2026-11-05)
 
+- **Align Go Core Diagnostic Proxy Subpath**:
+  - Aligned default target in `handleTestProxy` (`internal/gateway/server.go`) to canonical `/inference/openai/v1/models`.
+
 - **Port OpenCode Quota Classifier from Kandev PR #5120**:
   - Added explicit regex-aligned error rules for `FreeUsageLimitError`, `free usage limit reached`, and `AI_APICallError` in `open-sse/config/errorConfig.js` to trigger automatic routing failover to the next connection instead of surfacing generic runtime errors.
 
