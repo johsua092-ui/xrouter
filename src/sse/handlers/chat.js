@@ -33,6 +33,8 @@ import { updateProviderCredentials, checkAndRefreshToken } from "../services/tok
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
 import { resolveTokenmaxxingOrder } from "../services/tokenmaxxing.js";
+import { applyProfileBudget } from '@/lib/security/modelProfiles';
+import { accountAttemptLimit } from '@/lib/security/connectionHealth';
 
 
 /**
@@ -84,6 +86,7 @@ export async function handleChat(request, clientRawRequest = null) {
 
   // Enforce API key if provided or if required by settings
   const settings = await getSettings();
+  body = applyProfileBudget(body, settings.profileBudgets);
   if (settings.requireApiKey && !apiKey) {
     if (shouldLogAuthFailure("chat", getClientIp(request), null)) {
       log.warn("AUTH", "Missing API key (requireApiKey=true)");
@@ -429,8 +432,11 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
   let lastError = null;
   let lastStatus = null;
   let lastHeaders = null;
+  const attemptSettings = await getSettings();
+  const maxAccountAttempts = accountAttemptLimit(attemptSettings.maxAccountAttempts);
 
-  while (true) {
+  while (excludeConnectionIds.size < maxAccountAttempts) {
+    if (request?.signal?.aborted) return errorResponse(HTTP_STATUS.CLIENT_CLOSED_REQUEST, 'Client cancelled the request');
     const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, {
       requestedModel: requestedModel || model,
       conversationKey,
@@ -489,6 +495,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       body: { ...body, model: `${provider}/${effectiveModel}` },
       modelInfo: { provider, model: effectiveModel },
       requestedModel,
+      requestSignal: request?.signal,
       credentials: refreshedCredentials,
       log,
       clientRawRequest,
@@ -546,6 +553,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     });
 
     if (result.success) return result.response;
+    if (result.status === HTTP_STATUS.CLIENT_CLOSED_REQUEST || request?.signal?.aborted) return errorResponse(HTTP_STATUS.CLIENT_CLOSED_REQUEST, 'Client cancelled the request');
 
     // Antigravity 409/429: refresh live quota to get exact resetAt before locking
     let quotaResetMs = null;
@@ -576,4 +584,5 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
     return result.response;
   }
+  return errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || 'Provider account attempt limit reached', lastHeaders);
 }

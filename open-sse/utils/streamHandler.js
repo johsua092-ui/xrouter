@@ -92,6 +92,7 @@ export function createDisconnectAwareStream(transformStream, streamController, o
   const reader = transformStream.readable.getReader();
   const writer = transformStream.writable.getWriter();
   let terminalEmitted = false;
+  let cancelledByClient = false;
 
   // Emit a synthesized terminal payload (e.g. Responses response.failed + [DONE]) once
   const emitTerminal = (controller) => {
@@ -135,6 +136,9 @@ export function createDisconnectAwareStream(transformStream, streamController, o
         // so client sees the failure and triggers auto-retry (OmniRoute #17292).
         try {
           if (!wasConnected) {
+            // A watchdog marks the controller disconnected before aborting the
+            // upstream reader. Its error frame must still reach a waiting client.
+            if (!cancelledByClient) emitTerminal(controller);
             controller.close();
           } else if (onAbortTerminal) {
             emitTerminal(controller);
@@ -147,6 +151,7 @@ export function createDisconnectAwareStream(transformStream, streamController, o
     },
 
     cancel(reason) {
+      cancelledByClient = true;
       streamController.handleDisconnect(reason || "cancelled");
       reader.cancel();
       writer.abort();

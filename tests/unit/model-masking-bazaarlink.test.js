@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,6 +18,7 @@ describe("Model Masking & BazaarLink Anti-Probe", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "xrouter-mask-test-"));
     const origDataDir = process.env.DATA_DIR;
     process.env.DATA_DIR = tempDir;
+    vi.resetModules();
 
     try {
       const editor = await import("@/lib/db/repos/modelEditorRepo.js");
@@ -36,6 +37,8 @@ describe("Model Masking & BazaarLink Anti-Probe", () => {
       expect(fetched).not.toBeNull();
       expect(fetched.ownedBy).toBe("anthropic");
     } finally {
+      const { closeDb } = await import("@/lib/db/driver.js");
+      await closeDb();
       fs.rmSync(tempDir, { recursive: true, force: true });
       if (origDataDir === undefined) delete process.env.DATA_DIR;
       else process.env.DATA_DIR = origDataDir;

@@ -4,6 +4,7 @@ import { dirname, join } from "path";
 import { existsSync } from "fs";
 import { cleanupProviderConnections, getSettings, updateSettings, getApiKeys } from "@/lib/localDb";
 import { getAutoBackupConfig } from "@/lib/db/repos/autoBackupRepo.js";
+import { startLocalBackupScheduler } from '@/lib/security/localBackups';
 import {
   enableTunnel, enableTailscale,
   isTunnelManuallyDisabled, isTunnelReconnecting, isTailscaleReconnecting,
@@ -81,6 +82,7 @@ export async function initializeApp() {
 }
 
 async function runHeavyStartup() {
+  startLocalBackupScheduler();
   await cleanupProviderConnections();
   const settings = await getSettings();
 

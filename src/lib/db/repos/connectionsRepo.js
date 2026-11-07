@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
+import { openCredentials, sealCredentials } from '../../security/credentialVault.js';
 
 const OPTIONAL_FIELDS = [
   "displayName", "email", "globalPriority", "defaultModel",
@@ -34,7 +35,7 @@ function resetHealthStateOnActivation(existing, patch) {
 
 function rowToConn(row) {
   if (!row) return null;
-  const extra = parseJson(row.data, {});
+  const extra = openCredentials(parseJson(row.data, {}));
   return {
     ...extra,
     id: row.id,
@@ -59,7 +60,7 @@ function connToRow(c) {
     email: email ?? null,
     priority: priority ?? null,
     isActive: isActive === false ? 0 : 1,
-    data: stringifyJson(rest),
+    data: stringifyJson(sealCredentials(rest)),
     createdAt,
     updatedAt,
   };

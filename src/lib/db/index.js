@@ -1,6 +1,7 @@
 // Public API barrel — all DB functions
 import { getAdapter } from "./driver.js";
 import { stringifyJson, parseJson } from "./helpers/jsonCol.js";
+import { openCredentials, sealCredentials } from '../security/credentialVault.js';
 
 // Settings
 export {
@@ -121,7 +122,7 @@ export async function exportDb(options = null) {
     out.settings = await exportSettings();
   }
   if (isIncluded("providers")) {
-    out.providerConnections = db.all(`SELECT * FROM providerConnections`).map((r) => ({ ...parseJson(r.data, {}), id: r.id, provider: r.provider, authType: r.authType, name: r.name, email: r.email, priority: r.priority, isActive: r.isActive === 1, createdAt: r.createdAt, updatedAt: r.updatedAt }));
+    out.providerConnections = db.all(`SELECT * FROM providerConnections`).map((r) => ({ ...openCredentials(parseJson(r.data, {})), id: r.id, provider: r.provider, authType: r.authType, name: r.name, email: r.email, priority: r.priority, isActive: r.isActive === 1, createdAt: r.createdAt, updatedAt: r.updatedAt }));
     out.providerNodes = db.all(`SELECT * FROM providerNodes`).map((r) => ({ ...parseJson(r.data, {}), id: r.id, type: r.type, name: r.name, createdAt: r.createdAt, updatedAt: r.updatedAt }));
     out.proxyPools = db.all(`SELECT * FROM proxyPools`).map((r) => ({ ...parseJson(r.data, {}), id: r.id, isActive: r.isActive === 1, testStatus: r.testStatus, createdAt: r.createdAt, updatedAt: r.updatedAt }));
   }
@@ -243,7 +244,7 @@ export async function importDb(payload) {
         const { id, provider, authType, name, email, priority, isActive, createdAt, updatedAt, ...rest } = c;
         db.run(
           `INSERT OR REPLACE INTO providerConnections(id, provider, authType, name, email, priority, isActive, data, createdAt, updatedAt) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [id, provider, authType || "oauth", name || null, email || null, priority || null, isActive === false ? 0 : 1, stringifyJson(rest), createdAt || new Date().toISOString(), updatedAt || new Date().toISOString()]
+          [id, provider, authType || "oauth", name || null, email || null, priority || null, isActive === false ? 0 : 1, stringifyJson(sealCredentials(rest)), createdAt || new Date().toISOString(), updatedAt || new Date().toISOString()]
         );
       }
     }
@@ -486,7 +487,7 @@ export async function importDbProgressive(payload, onProgress) {
           const { id, provider, authType, name, email, priority, isActive, createdAt, updatedAt, ...rest } = c;
           db.run(
             `INSERT OR REPLACE INTO providerConnections(id, provider, authType, name, email, priority, isActive, data, createdAt, updatedAt) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, provider, authType || "oauth", name || null, email || null, priority || null, isActive === false ? 0 : 1, stringifyJson(rest), createdAt || new Date().toISOString(), updatedAt || new Date().toISOString()]
+            [id, provider, authType || "oauth", name || null, email || null, priority || null, isActive === false ? 0 : 1, stringifyJson(sealCredentials(rest)), createdAt || new Date().toISOString(), updatedAt || new Date().toISOString()]
           );
         }
       }

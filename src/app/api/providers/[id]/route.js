@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { redactCredentials } from '@/lib/security/credentialVault';
 import {
   getProviderConnectionById,
   getProxyPoolById,
@@ -70,7 +71,7 @@ export async function GET(request, { params }) {
     }
 
     // Hide sensitive fields
-    const result = { ...connection };
+    const result = redactCredentials(connection);
     delete result.apiKey;
     delete result.accessToken;
     delete result.refreshToken;
@@ -158,7 +159,7 @@ export async function PUT(request, { params }) {
     const updated = await updateProviderConnection(id, updateData);
 
     // Hide sensitive fields
-    const result = { ...updated };
+    const result = redactCredentials(updated);
     delete result.apiKey;
     delete result.accessToken;
     delete result.refreshToken;

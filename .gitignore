@@ -112,3 +112,6 @@ graphify-out/*
 .start-dev.ps1
 start-dev-silent.cjs
 debug.log
+
+# Security-scan plugin state (local tooling)
+.mimosa/

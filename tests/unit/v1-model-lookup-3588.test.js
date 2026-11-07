@@ -2,10 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   buildModelsList: vi.fn(),
+  getSettings: vi.fn(),
+  isValidApiKey: vi.fn(),
 }));
 
 vi.mock("../../src/app/api/v1/models/route.js", () => ({
   buildModelsList: mocks.buildModelsList,
+}));
+
+vi.mock("@/lib/localDb", () => ({ getSettings: mocks.getSettings }));
+vi.mock("@/sse/services/auth.js", async () => ({
+  ...(await import("../../src/sse/services/keyGate.js")),
+  isValidApiKey: mocks.isValidApiKey,
 }));
 
 const { GET } = await import("../../src/app/api/v1/models/[...model]/route.js");
@@ -24,6 +32,9 @@ function params(model) {
 describe("GET /v1/models/{id}", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getSettings.mockResolvedValue({ requireApiKey: false });
+    mocks.isValidApiKey.mockResolvedValue(true);
+    mocks.buildModelsList.mockResolvedValue([chatModel]);
   });
 
   it("retrieves a provider-prefixed model ID split across URL path segments", async () => {
@@ -67,5 +78,42 @@ describe("GET /v1/models/{id}", () => {
       type: "invalid_request_error",
       code: "model_not_found",
     });
+  });
+
+  it.each([["cc", "claude-sonnet-5"], ["image"]])("requires a key for protected model path %j", async (...model) => {
+    mocks.getSettings.mockResolvedValue({ requireApiKey: true });
+    const response = await GET(new Request("https://router.test/v1/models/lookup"), params(model));
+
+    expect(response.status).toBe(401);
+    expect((await response.json()).error.code).toBe("unauthorized");
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(mocks.buildModelsList).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [false, 401],
+    ["KEY_DISABLED", 403],
+    ["QUOTA_EXCEEDED", 429],
+  ])("rejects a key with verdict %j", async (verdict, status) => {
+    mocks.getSettings.mockResolvedValue({ requireApiKey: true });
+    mocks.isValidApiKey.mockResolvedValue(verdict);
+    const response = await GET(new Request("https://router.test/v1/models/cc/claude-sonnet-5", {
+      headers: { authorization: "Bearer fixture-model-key" },
+    }), params(["cc", "claude-sonnet-5"]));
+
+    expect(response.status).toBe(status);
+    expect((await response.json()).error.type).toBe("invalid_request_error");
+    expect(mocks.buildModelsList).not.toHaveBeenCalled();
+  });
+
+  it.each(["authorization", "x-api-key"])("accepts a valid key from %s", async (header) => {
+    mocks.getSettings.mockResolvedValue({ requireApiKey: true });
+    const response = await GET(new Request("https://router.test/v1/models/cc/claude-sonnet-5", {
+      headers: { [header]: header === "authorization" ? "Bearer fixture-model-key" : "fixture-model-key" },
+    }), params(["cc", "claude-sonnet-5"]));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(chatModel);
+    expect(mocks.isValidApiKey).toHaveBeenCalledWith("fixture-model-key");
   });
 });

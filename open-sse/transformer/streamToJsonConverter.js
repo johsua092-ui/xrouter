@@ -36,6 +36,7 @@ function processSSEMessage(msg, state) {
     }
   } else if (eventType === "response.failed") {
     state.status = "failed";
+    state.error = parsed.response?.error || { message: 'Upstream response failed' };
   }
 }
 
@@ -97,6 +98,7 @@ export async function convertResponsesStreamToJson(stream) {
     object: "response",
     created_at: state.created,
     status: state.status || "completed",
+    ...(state.error ? { error: state.error } : {}),
     output,
     usage: state.usage
   };

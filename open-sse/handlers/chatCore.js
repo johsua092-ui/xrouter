@@ -77,7 +77,7 @@ export function stripContinuityFields(body) {
   return body;
 }
 
-export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, contextPruningEnabled, maxMessagesLimit, semanticCacheEnabled, semanticCacheTtlHours, semanticCacheMaxEntries, contextPruningLevel, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, kernelEnabled = false, kernelPrompt = "", pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, requestedModel, toolCallFallbackEnabled = true, providerOverrides }) {
+export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, contextPruningEnabled, maxMessagesLimit, semanticCacheEnabled, semanticCacheTtlHours, semanticCacheMaxEntries, contextPruningLevel, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, kernelEnabled = false, kernelPrompt = "", pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, requestedModel, toolCallFallbackEnabled = true, providerOverrides, requestSignal }) {
   const { provider, model } = modelInfo;
   const requestStartTime = Date.now();
   // Stable per-session color so all lines of one CLI conversation share a tag
@@ -472,6 +472,8 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     log, provider, model, reqTag
   });
 
+  const upstreamSignal = requestSignal ? AbortSignal.any([streamController.signal, requestSignal]) : streamController.signal;
+
   const proxyOptions = {
     connectionProxyEnabled: credentials?.providerSpecificData?.connectionProxyEnabled === true,
     connectionProxyUrl: credentials?.providerSpecificData?.connectionProxyUrl || "",
@@ -522,7 +524,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       credentials,
       providerSessionId: sessionSeed,
       clientTool,
-      signal: streamController.signal,
+      signal: upstreamSignal,
       log,
       proxyOptions,
       providerOverrides,
@@ -593,7 +595,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
             credentials,
             providerSessionId: sessionSeed,
             clientTool,
-            signal: streamController.signal,
+            signal: upstreamSignal,
             log,
             proxyOptions,
             providerOverrides,
@@ -637,7 +639,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
                 credentials,
                 providerSessionId: sessionSeed,
                 clientTool,
-                signal: streamController.signal,
+                signal: upstreamSignal,
                 log,
                 proxyOptions,
                 providerOverrides,
@@ -681,7 +683,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
             credentials,
             providerSessionId: sessionSeed,
             clientTool,
-            signal: streamController.signal,
+            signal: upstreamSignal,
             log,
             proxyOptions,
           });
@@ -764,7 +766,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       // normal pipeline then reshapes into its own format.
       const sseReplayed = sseResponseFromCompletion(mismatchedBody, providerResponse);
       const { onStreamComplete, streamDetailId } = buildOnStreamComplete({ ...sharedCtx });
-      return handleStreamingResponse({ ...sharedCtx, providerResponse: sseReplayed, sourceFormat, targetFormat: FORMATS.OPENAI, userAgent, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, credentials });
+      return handleStreamingResponse({ ...sharedCtx, providerResponse: sseReplayed, sourceFormat, targetFormat: FORMATS.OPENAI, userAgent, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, credentials, requestSignal, trackDone, appendLog });
     } else {
       const result = await handleNonStreamingResponse({
         ...sharedCtx,
@@ -798,7 +800,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
 
   // Streaming response
   const { onStreamComplete, streamDetailId } = buildOnStreamComplete({ ...sharedCtx });
-  return handleStreamingResponse({ ...sharedCtx, providerResponse, sourceFormat, targetFormat: providerResponseFormat, userAgent, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, credentials });
+  return handleStreamingResponse({ ...sharedCtx, providerResponse, sourceFormat, targetFormat: providerResponseFormat, userAgent, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, credentials, requestSignal, trackDone, appendLog });
 }
 
 export function isTokenExpiringSoon(expiresAt, bufferMs = 5 * 60 * 1000) {

@@ -101,6 +101,10 @@ async function initAdapter() {
 
   const { runMigrationOnce } = await import("./migrate.js");
   await runMigrationOnce(adapter);
+  if (process.platform === 'win32' || process.env.CREDENTIAL_VAULT_KEY) {
+    const { migrateCredentialRows } = await import('../security/credentialVault.js');
+    migrateCredentialRows(adapter);
+  }
   return adapter;
 }
 

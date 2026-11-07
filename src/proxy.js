@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-export function middleware(request) {
+export function proxy(request) {
   if (!MUTATING.has(request.method)) return NextResponse.next();
 
   // Auth login/logout and status routes need to be accessible from any client

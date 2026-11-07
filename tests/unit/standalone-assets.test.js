@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from "vitest";
 import { copyStandaloneAssets } from "../../scripts/copy-standalone-assets.mjs";
 
@@ -17,6 +18,22 @@ function createBuildFixture(distDir) {
 }
 
 describe("standalone build assets", () => {
+  it('can run postbuild twice without corrupting the generated server', () => {
+    const projectRoot = createBuildFixture('.next');
+    const server = join(projectRoot, '.next/standalone/server.js');
+    writeFileSync(server, "const path = require('path');\n");
+    copyStandaloneAssets({ projectRoot, distDir: '.next' });
+    copyStandaloneAssets({ projectRoot, distDir: '.next' });
+    expect(() => execFileSync(process.execPath, ['--check', server], { stdio: 'pipe' })).not.toThrow();
+  });
+  it('includes Next server runtime modules that tracing omits', () => {
+    const projectRoot = createBuildFixture('.next');
+    const source = join(projectRoot, 'node_modules/next/dist/server/dev/browser-logs');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, 'file-logger.js'), 'module.exports = { ready: true };');
+    copyStandaloneAssets({ projectRoot, distDir: '.next' });
+    expect(readFileSync(join(projectRoot, '.next/standalone/node_modules/next/dist/server/dev/browser-logs/file-logger.js'), 'utf8')).toContain('ready: true');
+  });
   it("copies static and public assets into the default standalone layout", () => {
     const projectRoot = createBuildFixture(".next");
 

@@ -195,6 +195,17 @@ export function createSSEStream(options = {}) {
           let responsesTerminal = false;
           const payload = framePayload(trimmed);
 
+          if (payload === SSE_DONE_DATA) {
+            if (!streamDoneSent) {
+              const doneOutput = 'data: [DONE]\n\n';
+              reqLogger?.appendConvertedChunk?.(doneOutput);
+              controller.enqueue(sharedEncoder.encode(doneOutput));
+              streamDoneSent = true;
+            }
+            finalizeStream();
+            continue;
+          }
+
           if (payload !== null && payload !== SSE_DONE_DATA) {
             try {
               const parsed = JSON.parse(payload);
@@ -290,14 +301,11 @@ export function createSSEStream(options = {}) {
 
               const isFinishChunk = parsed.choices?.[0]?.finish_reason;
               if (isFinishChunk && !hasValidUsage(parsed.usage)) {
-                finalizeStream();
                 const estimated = estimateUsage(body, totalContentLength, FORMATS.OPENAI);
                 parsed.usage = filterUsageForFormat(estimated, FORMATS.OPENAI);
                 output = `data: ${JSON.stringify(parsed)}\n`;
-                usage = estimated;
                 injectedUsage = true;
               } else if (isFinishChunk && usage) {
-                finalizeStream();
                 const buffered = addBufferToUsage(usage);
                 parsed.usage = filterUsageForFormat(buffered, FORMATS.OPENAI);
                 output = `data: ${JSON.stringify(parsed)}\n`;
@@ -361,7 +369,7 @@ export function createSSEStream(options = {}) {
             sseEmittedCount++;
           }
 
-          if (keepsOpenAIResponsesFormat && !streamDoneSent) {
+          if ((keepsOpenAIResponsesFormat || sourceFormat === FORMATS.OPENAI) && !streamDoneSent) {
             const doneOutput = "data: [DONE]\n\n";
             reqLogger?.appendConvertedChunk?.(doneOutput);
             controller.enqueue(sharedEncoder.encode(doneOutput));
@@ -482,6 +490,10 @@ export function createSSEStream(options = {}) {
           if (buffer) {
             let output = buffer;
             const payload = framePayload(buffer);
+            if (payload === SSE_DONE_DATA) streamDoneSent = true;
+            else if (payload) {
+              try { const extracted = extractUsage(JSON.parse(payload)); if (extracted) usage = mergeUsage(usage, extracted); } catch {}
+            }
             if (buffer.startsWith(SSE_DATA_PREFIX) && !buffer.startsWith(`${SSE_DATA_PREFIX} `)) {
               output = `${SSE_DATA_PREFIX} ${buffer.slice(SSE_DATA_PREFIX.length)}`;
             } else if (payload === buffer.trim()) {
@@ -489,6 +501,7 @@ export function createSSEStream(options = {}) {
               // [DONE] emitted below lands on the same line and both frames are lost
               output = `${SSE_DATA_PREFIX} ${payload}\n`;
             }
+            output = output.trimEnd() + '\n\n';
             reqLogger?.appendConvertedChunk?.(output);
             controller.enqueue(sharedEncoder.encode(output));
           }
@@ -576,7 +589,7 @@ export function createSSEStream(options = {}) {
           openAIResponsesTerminalSeen = true;
         }
 
-        if (keepsOpenAIResponsesFormat && !openAIResponsesDoneSent && !streamDoneSent) {
+        if ((keepsOpenAIResponsesFormat && !openAIResponsesDoneSent || sourceFormat === FORMATS.OPENAI) && !streamDoneSent) {
           const doneOutput = "data: [DONE]\n\n";
           reqLogger?.appendConvertedChunk?.(doneOutput);
           controller.enqueue(sharedEncoder.encode(doneOutput));

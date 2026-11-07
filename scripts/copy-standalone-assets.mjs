@@ -16,6 +16,14 @@ export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = pr
     return;
   }
 
+  // Next 16 loads additional server modules dynamically (including the console
+  // file logger); NFT tracing can omit them on Windows. Ship the package's
+  // server runtime rather than producing a build that cannot start.
+  const nextPackage = resolve(projectRoot, 'node_modules', 'next');
+  if (existsSync(nextPackage)) {
+    cpSync(nextPackage, resolve(standaloneDir, 'node_modules', 'next'), { recursive: true, force: true });
+  }
+
   const staticSource = resolve(buildDir, "static");
   const staticDestination = resolve(standaloneDir, distDir, "static");
   if (existsSync(staticSource)) {
