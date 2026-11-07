@@ -1,5 +1,9 @@
 # v0.1.0 (2026-11-05)
 
+- **Port OpenCode Zen Dynamic Project ID Rotation (Bypass Quota Limit)**:
+  - Integrated `generateRandomProjectId()` (40-hex git-commit-shaped hash) from `TiaraBasori/OpenCode2API` in `open-sse/executors/opencode.js`.
+  - Replaced static `"global"` project header with dynamic rotation, isolating quota buckets per request to avoid premature HTTP 429 `FreeUsageLimitError`.
+
 - **Fix NPM CLI Update Check False Downgrade Prompt**:
   - Filtered legacy `0.6.x` published registry versions in `cli/cli.js` from triggering an update prompt when running the new `0.1.0` series locally.
 

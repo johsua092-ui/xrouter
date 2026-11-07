@@ -72,6 +72,12 @@ function descendingTimeHex(time, counterValue) {
     .padStart(12, "0");
 }
 
+// Generates a fresh 40-hex git-commit-shaped project ID (the free tier ledges quota
+// per project ID, so rotating project IDs prevents hitting static account rate limits).
+export function generateRandomProjectId() {
+  return crypto.randomBytes(20).toString("hex");
+}
+
 export function generateSessionId(timestamp = Date.now()) {
   if (timestamp !== lastTimestamp) {
     lastTimestamp = timestamp;
@@ -621,7 +627,7 @@ export class OpenCodeExecutor extends BaseExecutor {
       "x-opencode-session-id": session,
       "x-session-affinity": session,
       "x-session-id": session,
-      "x-opencode-project": lower["x-opencode-project"] || "global",
+      "x-opencode-project": lower["x-opencode-project"] || generateRandomProjectId(),
       "Accept": stream ? "text/event-stream" : "*/*",
     };
     if (url.endsWith("/messages")) headers["anthropic-version"] = ANTHROPIC_API_VERSION;
