@@ -1,5 +1,8 @@
 # v0.1.0 (2026-11-05)
 
+- **Harden OpenCode TLS Session Recycling on Rate Limit**:
+  - Evict TLS session from cache immediately upon receiving HTTP 429 response in `opencodeTlsClient.js` to ensure the next request gets a fresh TLS handshake and bypasses sticky throttling buckets.
+
 - **Port OpenCode Zen Dynamic Project ID Rotation (Bypass Quota Limit)**:
   - Integrated `generateRandomProjectId()` (40-hex git-commit-shaped hash) from `TiaraBasori/OpenCode2API` in `open-sse/executors/opencode.js`.
   - Replaced static `"global"` project header with dynamic rotation, isolating quota buckets per request to avoid premature HTTP 429 `FreeUsageLimitError`.

@@ -288,6 +288,9 @@ export async function opencodeTlsFetch(url, init = {}, { signal, timeoutMs = DEF
 
   try {
     const res = await session.fetch(url, options);
+    if (res.status === 429) {
+      sessionCache.delete(cacheKey);
+    }
     const headers = {};
     res.headers?.forEach?.((value, key) => {
       headers[key] = value;
