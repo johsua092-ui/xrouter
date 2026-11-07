@@ -34,7 +34,20 @@ import path from "path";
 import os from "os";
 import { dbg } from "../utils/debugLog.js";
 
-const DEFAULT_STATE_PATH = path.join(os.homedir(), ".local", "state", "opencode", "service.json");
+function clearStaleOpenCodeLimitErrors() {
+  try {
+    const dbPath = path.join(os.homedir(), ".local", "share", "opencode", "opencode.db");
+    if (!fs.existsSync(dbPath)) return;
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync(dbPath);
+    db.exec(`
+      UPDATE session_message 
+      SET data = json_remove(data, '$.error') 
+      WHERE cast(data as text) LIKE '%provider.free-limit%'
+    `);
+    db.close();
+  } catch {}
+}
 
 // Cache of on-demand daemon processes per proxy URL
 const proxyDaemonPool = new Map();
@@ -2083,6 +2096,7 @@ async function executeServiceStreamOnceMcp({ model, body: requestBody, messages,
   const isTurnLimitReached = state && state.turnCount >= MAX_SESSION_TURNS;
 
   if (state?.closed || state?.service?.url !== service.url || state?.lastEventType === "session.execution.failed" || isCompacted || isTurnLimitReached) {
+    clearStaleOpenCodeLimitErrors();
     dbg(
       "OPENCODE_SVC",
       `Evicting/recycling session ${state?.sessionId} from pool for key ${sessionCacheKey}`

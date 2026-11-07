@@ -1,5 +1,8 @@
 # v0.1.0 (2026-11-05)
 
+- **Port OpenCode Stale Limit Auto-Clear from OpenCode-Unlimited**:
+  - Automatically clear sticky `provider.free-limit` cached error flags from local `opencode.db` on session eviction to prevent permanent rate-limit lockouts.
+
 - **Harden OpenCode TLS Session Recycling on Rate Limit**:
   - Evict TLS session from cache immediately upon receiving HTTP 429 response in `opencodeTlsClient.js` to ensure the next request gets a fresh TLS handshake and bypasses sticky throttling buckets.
 
