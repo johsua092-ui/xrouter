@@ -1,5 +1,8 @@
 # v0.0.8 (2026-11-05)
 
+- **Port Go Core Diagnostic Proxy Test to Node.js Gateway**:
+  - Implemented `/api/test-proxy` endpoint in Next.js router (`src/app/api/test-proxy/route.js`) using `undici` and `ProxyAgent` for full feature parity with Go Core.
+
 - **Fix Missing Gift Card Button for ZCode Connections**:
   - Expanded `isGlm` check in `ProviderLimits/index.js` to include `conn.provider === "zcode"`, ensuring connections registered under `zcode` display the Gift button alongside `glm`.
   - Updated bridge page copy as requested.
