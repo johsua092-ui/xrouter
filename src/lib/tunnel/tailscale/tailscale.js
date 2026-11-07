@@ -87,9 +87,14 @@ export function isTailscaleInstalled() {
   return getTailscaleBin() !== null;
 }
 
-/** Build tailscale CLI args with custom socket (no root needed) */
+function getActiveSocketFlag() {
+  if (isSystemDaemonRunning()) return SYSTEM_SOCKET_FLAG;
+  return SOCKET_FLAG;
+}
+
+/** Build tailscale CLI args with active socket (system or userspace) */
 function tsArgs(...args) {
-  return [...SOCKET_FLAG, ...args];
+  return [...getActiveSocketFlag(), ...args];
 }
 
 // Async strict probe: authoritative, awaitable (never blocks event loop). Updates cache.
@@ -398,7 +403,11 @@ async function installTailscaleLinux(sudoPassword, log) {
         const line = d.toString().trim();
         if (line) log(line);
       });
-      child.stderr.on("data", (d) => { stderr += d.toString(); });
+      child.stderr.on("data", (d) => {
+        const line = d.toString().trim();
+        if (line) log(line);
+        stderr += d.toString();
+      });
       child.on("close", (c) => {
         cleanup();
         if (c === 0) resolve();
@@ -665,7 +674,7 @@ export function startLogin(hostname) {
     let output = "";
 
     const parseAuthUrl = (text) => {
-      const match = text.match(/https:\/\/login\.tailscale\.com\/a\/[a-zA-Z0-9]+/);
+      const match = text.match(/https:\/\/login\.tailscale\.com\/[^\s'"]+/);
       return match ? match[0] : null;
     };
 

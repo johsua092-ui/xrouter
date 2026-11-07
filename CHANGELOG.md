@@ -1,5 +1,10 @@
 # v0.1.0 (2026-11-05)
 
+- **Fix Tailscale Installer Hanging ("Bengong") and Socket Detection**:
+  - Streamed `child.stderr` in `installTailscaleLinux` so apt-get progress is pushed to the UI in real time rather than freezing.
+  - Dynamically resolved active socket flag (`getActiveSocketFlag`) between system daemon (`/var/run/tailscale/tailscaled.sock`) and custom userspace socket.
+  - Broadened `parseAuthUrl` regex to match any `https://login.tailscale.com/*` auth URL.
+
 - **Align OpenCode Free Tier Endpoint Subpath**:
   - Pointed free-tier executor URL to canonical `/inference/openai/v1/*` matching official CLI binary reverse-engineering findings.
 
