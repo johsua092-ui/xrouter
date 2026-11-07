@@ -230,7 +230,7 @@ export async function GET(request, { params }) {
         <span class="step-title" style="color: #34D399;">1-Click Auto Claim (Bypass Aliyun Traceless Captcha)</span>
       </div>
       <p class="step-desc">
-        Menggunakan engine resmi Aliyun Web SDK Traceless Captcha (Scene <code>11xygtvd</code>). Verifikasi berlangsung di background browser kamu tanpa puzzle geser manual:
+        Verifikasi berlangsung di background browser kamu tanpa puzzle geser manual:
       </p>
       <div id="captcha-element"></div>
       <button type="button" id="btnAutoClaim" class="btn btn-green" onclick="startOneClickClaim()">

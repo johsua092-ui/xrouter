@@ -1,5 +1,9 @@
 # v0.0.8 (2026-11-05)
 
+- **Fix Missing Gift Card Button for ZCode Connections**:
+  - Expanded `isGlm` check in `ProviderLimits/index.js` to include `conn.provider === "zcode"`, ensuring connections registered under `zcode` display the Gift button alongside `glm`.
+  - Updated bridge page copy as requested.
+
 - **Fix GLM & ZCode Event Gift Card Balance Overwrite Bug**:
   - Fixed dictionary key collision in `parseZcodeStartPlanBalance` (`zcode.js`) and `getGlmUsage` (`glm.js`) where multiple entitlements sharing model name `GLM-5.3-Flash` (such as 500M Weekend Build / 300M Global Build and 5M Start Plan) overwrote each other.
   - Distinctly labels event gift bansos buckets with associated plan names (e.g. `GLM-5.3-Flash (ZCODE WEEKEND BUILD)`), displaying both massive gift card balances and daily start plan quotas in full.

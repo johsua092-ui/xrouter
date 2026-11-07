@@ -51,6 +51,8 @@ function glmResetStorage() {
   try { return window.localStorage; } catch { return null; }
 }
 
+const isGlmLike = (p) => p === "glm" || p === "zcode";
+
 function readGlmPending(connectionId) {
   const read = readPendingResetAttempt(glmResetStorage(), connectionId);
   return read.status === "ok" ? read.attempt : read.status === "invalid" ? { invalid: true } : null;
@@ -1324,7 +1326,7 @@ export default function ProviderLimits() {
           // Use table layout for all providers
           const isInactive = conn.isActive === false;
           const isCodex = conn.provider === "codex";
-          const isGlm = conn.provider === "glm";
+          const isGlm = conn.provider === "glm" || conn.provider === "zcode";
           const glmReset = glmResets[conn.id];
           const glmInventory = glmReset && Object.hasOwn(glmReset, "inventory") ? glmReset.inventory : quota?.raw?.resetCards;
           const claudeReset = conn.provider === "claude" ? quota?.raw?.resetCredits : null;
