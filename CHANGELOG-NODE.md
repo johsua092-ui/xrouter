@@ -1,5 +1,8 @@
 # v0.1.0 (2026-11-05)
 
+- **Documentation & Distribution Cleanup**:
+  - Deprecated and removed global NPM package instructions (`npm install -g xrouter-ai`, `npx xrouter-ai`) and badges from `README.md` to align with the repository's native Git & Go Core distribution model.
+
 - **Port Complete Magpie OpenCode Specification**:
   - Upgraded OpenCode fingerprint tool definitions to full 5 core tools (`edit`, `glob`, `grep`, `read`, `shell`) with exact upstream schemas.
   - Injected OpenTelemetry trace headers (`b3`, `traceparent`) on every request to pass OpenCode 2.2.5+ telemetry verification.

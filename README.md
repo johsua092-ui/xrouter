@@ -6,9 +6,8 @@
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-26-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" /></a>
   <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-14.2-000000?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" /></a>
   <a href="https://sqlite.org"><img src="https://img.shields.io/badge/SQLite-WAL%20Zero--CGO-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite" /></a>
-  <a href="https://github.com/johsua092-ui/xrouter"><img src="https://img.shields.io/badge/Release-v0.0.5-E56A4A?style=for-the-badge" alt="Release" /></a>
-  <a href="https://www.npmjs.com/package/xrouter-ai"><img src="https://img.shields.io/npm/v/xrouter-ai.svg?style=for-the-badge&logo=npm&logoColor=white&color=CB3837" alt="npm" /></a>
-  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go%20Core-Planned-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go Core (Planned)" /></a>
+  <a href="https://github.com/johsua092-ui/xrouter"><img src="https://img.shields.io/badge/Release-v0.1.0-E56A4A?style=for-the-badge" alt="Release" /></a>
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go%20Core-v0.0.1-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go Core" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License" /></a>
 </p>
 
@@ -76,7 +75,7 @@ Unlike traditional generic reverse proxies (such as One-API, New-API, or raw Lit
 | **Multi-Cookie Provider Support** | ❌ Complex single-line manual concatenation | ✅ **Structured 2-Column Inputs** with real-time smart auto-split (Gemini `1PSID/1PSIDTS`, Grok `sso/sso-rw`) |
 | **Dead Account / Key Handling** | ⚠️ Blacklists keys with manual reset required | ✅ **Zero-Maintenance Auto-Prune** (Instantly evicts expired/401/403/banned keys with zero cluster downtime) |
 | **Provider Modularity** | ⚠️ Generic OpenAI endpoints only | ✅ **40+ Native Adapters** including OpenCode Free, Antigravity v2, Nous, Minimax Code, Kiro, & Claude Responses |
-| **CLI & Desktop Integration** | ❌ Web-only / Server Docker only | ✅ **Global NPM Package (`xrouter-ai`)** with built-in MITM proxy, System Tray, & Terminal UI |
+| **CLI & Desktop Integration** | ❌ Web-only / Server Docker only | ✅ **Native Go Core & System Service** with built-in MITM proxy & Terminal UI |
 
 ---
 
@@ -140,41 +139,12 @@ bash install.sh --port 8080 --password "MySecretPass" -y
 
 > **Note on Security Secrets:** When running `install.sh`, all core cryptographic secrets (`JWT_SECRET`, `MACHINE_ID_SALT`, and `API_KEY_SECRET`) are automatically generated with secure random hex tokens. You do not need to enter or configure them manually. If you prefer custom secrets, you can still override them via CLI flags (`--jwt-secret`, `--salt`, `--api-key-secret`) or edit `.env` directly.
 
-### 2. Global NPM Install
-
-Install and run X Router globally on any server or desktop machine with a single command:
-
-```bash
-# Install globally via npm
-npm install -g xrouter-ai
-
-# Start X Router and open the dashboard
-xrouter
-# or use the full alias
-xrouter-ai
-```
-
-You can also run directly without installation via `npx`:
-
-```bash
-npx xrouter-ai
-```
-
-**Common CLI Options:**
-```bash
-xrouter --port 8080      # Start on custom port
-xrouter status           # Check running instances
-xrouter --help           # Show all available commands
-```
-
----
-
 ### 2. Manual / Development Setup (From Git)
 
 ```bash
 # Clone the repository
-git clone https://github.com/johsua092-ui/x-router.git
-cd x-router
+git clone https://github.com/johsua092-ui/xrouter.git
+cd xrouter
 
 # Copy environment template (optional, customize your port & secrets)
 cp .env.example .env
