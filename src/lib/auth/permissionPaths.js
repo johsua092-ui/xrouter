@@ -130,6 +130,7 @@ export function requiredPermissionsForApiPath(pathname, method = "GET") {
 // and anything added later stays admin-only until it is opened up.
 const PAGE_PERMISSION_RULES = [
   { prefix: "/dashboard/endpoint", permissions: ["manageApiKeys"] },
+  { prefix: "/dashboard/teams", permissions: ["manageApiKeys"] },
   { prefix: "/dashboard/usage", permissions: ["viewUsage"] },
   { prefix: "/dashboard/api-key-usage", permissions: ["viewUsage", "manageApiKeys"] },
   { prefix: "/dashboard/providers", permissions: ["manageProviders"] },

@@ -99,6 +99,7 @@ function redirectWithProto(targetPath, request) {
 // Require auth, but allow through if requireLogin is disabled
 const PROTECTED_API_PATHS = [
   "/api/settings",
+  "/api/teams",
   "/api/keys",
   "/api/providers",
   "/api/provider-nodes",

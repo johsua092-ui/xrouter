@@ -240,7 +240,7 @@ export default function LeftRail() {
   }, [expandedGroup]);
 
   // Split nav items into core routing vs telemetry for clean visual hierarchy
-  const coreRoutingHrefs = ["/dashboard/endpoint", "/dashboard/providers", "/dashboard/combos"];
+  const coreRoutingHrefs = ["/dashboard/endpoint", "/dashboard/teams", "/dashboard/providers", "/dashboard/combos"];
   const coreRouting = navItems.filter((i) => coreRoutingHrefs.includes(i.href));
   const telemetry = navItems.filter((i) => !coreRoutingHrefs.includes(i.href));
 

@@ -359,6 +359,11 @@ const PROVIDER_MODELS_CONFIG = {
   // direct pattern: resolve with the connection's own credentials (never
   // exposed to the browser), return rich metadata, drop disabled entries.
   // Empty/failure yields an explicit warning, never a silent zero list.
+  ovh: {
+    customResolver: async () => ({
+      models: getStaticProviderModels("ovh"),
+    }),
+  },
   zed: {
     customResolver: async (connection) => {
       try {

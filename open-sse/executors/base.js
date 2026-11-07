@@ -60,11 +60,13 @@ export class BaseExecutor {
         headers["anthropic-version"] = ANTHROPIC_API_VERSION;
       }
     } else {
-      // Standard Bearer token auth for other providers
-      if (credentials.accessToken) {
-        headers["Authorization"] = `Bearer ${credentials.accessToken}`;
-      } else if (credentials.apiKey) {
-        headers["Authorization"] = `Bearer ${credentials.apiKey}`;
+      // Standard Bearer token auth for other providers (skip if provider is noAuth)
+      if (this.config.authType !== "none" && !this.config.noAuth) {
+        if (credentials.accessToken && credentials.accessToken !== "public") {
+          headers["Authorization"] = `Bearer ${credentials.accessToken}`;
+        } else if (credentials.apiKey && credentials.apiKey !== "public") {
+          headers["Authorization"] = `Bearer ${credentials.apiKey}`;
+        }
       }
     }
 

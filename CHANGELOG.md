@@ -1,5 +1,13 @@
 # v0.1.0 (2026-11-05)
 
+- **Dedicated Teams Governance Tab & UI in Dashboard**:
+  - Added modern Next.js UI tab `/dashboard/teams` in sidebar and navigation with cards, live toggles, and edit modal for group spend/rate limits.
+  - Connected `/api/teams` REST endpoints backed by local SQLite `teams` table.
+
+- **Fix OVH Keyless Auth & Static Model Discovery**:
+  - Suppressed Bearer header injection on keyless/noAuth providers in `open-sse/executors/base.js`.
+  - Added dedicated static resolver for `ovh` in `/api/providers/[id]/models/route.js`.
+
 - **Add Free Keyless Provider OVH Cloud (Kepler AI)**:
   - Registered `ovh` (`open-sse/providers/registry/ovh.js`) with keyless access to high-context reasoning models: `Qwen3.6-27B` (262K context), `Qwen3.8-27B` (262K context), `gpt-oss-120b` (131K context), and `Mistral-Small` (131K context).
   - Verified 100% native OpenAI tool calling & streaming compatibility.
