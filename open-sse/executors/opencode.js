@@ -601,9 +601,9 @@ export class OpenCodeExecutor extends BaseExecutor {
   // answers every free request with 403 FreeTierError.
   buildUrl(model) {
     const base = this.config.baseUrl;
-    if (isResponsesModel(model)) return `${base}/inference/v1/responses`;
-    if (isMessagesModel(model)) return `${base}/inference/v1/messages`;
-    return `${base}/inference/v1/chat/completions`;
+    if (isResponsesModel(model)) return `${base}/inference/openai/v1/responses`;
+    if (isMessagesModel(model)) return `${base}/inference/openai/v1/messages`;
+    return `${base}/inference/openai/v1/chat/completions`;
   }
 
   buildHeaders(credentials, stream = true, url = "") {

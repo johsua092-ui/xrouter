@@ -1,5 +1,8 @@
 # v0.1.0 (2026-11-05)
 
+- **Align OpenCode Free Tier Endpoint Subpath**:
+  - Pointed free-tier executor URL to canonical `/inference/openai/v1/*` matching official CLI binary reverse-engineering findings.
+
 - **Port OpenCode Stale Limit Auto-Clear from OpenCode-Unlimited**:
   - Automatically clear sticky `provider.free-limit` cached error flags from local `opencode.db` on session eviction to prevent permanent rate-limit lockouts.
 
