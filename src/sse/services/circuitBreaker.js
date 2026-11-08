@@ -1,5 +1,6 @@
 import * as log from "../utils/logger.js";
 import { updateProviderConnection, getProviderConnectionById } from "@/lib/localDb";
+import { cooldownRegistry } from "./cooldownRegistry.js";
 
 /**
  * Smart Circuit Breaker & Auto-Cooldown Recovery
@@ -96,6 +97,7 @@ export function isCircuitBreakerOpen(connectionId) {
  */
 export function recordCircuitSuccess(connectionId) {
   if (!connectionId) return;
+  cooldownRegistry.clear(connectionId);
   const entry = circuitBreakerState.get(connectionId);
   if (entry && (entry.failures > 0 || entry.state !== CIRCUIT_STATES.HEALTHY)) {
     circuitBreakerState.set(connectionId, {

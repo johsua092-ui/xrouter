@@ -6,6 +6,7 @@ import { resolveProviderId, FREE_PROVIDERS, AI_PROVIDERS } from "@/shared/consta
 import { getAntigravityQuotaCache, getAntigravityModelQuota } from "./antigravityQuota.js";
 import { getAffinityConnectionId, setAffinityConnection, touchAffinity, clearAffinity } from "./conversationAffinity.js";
 import { tripCircuitBreaker, isCircuitBreakerOpen, recordCircuitSuccess } from "./circuitBreaker.js";
+import { cooldownRegistry } from "./cooldownRegistry.js";
 
 export { apiKeyGateFailure, shouldLogAuthFailure } from "./keyGate.js";
 import * as log from "../utils/logger.js";
@@ -170,11 +171,13 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     const isAntigravity = providerId === "antigravity";
     const antigravityQuotaCache = isAntigravity && model ? getAntigravityQuotaCache() : null;
 
-    // Filter out model-locked, excluded, circuit-broken, and Antigravity quota-exhausted connections.
+    // Filter out model-locked, excluded, circuit-broken, cooldown-quarantined, and Antigravity quota-exhausted connections.
     const availableConnections = connections.filter(c => {
       if (excludeSet.has(c.id)) return false;
       if (isModelLockActive(c, model)) return false;
       if (isCircuitBreakerOpen(c.id)) return false;
+      if (cooldownRegistry.isCooling(c.id)) return false;
+      if (model && cooldownRegistry.isCooling(`${c.id}|${model}`)) return false;
       const enabled = c.providerSpecificData?.enabledModels;
       if (providerId === "codex" && Array.isArray(enabled) && enabled.length && requestedModel && !enabled.includes(requestedModel)) return false;
       // Antigravity: skip if live quota exhausted for this model
@@ -485,8 +488,16 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   );
 
   // Trip circuit breaker on actual connection/server-level errors (not per-model rate limits)
-  if (shouldFallback && connectionId && connectionId !== "noauth" && !isPerModelRateLimit) {
-    tripCircuitBreaker(connectionId, { status, error: reason, provider, model });
+  if (shouldFallback && connectionId && connectionId !== "noauth") {
+    if (isPerModelRateLimit) {
+      // Use VoidLLM-style lightweight Cooldown Registry for 429 rate limit backoff (per model + per connection)
+      const cdDuration = cooldownMs || (githubResetAtMs ? Math.max(1000, githubResetAtMs - Date.now()) : 30000);
+      cooldownRegistry.mark(connectionId, cdDuration, reason);
+      if (model) cooldownRegistry.mark(`${connectionId}|${model}`, cdDuration, reason);
+      log.info("COOLDOWN", `⏳ Connection ${connName} [${model || provider}] placed in cooldown for ${Math.round(cdDuration / 1000)}s`);
+    } else {
+      tripCircuitBreaker(connectionId, { status, error: reason, provider, model });
+    }
   }
 
   await updateProviderConnection(connectionId, {
