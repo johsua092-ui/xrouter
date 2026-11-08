@@ -1,5 +1,11 @@
 # v0.1.0 (2026-11-05)
 
+- **Fix Xray Modern Outbound TLS Configuration**:
+  - Removed deprecated `allowInsecure` property from Xray TLS outbound configurations in `src/lib/v2ray/parser.js` to ensure compatibility with Xray-core v26+.
+
+- **Fix Model Test Endpoint Authorization in Permission Paths**:
+  - Registered `/api/models/test` under `src/lib/auth/permissionPaths.js` with `manageModels`, `manageProviders`, and `manageApiKeys` permissions so dashboard UI model testing does not fail with 401 when Require API Key is active.
+
 - **Fix OVH Keyless Auth & Internal Test Ping**:
   - Registered `providerId === "ovh"` in `src/sse/services/auth.js` to ensure virtual no-auth credentials are automatically supplied.
   - Fixed internal `pingModelByKind` to inject the gateway API key so `requireApiKey` validates properly on test probes.

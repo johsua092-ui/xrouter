@@ -81,7 +81,6 @@ function parseVmess(link) {
     if (tls === "tls") {
       outbound.streamSettings.tlsSettings = {
         serverName: sni,
-        allowInsecure: false,
       };
     }
 
@@ -154,7 +153,6 @@ function parseVless(link) {
       outbound.streamSettings.tlsSettings = {
         serverName: sni,
         fingerprint: fp,
-        allowInsecure: false,
       };
     } else if (security === "reality") {
       outbound.streamSettings.realitySettings = {
@@ -224,7 +222,6 @@ function parseTrojan(link) {
     if (security === "tls") {
       outbound.streamSettings.tlsSettings = {
         serverName: sni,
-        allowInsecure: false,
       };
     }
 
