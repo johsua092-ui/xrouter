@@ -389,7 +389,11 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels, display, model = "")
     }
     case "deepseek": {
       if (none && canDisable) { body.thinking = { type: "disabled" }; break; }
-      body.thinking = { type: "enabled" };
+      // Keep an explicit budget captured before translation/stripAll; strict
+      // DeepSeek-compatible hosts validate it when thinking is enabled.
+      body.thinking = cfg.mode === "budget" && Number.isFinite(cfg.budget) && cfg.budget > 0
+        ? { type: "enabled", budget_tokens: cfg.budget }
+        : { type: "enabled" };
       // DeepSeek: low/medium→high, xhigh/max→max. Some backends (mimo v2.5-pro/v2.6
       // on opencode-go, probed live) 400 on "max" - clamp to high when the declared
       // levels exclude it.

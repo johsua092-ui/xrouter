@@ -93,7 +93,7 @@ export default {
   ],
   // Live catalogue; ids outside this curated list get their endpoint lane from the
   // family regex in providers/models/helpers.js (opencodeFamilyFormats).
-  modelsFetcher: { url: "https://opencode.ai/zen/go/v1/models", type: "opencode-go" },
+  modelsFetcher: { url: "https://opencode.ai/inference/go/v1/models", type: "opencode-go" },
   passthroughModels: true,
   features: {
     usage: true,
