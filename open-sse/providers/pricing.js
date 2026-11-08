@@ -445,7 +445,9 @@ export function getPricingForModel(provider, model) {
   }
 
   // 4. Free-tier / community models — priced at zero so they're distinguishable from unknown
-  if (/(^|[-_/])(free|contributor|community|opencode|zen|preview-?free)([-_]|$)/i.test(model)) {
+  // Note: Only models explicitly containing 'free', 'contributor', 'preview-free'
+  // Avoid broad matching that zeroes out real models.
+  if (/(^|[-_/])(free|contributor|community|preview-?free)([-_]|$)/i.test(model)) {
     return { input: 0, output: 0, cached: 0, reasoning: 0, cache_creation: 0 };
   }
 

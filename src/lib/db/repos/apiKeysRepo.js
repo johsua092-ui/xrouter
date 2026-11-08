@@ -278,12 +278,49 @@ export async function getAllowedModelsOfKey(key) {
  }
 }
 
+// Helper to sum team spending in given time window
+export async function getTeamSpendUsd(apiKey, sinceIso) {
+  if (!apiKey) return 0;
+  const db = await getAdapter();
+  const row = db.get(
+    `SELECT SUM(cost) as totalCost FROM usageHistory WHERE apiKey = ? AND timestamp >= ?`,
+    [apiKey, sinceIso]
+  );
+  return Number(row?.totalCost) || 0;
+}
+
 export async function validateApiKey(key, requestedModel = null, clientIp = null) {
   const db = await getAdapter();
   let result = false;
 
   db.transaction(() => {
-    const row = db.get(`SELECT * FROM apiKeys WHERE key = ?`, [key]);
+    let row = db.get(`SELECT * FROM apiKeys WHERE key = ?`, [key]);
+    let teamRecord = null;
+    if (!row && key && (key.startsWith("xteam-") || key.startsWith("team_"))) {
+      const teamRow = db.get(`SELECT * FROM teams WHERE apiKey = ?`, [key]);
+      if (teamRow) {
+        if (teamRow.enabled !== 1 && teamRow.enabled !== true) {
+          result = "KEY_DISABLED";
+          return;
+        }
+        teamRecord = teamRow;
+        row = {
+          id: teamRow.id,
+          key: teamRow.apiKey,
+          isActive: 1,
+          tokenLimit: 0,
+          usedTokens: 0,
+          resetInterval: "never",
+          allowedModels: teamRow.allowedModels || "*",
+          rpmLimit: teamRow.rpmLimit || 0,
+          tpmLimit: 0,
+          ipWhitelist: "",
+          expiresAt: null,
+          createdAt: teamRow.createdAt,
+          lastResetAt: null,
+        };
+      }
+    }
     if (!row) {
       result = false;
       return;
@@ -303,7 +340,6 @@ export async function validateApiKey(key, requestedModel = null, clientIp = null
       }
     }
 
-
     // Check IP whitelist (empty = disabled/allow all)
     const ipWhitelist = (row.ipWhitelist || "").trim();
     if (ipWhitelist && clientIp) {
@@ -311,6 +347,41 @@ export async function validateApiKey(key, requestedModel = null, clientIp = null
       if (allowedIps.length > 0 && !allowedIps.includes(clientIp)) {
         result = "IP_NOT_ALLOWED";
         return;
+      }
+    }
+
+    // Check Team-level Spend Limit Constraints ($ USD)
+    if (teamRecord) {
+      const dailySpendCap = Number(teamRecord.dailySpendLimitUsd) || 0;
+      const monthlySpendCap = Number(teamRecord.monthlySpendLimitUsd) || 0;
+
+      if (dailySpendCap > 0) {
+        const startOfDay = new Date();
+        startOfDay.setUTCHours(0, 0, 0, 0);
+        const dayRow = db.get(
+          `SELECT SUM(cost) as totalCost FROM usageHistory WHERE apiKey = ? AND timestamp >= ?`,
+          [key, startOfDay.toISOString()]
+        );
+        const daySpent = Number(dayRow?.totalCost) || 0;
+        if (daySpent >= dailySpendCap) {
+          result = "QUOTA_EXCEEDED";
+          return;
+        }
+      }
+
+      if (monthlySpendCap > 0) {
+        const startOfMonth = new Date();
+        startOfMonth.setUTCDate(1);
+        startOfMonth.setUTCHours(0, 0, 0, 0);
+        const monthRow = db.get(
+          `SELECT SUM(cost) as totalCost FROM usageHistory WHERE apiKey = ? AND timestamp >= ?`,
+          [key, startOfMonth.toISOString()]
+        );
+        const monthSpent = Number(monthRow?.totalCost) || 0;
+        if (monthSpent >= monthlySpendCap) {
+          result = "QUOTA_EXCEEDED";
+          return;
+        }
       }
     }
 

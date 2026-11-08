@@ -39,8 +39,24 @@ function rowToTeam(row) {
   };
 }
 
+let schemaChecked = false;
+async function ensureTeamsSchema(db) {
+  if (schemaChecked) return;
+  try {
+    const cols = await db.all("PRAGMA table_info(teams)");
+    const colNames = new Set((cols || []).map((c) => c.name));
+    if (!colNames.has("apiKey")) {
+      await db.run("ALTER TABLE teams ADD COLUMN apiKey TEXT UNIQUE");
+    }
+    schemaChecked = true;
+  } catch (e) {
+    // If table doesn't exist yet, it will be created by schema sync
+  }
+}
+
 export async function getTeams() {
   const db = await getAdapter();
+  await ensureTeamsSchema(db);
   const rows = await db.all("SELECT * FROM teams ORDER BY createdAt DESC");
   return (rows || []).map(rowToTeam);
 }
@@ -48,6 +64,7 @@ export async function getTeams() {
 export async function getTeamById(id) {
   if (!id) return null;
   const db = await getAdapter();
+  await ensureTeamsSchema(db);
   const row = await db.get("SELECT * FROM teams WHERE id = ?", [id]);
   return rowToTeam(row);
 }
@@ -65,6 +82,7 @@ export async function createTeam({
   monthlySpendLimitUsd = 0,
 }) {
   const db = await getAdapter();
+  await ensureTeamsSchema(db);
   const id = `team_${uuidv4().replace(/-/g, "").slice(0, 16)}`;
   const now = new Date().toISOString();
 
@@ -106,6 +124,7 @@ export async function createTeam({
 
 export async function updateTeam(id, updates = {}) {
   const db = await getAdapter();
+  await ensureTeamsSchema(db);
   const existing = await getTeamById(id);
   if (!existing) return null;
 
