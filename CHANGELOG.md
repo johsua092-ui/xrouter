@@ -1,5 +1,8 @@
 # v0.1.0 (2026-11-05)
 
+- **Fix DefaultExecutor Authorization for Keyless OVH Provider**:
+  - Added early check in `DefaultExecutor.buildHeaders()` to strip `Authorization` header for `ovh` and no-auth providers so upstream doesn't return `403 Forbidden: authentication failed`.
+
 - **Backport Decolua Upstream PRs (#5486, #5508, #5509)**:
   - **PR #5486**: Preserved explicit `thinking.budget_tokens` on DeepSeek models (`thinkingUnified.js`) so compatible hosts don't reject requests as missing budget.
   - **PR #5508**: Sanitized third-party CLI agent markers (Claude Code, Cursor, Cline) in `codebuddy-intl.js` while preserving user system prompts to prevent Tencent WAF 11101 rejections.
