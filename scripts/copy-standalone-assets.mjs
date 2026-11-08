@@ -23,11 +23,12 @@ export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = pr
     console.log(`[standalone-assets] Copied static assets to ${staticDestination}`);
   }
 
-  const pagesSource = resolve(buildDir, "server", "pages");
-  const pagesDestination = resolve(standaloneDir, distDir, "server", "pages");
-  if (existsSync(pagesSource)) {
-    cpSync(pagesSource, pagesDestination, { recursive: true, force: true });
-    console.log(`[standalone-assets] Copied server pages to ${pagesDestination}`);
+  // Next.js standalone requires the entire server artifact directory (including app & pages)
+  const serverSource = resolve(buildDir, "server");
+  const serverDestination = resolve(standaloneDir, distDir, "server");
+  if (existsSync(serverSource)) {
+    cpSync(serverSource, serverDestination, { recursive: true, force: true });
+    console.log(`[standalone-assets] Copied server build artifacts to ${serverDestination}`);
   }
 
   const publicSource = resolve(projectRoot, "public");
@@ -51,6 +52,7 @@ export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = pr
     try {
       let serverCode = readFileSync(standaloneServer, "utf8");
       // Strip any previous hook cleanly
+      serverCode = serverCode.replace(/^if \(typeof globalThis !== "undefined"\) \{[\s\S]*?\}\n\}\n/, "");
       serverCode = serverCode.replace(/^if \(typeof globalThis !== "undefined"\) \{[\s\S]*?\}\n/, "");
       const hook = `if (typeof globalThis !== "undefined") {\n  globalThis.__xrouter_native_require__ = require;\n  globalThis.__non_webpack_require__ = require;\n  try { globalThis.__xrouter_wreq__ = require("wreq-js"); } catch {}\n}\n`;
       writeFileSync(standaloneServer, hook + serverCode, "utf8");
