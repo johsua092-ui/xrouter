@@ -44,13 +44,31 @@ async function ensureTeamsSchema(db) {
   if (schemaChecked) return;
   try {
     const cols = await db.all("PRAGMA table_info(teams)");
-    const colNames = new Set((cols || []).map((c) => c.name));
+    if (!cols || cols.length === 0) return;
+    const colNames = new Set(cols.map((c) => c.name));
+
+    // SQLite forbids "ADD COLUMN ... UNIQUE". Add plain column then create unique index.
     if (!colNames.has("apiKey")) {
-      await db.run("ALTER TABLE teams ADD COLUMN apiKey TEXT UNIQUE");
+      try {
+        await db.run("ALTER TABLE teams ADD COLUMN apiKey TEXT");
+        await db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_team_apikey ON teams(apiKey)");
+      } catch (err) {
+        console.warn("[teamsRepo] failed to add apiKey column:", err?.message);
+      }
+    }
+    if (!colNames.has("dailySpendLimitUsd")) {
+      try {
+        await db.run("ALTER TABLE teams ADD COLUMN dailySpendLimitUsd REAL DEFAULT 0");
+      } catch {}
+    }
+    if (!colNames.has("monthlySpendLimitUsd")) {
+      try {
+        await db.run("ALTER TABLE teams ADD COLUMN monthlySpendLimitUsd REAL DEFAULT 0");
+      } catch {}
     }
     schemaChecked = true;
   } catch (e) {
-    // If table doesn't exist yet, it will be created by schema sync
+    console.warn("[teamsRepo] ensureTeamsSchema error:", e?.message);
   }
 }
 

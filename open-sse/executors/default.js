@@ -156,6 +156,9 @@ export class DefaultExecutor extends BaseExecutor {
       return `${this.config.baseUrl}${this.config.urlSuffix}`;
     }
     const url = this.config.baseUrl;
+    if (this.provider === "ovh" && !url.endsWith("/chat/completions")) {
+      return `${url.replace(/\/$/, "")}/chat/completions`;
+    }
     if (url?.includes("{accountId}")) {
       const accountId = credentials?.providerSpecificData?.accountId;
       if (!accountId) throw new Error(`${this.provider} requires accountId in providerSpecificData`);

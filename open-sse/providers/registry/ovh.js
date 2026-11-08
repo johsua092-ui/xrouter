@@ -20,7 +20,7 @@ export default {
   authType: "none",
   authModes: ["none"],
   transport: {
-    baseUrl: "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+    baseUrl: "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions",
     format: "openai",
     headers: {
       "Authorization": "",
