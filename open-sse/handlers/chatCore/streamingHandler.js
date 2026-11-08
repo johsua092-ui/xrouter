@@ -203,9 +203,10 @@ export function buildOnStreamComplete({ provider, model, connectionId, apiKey, r
           ],
           usage: usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
         };
-        saveToSemanticCache(body, `${provider}/${model}`, syntheticResponse);
+        const nonStreamBody = { ...body, stream: false };
+        saveToSemanticCache(nonStreamBody, `${provider}/${model}`, syntheticResponse);
         if (requestedModel && requestedModel !== `${provider}/${model}`) {
-          saveToSemanticCache(body, requestedModel, syntheticResponse);
+          saveToSemanticCache(nonStreamBody, requestedModel, syntheticResponse);
         }
       } catch (err) {
         // fail-open
