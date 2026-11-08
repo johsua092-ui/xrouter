@@ -51,6 +51,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     // Inject a virtual connection for no-auth free providers (with optional proxy pool from settings)
     const isNoAuth =
       providerId === "opencode" ||
+      providerId === "ovh" ||
       Boolean(FREE_PROVIDERS[providerId]?.noAuth) ||
       Boolean(AI_PROVIDERS[providerId]?.noAuth);
 

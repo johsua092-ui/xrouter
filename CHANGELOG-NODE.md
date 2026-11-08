@@ -1,5 +1,13 @@
 # v0.1.0 (2026-11-05)
 
+- **Fix OVH Keyless Auth & Internal Test Ping**:
+  - Registered `providerId === "ovh"` in `src/sse/services/auth.js` to ensure virtual no-auth credentials are automatically supplied.
+  - Fixed internal `pingModelByKind` to inject the gateway API key so `requireApiKey` validates properly on test probes.
+  - Ensured standalone `.next/server/pages` is copied in `scripts/copy-standalone-assets.mjs` to resolve `_error.js` missing module warning.
+
+- **Move Teams to Features Menu Group**:
+  - Relocated `/dashboard/teams` from core routing nav items into `WORKSHOP_ITEMS` (Feature+ group) in navigation constants, Sidebar, and LeftRail as requested by Naub.
+
 - **Port OpenCode Zen 4-Pillar Playbook Validations**:
   - Enforced atomic mathematical sequence clamping `counter = (counter + 1) & 0x0F` on `generateSessionId` to satisfy upstream backend's `0xfff - low < 16` integrity check.
   - Automatically deleted prohibited `tool_choice: "none"` across all request lanes to prevent upstream `403 FreeTierError`.

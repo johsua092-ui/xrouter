@@ -17,7 +17,6 @@ const COMBINED_WEB_ITEM = { id: "web", label: "Web Fetch & Search", icon: "trave
 
 const navItems = [
   { href: "/dashboard/endpoint", label: "Endpoint & Key", icon: "api" },
-  { href: "/dashboard/teams", label: "Teams", icon: "groups" },
   { href: "/dashboard/providers", label: "Providers", icon: "dns" },
   // { href: "/dashboard/basic-chat", label: "Basic Chat", icon: "chat" }, // Hidden
   { href: "/dashboard/combos", label: "Combo & Vision Adapter", icon: "layers" },
@@ -30,6 +29,7 @@ const navItems = [
 
 // Custom features added by this fork — open-ended, new tools land here too.
 const workshopItems = [
+  { href: "/dashboard/teams", label: "Teams", icon: "groups" },
   { href: "/dashboard/arena", label: "Compare Models", icon: "swords" },
   { href: "/dashboard/model-editor", label: "Custom Models", icon: "auto_awesome" },
   { href: "/dashboard/prompt-injection", label: "Prompt Injection", icon: "tune" },
@@ -126,6 +126,7 @@ export default function Sidebar({ onClose }) {
 
   const filteredWorkshopItems = workshopItems.filter((item) => {
     if (!isApiKeyUser) return true;
+    if (item.href === "/dashboard/teams") return permissions.manageApiKeys;
     if (
       item.href === "/dashboard/model-editor" ||
       item.href === "/dashboard/arena" ||

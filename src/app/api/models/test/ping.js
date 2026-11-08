@@ -47,9 +47,7 @@ async function getInternalHeaders(model = "") {
   } catch {}
 
   const headers = { "Content-Type": "application/json" };
-  // Only inject Authorization if model is not from a keyless noAuth provider
-  const isKeylessNoAuth = String(model).startsWith("ovh/") || String(model).startsWith("koma/") || String(model).startsWith("opensatan/");
-  if (apiKey && !isKeylessNoAuth) {
+  if (apiKey) {
     headers["Authorization"] = `Bearer ${apiKey}`;
   }
   headers["x-9r-cli-token"] = await getConsistentMachineId(CLI_TOKEN_SALT);

@@ -23,6 +23,13 @@ export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = pr
     console.log(`[standalone-assets] Copied static assets to ${staticDestination}`);
   }
 
+  const pagesSource = resolve(buildDir, "server", "pages");
+  const pagesDestination = resolve(standaloneDir, distDir, "server", "pages");
+  if (existsSync(pagesSource)) {
+    cpSync(pagesSource, pagesDestination, { recursive: true, force: true });
+    console.log(`[standalone-assets] Copied server pages to ${pagesDestination}`);
+  }
+
   const publicSource = resolve(projectRoot, "public");
   const publicDestination = resolve(standaloneDir, "public");
   if (existsSync(publicSource)) {

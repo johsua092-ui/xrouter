@@ -16,7 +16,6 @@ export const COMBINED_WEB_ITEM = {
 
 export const NAV_ITEMS = [
   { href: "/dashboard/endpoint", label: "Endpoint", icon: "api" },
-  { href: "/dashboard/teams", label: "Teams", icon: "groups" },
   { href: "/dashboard/providers", label: "Providers", icon: "dns" },
   { href: "/dashboard/combos", label: "Combos", icon: "layers" },
   { href: "/dashboard/usage", label: "Usage", icon: "bar_chart" },
@@ -27,6 +26,7 @@ export const NAV_ITEMS = [
 ];
 
 export const WORKSHOP_ITEMS = [
+  { href: "/dashboard/teams", label: "Teams", icon: "groups" },
   { href: "/dashboard/arena", label: "Compare Models", icon: "swords" },
   { href: "/dashboard/model-editor", label: "Custom Models", icon: "auto_awesome" },
   { href: "/dashboard/plugins", label: "Custom Plugins", icon: "widgets" },
@@ -83,6 +83,7 @@ export function filterNavigation({ isApiKeyUser, permissions, enableTranslator }
 
   const workshopItems = WORKSHOP_ITEMS.filter((item) => {
     if (!isApiKeyUser) return true;
+    if (item.href === "/dashboard/teams") return p.manageApiKeys;
     if (
       item.href === "/dashboard/model-editor" ||
       item.href === "/dashboard/arena" ||
