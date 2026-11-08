@@ -115,3 +115,6 @@ debug.log
 
 # Security-scan plugin state (local tooling)
 .mimosa/
+
+# Production build backups (rollback snapshots)
+.next-backup-*/

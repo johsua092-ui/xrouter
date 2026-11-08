@@ -65,6 +65,23 @@ describe("standalone build assets", () => {
       .toBe("wrapper");
   });
 
+  it("reads NEXT_DIST_DIR from .env when the environment does not set it", () => {
+    const projectRoot = createBuildFixture(".next-env-test");
+    writeFileSync(join(projectRoot, ".env"), "PORT=20128\nNEXT_DIST_DIR=.next-env-test\n");
+    const previous = process.env.NEXT_DIST_DIR;
+    delete process.env.NEXT_DIST_DIR;
+
+    try {
+      copyStandaloneAssets({ projectRoot });
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_DIST_DIR;
+      else process.env.NEXT_DIST_DIR = previous;
+    }
+
+    expect(readFileSync(join(projectRoot, ".next-env-test", "standalone", ".next-env-test", "static", "chunks", "app.js"), "utf8"))
+      .toBe("static asset");
+  });
+
   it("does not modify workspace-traced CLI builds", () => {
     const projectRoot = createBuildFixture(".next-cli-build");
     const previousMode = process.env.NEXT_TRACING_ROOT_MODE;
