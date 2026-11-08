@@ -1,5 +1,10 @@
 # v0.1.0 (2026-11-05)
 
+- **Native V2Ray / VLESS / Trojan Link Ingestion in Proxy Pools**:
+  - Implemented `parseV2RayLink` in `src/lib/v2ray/parser.js` supporting `vmess://`, `vless://`, `trojan://`, and `ss://` with automatic TLS, WebSocket, Reality, and gRPC profile mapping.
+  - Added Xray lifecycle manager (`src/lib/v2ray/manager.js`) auto-binding local SOCKS5 (`10855`) and HTTP (`10856`) proxy ports and registering directly into `proxyPools`.
+  - Added UI modal in `/dashboard/proxy-pools` for 1-click V2Ray tunnel connection and proxy pool assignment.
+
 - **Fix Keyless Models Internal Ping Authorization**:
   - Suppressed Bearer injection on internal health test probes for keyless models (`ovh/*`, `koma/*`, `opensatan/*`) in `ping.js`.
   - Added team API key authentication support in `validateApiKey` (`apiKeysRepo.js`).

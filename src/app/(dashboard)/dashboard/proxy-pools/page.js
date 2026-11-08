@@ -85,6 +85,11 @@ export default function ProxyPoolsPage() {
   const [showCloudflareModal, setShowCloudflareModal] = useState(false);
   const [showDenoModal, setShowDenoModal] = useState(false);
   const [showNetlifyModal, setShowNetlifyModal] = useState(false);
+  const [showV2RayModal, setShowV2RayModal] = useState(false);
+  const [v2rayLink, setV2rayLink] = useState("");
+  const [v2rayName, setV2rayName] = useState("");
+  const [v2rayStatus, setV2rayStatus] = useState(null);
+  const [v2rayBusy, setV2rayBusy] = useState(false);
   const [showRelayMenu, setShowRelayMenu] = useState(false);
   const [editingProxyPool, setEditingProxyPool] = useState(null);
   const [formData, setFormData] = useState(normalizeFormData());
@@ -840,6 +845,59 @@ export default function ProxyPoolsPage() {
     }
   };
 
+  const fetchV2RayStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/proxy-pools/v2ray", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setV2rayStatus(data);
+      }
+    } catch {}
+  }, []);
+
+  const handleStartV2Ray = async () => {
+    if (!v2rayLink.trim()) return;
+    setV2rayBusy(true);
+    try {
+      const res = await fetch("/api/proxy-pools/v2ray", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ link: v2rayLink.trim(), name: v2rayName.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        notify.success("V2Ray tunnel started and added to Proxy Pools!");
+        setShowV2RayModal(false);
+        setV2rayLink("");
+        setV2rayName("");
+        await fetchV2RayStatus();
+        await fetchProxyPools();
+      } else {
+        notify.error(data.error || "Failed to start V2Ray");
+      }
+    } catch (e) {
+      notify.error(e.message || "Failed to start V2Ray");
+    } finally {
+      setV2rayBusy(false);
+    }
+  };
+
+  const handleStopV2Ray = async () => {
+    setV2rayBusy(true);
+    try {
+      const res = await fetch("/api/proxy-pools/v2ray", { method: "DELETE" });
+      if (res.ok) {
+        notify.success("V2Ray tunnel stopped");
+        await fetchV2RayStatus();
+        await fetchProxyPools();
+      }
+    } catch (e) {
+      notify.error(e.message || "Failed to stop V2Ray");
+    } finally {
+      setV2rayBusy(false);
+    }
+  };
+
   const activeCount = useMemo(
     () => proxyPools.filter((pool) => pool.isActive === true).length,
     [proxyPools]
@@ -931,6 +989,18 @@ export default function ProxyPoolsPage() {
             title="Prune dead or failed proxies that are not in use"
           >
             {pruningDead ? "Cleaning..." : "Clean Dead"}
+          </Button>
+
+          <Button
+            size="sm"
+            variant="secondary"
+            icon="vpn_key"
+            onClick={() => {
+              fetchV2RayStatus();
+              setShowV2RayModal(true);
+            }}
+          >
+            V2Ray / VLESS
           </Button>
 
           <Button size="sm" variant="secondary" icon="upload" onClick={openBatchImportModal}>
@@ -1267,6 +1337,61 @@ export default function ProxyPoolsPage() {
             }
           />
         )}
+      </Modal>
+
+      {/* V2Ray / VLESS Ingestion Modal */}
+      <Modal
+        isOpen={showV2RayModal}
+        title="V2Ray / VLESS / Trojan Proxy Tunnel"
+        onClose={() => setShowV2RayModal(false)}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="rounded-lg bg-surface-2 p-3 border border-border text-xs text-text-muted">
+            Paste your <code className="text-primary font-mono font-medium">vmess://</code>, <code className="text-primary font-mono font-medium">vless://</code>, <code className="text-primary font-mono font-medium">trojan://</code>, or <code className="text-primary font-mono font-medium">ss://</code> link. XRouter will auto-route through this tunnel via an internal proxy.
+          </div>
+
+          {v2rayStatus?.running && (
+            <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-emerald-500 block">Tunnel Active</span>
+                <span className="text-[11px] font-mono text-text-muted">
+                  {v2rayStatus.currentMetadata?.name || "Active Node"} ({v2rayStatus.currentMetadata?.protocol?.toUpperCase()}) · Port {v2rayStatus.httpPort}
+                </span>
+              </div>
+              <Button size="sm" variant="danger" loading={v2rayBusy} onClick={handleStopV2Ray}>
+                Stop
+              </Button>
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs font-medium text-text-main mb-1 block">V2Ray / VLESS Link</label>
+            <textarea
+              value={v2rayLink}
+              onChange={(e) => setV2rayLink(e.target.value)}
+              placeholder="vmess://... or vless://... or trojan://..."
+              className="w-full min-h-[100px] py-2 px-3 text-xs font-mono text-text-main bg-surface dark:bg-surface-2 border border-border rounded-md focus:ring-1 focus:ring-primary/30 focus:border-primary/50 focus:outline-none transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-text-main mb-1 block">Custom Label (Optional)</label>
+            <Input
+              value={v2rayName}
+              onChange={(e) => setV2rayName(e.target.value)}
+              placeholder="e.g. Singapore SG-1, Residential US"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-border">
+            <Button variant="ghost" onClick={() => setShowV2RayModal(false)} disabled={v2rayBusy}>
+              Cancel
+            </Button>
+            <Button loading={v2rayBusy} onClick={handleStartV2Ray} disabled={!v2rayLink.trim()}>
+              Connect & Add Proxy
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <Modal
