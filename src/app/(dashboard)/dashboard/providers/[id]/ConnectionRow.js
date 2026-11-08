@@ -211,7 +211,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
           )}
           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
             <Badge variant={getStatusVariant()} size="sm" dot>
-              {connection.isActive === false ? "disabled" : (effectiveStatus || "Unknown")}
+              {connection.health?.label || (connection.isActive === false ? "disabled" : (effectiveStatus || "Unknown"))}
             </Badge>
             <Badge variant="default" size="sm">
               {authLabel}

@@ -42,8 +42,9 @@ export function useNavigation() {
   const filtered = filterNavigation({ isApiKeyUser, permissions, enableTranslator });
 
   const isActive = (href) => {
+    if (href === '/dashboard') return pathname === '/dashboard';
     if (href === "/dashboard/endpoint") {
-      return pathname === "/dashboard" || pathname.startsWith("/dashboard/endpoint");
+      return pathname.startsWith("/dashboard/endpoint");
     }
     return pathname.startsWith(href);
   };

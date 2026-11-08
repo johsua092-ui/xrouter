@@ -22,6 +22,11 @@ function conn(overrides = {}) {
 }
 
 describe("selectConnectionsNeedingRefresh", () => {
+  it('does not retry paused, revoked or cooling-down grants', async () => {
+    const { selectConnectionsNeedingRefresh } = await import('../../src/sse/services/backgroundTokenRefresh.js');
+    const entries = [conn({ isActive: false }), conn({ credentialHealth: { state: 'reauth_required' } }), conn({ credentialHealth: { retryAfter: new Date(NOW + 60_000).toISOString() } })];
+    expect(selectConnectionsNeedingRefresh(entries, NOW)).toEqual([]);
+  });
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);

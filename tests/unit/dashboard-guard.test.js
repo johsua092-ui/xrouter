@@ -31,11 +31,23 @@ vi.mock("@/shared/utils/machineId", () => ({
 
 vi.mock("@/lib/auth/dashboardSession", () => ({
   verifyDashboardAuthToken: mocks.verifyDashboardAuthToken,
+  getDashboardAuthSession: async () => null,
 }));
 
 const { proxy, __test__ } = await import("../../src/dashboardGuard.js");
 
 const PEER_TOKEN = "peer-token-fixture";
+
+it('keeps the local dashboard port when redirecting an unauthenticated browser', async () => {
+  mocks.getSettings.mockResolvedValue({ requireLogin: true });
+  mocks.verifyDashboardAuthToken.mockResolvedValue(false);
+  mocks.getConsistentMachineId.mockResolvedValue('cli-fixture');
+  const req = request('/dashboard', { host: '127.0.0.1:20128' });
+  req.url = 'http://127.0.0.1:20128/dashboard';
+  const response = await proxy(req);
+  expect(new URL(response.url).origin).toBe('http://127.0.0.1:20128');
+  expect(new URL(response.url).pathname).toBe('/login');
+});
 
 function request(pathname, headers = {}) {
   const normalizedHeaders = new Headers(headers);

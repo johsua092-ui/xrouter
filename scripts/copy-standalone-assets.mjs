@@ -2,7 +2,27 @@ import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = process.env.NEXT_DIST_DIR || ".next" } = {}) {
+/* distDir resolution order: explicit arg → NEXT_DIST_DIR env → NEXT_DIST_DIR
+   parsed from the project's .env (npm scripts do not load .env, so the
+   postbuild hook would otherwise miss a dist dir pinned there) → ".next". */
+function resolveDistDir({ projectRoot, distDir } = {}) {
+  if (distDir) return distDir;
+  if (process.env.NEXT_DIST_DIR) return process.env.NEXT_DIST_DIR;
+  try {
+    for (const line of readFileSync(resolve(projectRoot, ".env"), "utf8").split(/\r?\n/)) {
+      const match = line.match(/^\s*NEXT_DIST_DIR\s*=\s*(.+?)\s*$/);
+      if (match) {
+        const value = match[1].replace(/^["']|["']$/g, "");
+        if (value) return value;
+      }
+    }
+  } catch {}
+  return ".next";
+}
+
+export function copyStandaloneAssets(options = {}) {
+  const projectRoot = options.projectRoot || process.cwd();
+  const distDir = resolveDistDir({ projectRoot, distDir: options.distDir });
   if (process.env.NEXT_TRACING_ROOT_MODE === "workspace") {
     console.log("[standalone-assets] Skipping workspace-traced CLI build; CLI packaging handles assets");
     return;
@@ -14,6 +34,14 @@ export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = pr
   if (!existsSync(standaloneDir)) {
     console.log(`[standalone-assets] No standalone build found at ${standaloneDir}`);
     return;
+  }
+
+  // Next 16 loads additional server modules dynamically (including the console
+  // file logger); NFT tracing can omit them on Windows. Ship the package's
+  // server runtime rather than producing a build that cannot start.
+  const nextPackage = resolve(projectRoot, 'node_modules', 'next');
+  if (existsSync(nextPackage)) {
+    cpSync(nextPackage, resolve(standaloneDir, 'node_modules', 'next'), { recursive: true, force: true });
   }
 
   const staticSource = resolve(buildDir, "static");

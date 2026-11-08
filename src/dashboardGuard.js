@@ -52,6 +52,7 @@ const PUBLIC_WEB_PAGES = ["/claim", "/market"];
 
 // Always require JWT token regardless of requireLogin setting
 const ALWAYS_PROTECTED = [
+  '/api/maintenance',
   "/api/shutdown",
   "/api/settings/database",
   "/api/version/shutdown",
@@ -88,7 +89,8 @@ function redirectWithProto(targetPath, request) {
     const [h, p] = host.split(":");
     url.hostname = h;
     // Don't leak internal node ports (8080, 20128) onto public domains
-    if (p && !["8080", "20128", "80", "443"].includes(p)) {
+    const localHost = ["127.0.0.1", "localhost", "[::1]"].includes(h);
+    if (p && (localHost || !["8080", "20128", "80", "443"].includes(p))) {
       url.port = p;
     } else {
       url.port = "";

@@ -382,6 +382,9 @@ export async function handleForcedSSEToJson({ providerResponse, sourceFormat, ta
   if (isCodexResponsesApi) {
     try {
       const jsonResponse = await convertResponsesStreamToJson(providerResponse.body);
+      if (jsonResponse.status === 'failed' || jsonResponse.status === 'in_progress') {
+        return createErrorResult(HTTP_STATUS.BAD_GATEWAY, jsonResponse.error?.message || 'Upstream Responses stream did not complete');
+      }
       if (onRequestSuccess) await onRequestSuccess();
 
       const usage = jsonResponse.usage || {};

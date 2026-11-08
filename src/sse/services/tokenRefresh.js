@@ -248,6 +248,14 @@ export async function checkAndRefreshToken(provider, credentials, options = {}) 
     });
 
     const newCreds = await _refreshProviderCredentials(provider, creds, log);
+    if (newCreds?.error === 'invalid_grant' || newCreds?.error === 'invalid_request') {
+      const credentialHealth = { state: 'reauth_required', checkedAt: new Date().toISOString(), reason: 'refresh_token_rejected' };
+      await updateProviderConnection(creds.connectionId, { isActive: false, testStatus: 'error', credentialHealth, lastError: 'Refresh token rejected; reconnect this account.', lastErrorAt: credentialHealth.checkedAt });
+      return { ...creds, credentialHealth };
+    }
+    if (!newCreds?.accessToken && !newCreds?.apiKey && !newCreds?.copilotToken) {
+      await updateProviderConnection(creds.connectionId, { credentialHealth: { state: 'refresh_deferred', checkedAt: new Date().toISOString(), retryAfter: new Date(Date.now() + 15 * 60 * 1000).toISOString() } });
+    }
     if (newCreds?.accessToken || newCreds?.apiKey || newCreds?.copilotToken) {
       const mergedCreds = {
         ...newCreds,

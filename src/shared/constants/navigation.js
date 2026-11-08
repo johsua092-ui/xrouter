@@ -15,6 +15,7 @@ export const COMBINED_WEB_ITEM = {
 };
 
 export const NAV_ITEMS = [
+  { href: '/dashboard', label: 'ศูนย์ควบคุม', icon: 'space_dashboard' },
   { href: "/dashboard/endpoint", label: "Endpoint", icon: "api" },
   { href: "/dashboard/providers", label: "Providers", icon: "dns" },
   { href: "/dashboard/combos", label: "Combos", icon: "layers" },

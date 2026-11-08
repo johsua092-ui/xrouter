@@ -9,6 +9,9 @@ import {
 import { APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { AI_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { normalizeProviderId, normalizeProviderSpecificData } from "@/lib/providerNormalization";
+import { redactCredentials } from '@/lib/security/credentialVault';
+import { connectionHealth } from '@/lib/security/connectionHealth';
+import { getAdapter } from '@/lib/db/driver';
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +53,8 @@ async function normalizeProxyPoolId(proxyPoolId) {
 export async function GET() {
   try {
     const connections = await getProviderConnections();
+    const db = await getAdapter();
+    const successful = new Set(db.all("SELECT DISTINCT connectionId FROM usageHistory WHERE status IN ('ok','200','200 OK')").map(r => r.connectionId));
 
     // Build nodeNameMap for compatible providers (id → name)
     let nodeNameMap = {};
@@ -67,8 +72,9 @@ export async function GET() {
         ? (c.name || nodeNameMap[c.provider] || c.providerSpecificData?.nodeName || c.provider)
         : c.name;
       return {
-        ...c,
+        ...redactCredentials(c),
         name,
+        health: connectionHealth(c, successful.has(c.id)),
         apiKey: undefined,
         accessToken: undefined,
         refreshToken: undefined,
@@ -192,7 +198,7 @@ export async function POST(request) {
     });
 
     // Hide sensitive fields
-    const result = { ...newConnection };
+    const result = redactCredentials(newConnection);
     delete result.apiKey;
 
     return NextResponse.json({ connection: result }, { status: 201 });

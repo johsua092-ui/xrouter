@@ -20,18 +20,25 @@ beforeEach(async () => {
   process.env.DATA_DIR = tempDir;
   vi.resetModules();
   const db = await import("@/lib/db/index.js");
+  const { closeDb } = await import("@/lib/db/driver.js");
+  ctx = { db, closeDb, tempDir };
   const editor = await import("@/lib/db/repos/modelEditorRepo.js");
   const node = await db.createProviderNode({
     name: "Oss Node", type: "openai-compatible", prefix: "ossnode", apiType: "chat", baseUrl: "https://upstream.test/v1",
   });
   await db.createCombo({ name: "plain-mix", models: ["ossnode/gpt-oss-120b"] });
-  ctx = { db, editor, nodeId: node.id, tempDir };
+  Object.assign(ctx, { editor, nodeId: node.id });
 }, 60_000);
 
-afterEach(() => {
-  fs.rmSync(ctx.tempDir, { recursive: true, force: true });
-  if (originalDataDir === undefined) delete process.env.DATA_DIR;
-  else process.env.DATA_DIR = originalDataDir;
+afterEach(async () => {
+  try {
+    await ctx?.closeDb();
+    if (ctx) fs.rmSync(ctx.tempDir, { recursive: true, force: true });
+  } finally {
+    ctx = undefined;
+    if (originalDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = originalDataDir;
+  }
 });
 
 async function addStudio(callName, targetModel) {

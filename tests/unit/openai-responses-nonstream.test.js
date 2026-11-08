@@ -86,6 +86,13 @@ describe("non-stream Chat upstream for a Responses-API client (op-ericding bug)"
 });
 
 describe("forced-SSE JSON path for a Responses-API client behind a chat upstream", () => {
+  it('returns an upstream failure instead of a successful empty completion', async () => {
+    const payload = { type: 'response.failed', response: { id: 'resp_failed', status: 'failed', error: { code: 'server_error', message: 'Temporarily unavailable' } } };
+    const wire = `event: response.failed\ndata: ${JSON.stringify(payload)}\n\n`;
+    const result = await handleForcedSSEToJson({ providerResponse: new Response(wire, { headers: { 'content-type': 'text/event-stream' } }), sourceFormat: FORMATS.OPENAI, targetFormat: FORMATS.OPENAI_RESPONSES, provider: 'grok-cli', model: 'grok-4.7', body: { messages: [] }, stream: false, requestStartTime: Date.now(), trackDone() {}, appendLog() {} });
+    expect(result.success).toBe(false);
+    expect(result.status).toBeGreaterThanOrEqual(500);
+  });
   const sseCtx = (sourceFormat, targetFormat) => {
     const encoder = new TextEncoder();
     const raw = [

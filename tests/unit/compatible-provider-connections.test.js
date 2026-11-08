@@ -7,6 +7,8 @@ const originalDataDir = process.env.DATA_DIR;
 
 async function setupTestContext(nodeData) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "xrouter-compatible-provider-"));
+  const { closeDb } = await import('../../src/lib/db/driver.js');
+  await closeDb();
   process.env.DATA_DIR = tempDir;
   vi.resetModules();
   vi.doMock("next/server", () => ({
@@ -32,7 +34,9 @@ async function setupTestContext(nodeData) {
     node,
     POST,
     getProviderConnections,
-    cleanup() {
+    async cleanup() {
+      const { closeDb } = await import('../../src/lib/db/driver.js');
+      await closeDb();
       fs.rmSync(tempDir, { recursive: true, force: true });
     },
   };
@@ -73,11 +77,11 @@ describe("compatible provider connections API", () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await cleanup();
     vi.doUnmock("next/server");
     vi.resetModules();
     vi.clearAllMocks();
-    cleanup();
     cleanup = () => {};
     if (originalDataDir === undefined) delete process.env.DATA_DIR;
     else process.env.DATA_DIR = originalDataDir;

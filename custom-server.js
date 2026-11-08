@@ -478,12 +478,13 @@ try {
 if (require.main === module) {
   // If .next/standalone/server.js exists, prefer it directly so Next.js standalone output works properly
   const standaloneDirect = path.join(__dirname, "server.js");
-  const standaloneDist = path.join(__dirname, ".next", "standalone", "server.js");
+  const buildDirectory = process.env.NEXT_DIST_DIR || ".next";
+  const standaloneDist = path.join(__dirname, buildDirectory, "standalone", "server.js");
   if (fs.existsSync(standaloneDirect)) {
     require(standaloneDirect);
   } else if (fs.existsSync(standaloneDist)) {
     // Set cwd to standalone dir so Next standalone server finds its static & data
-    process.chdir(path.join(__dirname, ".next", "standalone"));
+    process.chdir(path.join(__dirname, buildDirectory, "standalone"));
     require(standaloneDist);
   } else {
     // Repo checkout has no standalone build next to us. `next start` builds its HTTP

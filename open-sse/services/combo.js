@@ -7,6 +7,7 @@ import { parseModel } from "./model.js";
 import { unavailableResponse } from "../utils/error.js";
 import { getCapabilitiesForModel } from "../providers/capabilities.js";
 import { extractTextContent } from "../translator/formats/gemini.js";
+import { HTTP_STATUS } from '../config/runtimeConfig.js';
 
 // Hard capabilities = input modalities; missing one drops request data (e.g. image
 // stripped). Must be prioritized. Soft (e.g. search) only degrades a feature.
@@ -392,6 +393,7 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
         deepCopyBody(body),
         modelStr
       );
+      if (result.status === HTTP_STATUS.CLIENT_CLOSED_REQUEST) return result;
       
       // Success (2xx) - return response unless empty/zero-content on a non-final seat
       if (result.ok) {

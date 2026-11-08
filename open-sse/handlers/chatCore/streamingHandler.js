@@ -7,12 +7,16 @@ import { HTTP_STATUS, STREAM_STALL_TIMEOUT_MS } from "../../config/runtimeConfig
 import { EMPTY_STREAM_ERROR } from "../../config/errorConfig.js";
 import { buildAbortedResponsesTerminalBytes } from "../../utils/responsesStreamHelpers.js";
 import { buildStreamErrorBytes, formatSSE } from "../../utils/streamHelpers.js";
-import { buildRequestDetail, extractRequestConfig, saveUsageStats, formatDoneLine } from "./requestDetail.js";
+import { buildRequestDetail, extractRequestConfig, saveUsageStats, saveFailedUsage, formatDoneLine } from "./requestDetail.js";
 import { saveToSemanticCache } from "../../rtk/semanticCache.js";
 import { saveRequestDetail } from "@/lib/usageDb.js";
 import { SSE_HEADERS_CORS as SSE_HEADERS } from "../../utils/sseConstants.js";
 import { calledModelName } from "../../utils/modelAlias.js";
 import { upstreamResponseHeaders } from "../../utils/upstreamHeaders.js";
+import { createErrorResult } from '../../utils/error.js';
+import { preflightChatStream } from '../../utils/streamPreflight.js';
+import { createDsmlChatStream } from '../../utils/dsmlChatStream.js';
+import { SSE_CONTENT_TYPE_EVENT_STREAM } from '../../utils/sseConstants.js';
 
 // Codex returns Responses API SSE → which client format to translate INTO, by request sourceFormat.
 // Gemini-family all map to ANTIGRAVITY decoder; unknown sources fall back to OPENAI.
@@ -63,15 +67,7 @@ function buildEmptyStreamTerminal(sourceFormat) {
 /**
  * Handle streaming response — pipe provider SSE through transform stream to client.
  */
-export async function handleStreamingResponse({ providerResponse, provider, model, sourceFormat, targetFormat, userAgent, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, pxpipe, reqTag, log, credentials, requestedModel }) {
-  if (onRequestSuccess) {
-    Promise.resolve()
-      .then(onRequestSuccess)
-      .catch(err => {
-        console.error("[ChatCore] onRequestSuccess failed:", err?.message || err);
-      });
-  }
-
+export async function handleStreamingResponse({ providerResponse, provider, model, sourceFormat, targetFormat, userAgent, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, reqLogger, toolNameMap, customToolNames, streamController, onStreamComplete, streamDetailId, pxpipe, reqTag, log, credentials, requestedModel, requestSignal, trackDone, appendLog }) {
   // When upstream returns HTML/text instead of SSE (e.g. Cloudflare 5xx error
   // page), piping it through the SSE transform stream causes Next.js
   // "failed to pipe response" and crashes the chat router. Read the body,
@@ -99,9 +95,29 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
     };
   }
 
+  if (sourceFormat === FORMATS.OPENAI && [FORMATS.OPENAI, FORMATS.OPENAI_RESPONSES].includes(targetFormat) && upstreamContentType.includes(SSE_CONTENT_TYPE_EVENT_STREAM)) {
+    const probe = await preflightChatStream(providerResponse.body, { signal: requestSignal });
+    if (probe.error) {
+      const { status, message } = probe.error;
+      appendLog?.({ status: `FAILED ${status}` });
+      if (streamController?.handleDisconnect) streamController.handleDisconnect('stream_preflight_failed');
+      else trackDone?.();
+      if (status !== HTTP_STATUS.CLIENT_CLOSED_REQUEST) saveFailedUsage({ provider, model, requestedModel, connectionId, apiKey, endpoint: clientRawRequest?.endpoint, statusCode: status });
+      log?.warn?.('STREAM', `${provider}/${model} stopped before output (HTTP ${status})`);
+      return createErrorResult(status, message, null, upstreamResponseHeaders(providerResponse.headers));
+    }
+    providerResponse = new Response(probe.body, { status: providerResponse.status, headers: providerResponse.headers });
+  }
+
+  if (onRequestSuccess) Promise.resolve().then(onRequestSuccess).catch(err => {
+    console.error('[ChatCore] onRequestSuccess failed:', err?.message || err);
+  });
+
   // The name the client called is the only one it is allowed to see.
   const aliasModel = calledModelName(requestedModel, model);
-  const transformStream = buildTransformStream({ provider, sourceFormat, targetFormat, userAgent, reqLogger, toolNameMap, customToolNames, model, connectionId, body, onStreamComplete, apiKey, credentials, aliasModel });
+  const normalTransform = buildTransformStream({ provider, sourceFormat, targetFormat, userAgent, reqLogger, toolNameMap, customToolNames, model, connectionId, body, onStreamComplete, apiKey, credentials, aliasModel });
+  const repair = sourceFormat === FORMATS.OPENAI && targetFormat === FORMATS.OPENAI && provider?.startsWith('openai-compatible-') ? createDsmlChatStream(body) : null;
+  const transformStream = repair ? { writable: repair.writable, readable: repair.readable.pipeThrough(normalTransform) } : normalTransform;
 
   // Terminal bytes when the stream aborts after HTTP 200 was already sent, so the
   // client sees a real error instead of a silently truncated stream.

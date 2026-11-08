@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from "vitest";
 import { copyStandaloneAssets } from "../../scripts/copy-standalone-assets.mjs";
 
@@ -17,6 +18,22 @@ function createBuildFixture(distDir) {
 }
 
 describe("standalone build assets", () => {
+  it('can run postbuild twice without corrupting the generated server', () => {
+    const projectRoot = createBuildFixture('.next');
+    const server = join(projectRoot, '.next/standalone/server.js');
+    writeFileSync(server, "const path = require('path');\n");
+    copyStandaloneAssets({ projectRoot, distDir: '.next' });
+    copyStandaloneAssets({ projectRoot, distDir: '.next' });
+    expect(() => execFileSync(process.execPath, ['--check', server], { stdio: 'pipe' })).not.toThrow();
+  });
+  it('includes Next server runtime modules that tracing omits', () => {
+    const projectRoot = createBuildFixture('.next');
+    const source = join(projectRoot, 'node_modules/next/dist/server/dev/browser-logs');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, 'file-logger.js'), 'module.exports = { ready: true };');
+    copyStandaloneAssets({ projectRoot, distDir: '.next' });
+    expect(readFileSync(join(projectRoot, '.next/standalone/node_modules/next/dist/server/dev/browser-logs/file-logger.js'), 'utf8')).toContain('ready: true');
+  });
   it("copies static and public assets into the default standalone layout", () => {
     const projectRoot = createBuildFixture(".next");
 
@@ -46,6 +63,23 @@ describe("standalone build assets", () => {
 
     expect(readFileSync(join(projectRoot, ".next", "standalone", "custom-server.js"), "utf8"))
       .toBe("wrapper");
+  });
+
+  it("reads NEXT_DIST_DIR from .env when the environment does not set it", () => {
+    const projectRoot = createBuildFixture(".next-env-test");
+    writeFileSync(join(projectRoot, ".env"), "PORT=20128\nNEXT_DIST_DIR=.next-env-test\n");
+    const previous = process.env.NEXT_DIST_DIR;
+    delete process.env.NEXT_DIST_DIR;
+
+    try {
+      copyStandaloneAssets({ projectRoot });
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_DIST_DIR;
+      else process.env.NEXT_DIST_DIR = previous;
+    }
+
+    expect(readFileSync(join(projectRoot, ".next-env-test", "standalone", ".next-env-test", "static", "chunks", "app.js"), "utf8"))
+      .toBe("static asset");
   });
 
   it("does not modify workspace-traced CLI builds", () => {

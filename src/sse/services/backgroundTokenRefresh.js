@@ -51,6 +51,8 @@ export function selectConnectionsNeedingRefresh(connections, nowMs = Date.now())
   const out = [];
   for (const conn of connections) {
     if (!conn) continue;
+    if (conn.isActive === false || conn.credentialHealth?.state === 'reauth_required') continue;
+    if (Date.parse(conn.credentialHealth?.retryAfter) > nowMs) continue;
 
     const authType = String(conn.authType || "").toLowerCase().replace(/_/g, "");
     if (authType !== "oauth") continue;
@@ -96,7 +98,7 @@ export async function runBackgroundTokenRefreshTick(deps = {}) {
     const sleep = deps.sleep || ((ms) => new Promise((res) => setTimeout(res, ms)));
 
     const connections = await load();
-    const due = selectConnectionsNeedingRefresh(connections, Date.now());
+    const due = selectConnectionsNeedingRefresh(connections, Date.now()).slice(0, Math.max(1, Number(process.env.BG_REFRESH_MAX_PER_TICK) || 20));
 
     if (due.length === 0) return;
 
