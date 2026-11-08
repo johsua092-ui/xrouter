@@ -1,5 +1,8 @@
 # v0.1.0 (2026-11-05)
 
+- **Fix Missing getSettings Import in Single Model Route**:
+  - Imported `getSettings`, `isValidApiKey`, and `apiKeyGateFailure` in `src/app/api/v1/models/[...model]/route.js` to fix `ReferenceError: getSettings is not defined` when client fetches `/v1/models/{model}`.
+
 - **Fix Xray Modern Outbound TLS Configuration**:
   - Removed deprecated `allowInsecure` property from Xray TLS outbound configurations in `src/lib/v2ray/parser.js` to ensure compatibility with Xray-core v26+.
 
