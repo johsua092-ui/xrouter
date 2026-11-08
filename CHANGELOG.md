@@ -1,4 +1,7 @@
-# v0.1.0 (2026-11-05)
+# v0.1.0 (2026-11-08)
+
+- **Enhance VMess TLS Profile Parsing (ALPN & Fingerprint)**:
+  - Extracted `fp` and `alpn` parameters from VMess JSON configs in `src/lib/v2ray/parser.js` and forwarded to Xray TLS stream settings for optimal handshake negotiation.
 
 - **Fix Teams Database Schema & Enforce Spend Limit (USD) Governance**:
   - Added self-healing `ensureTeamsSchema` in `teamsRepo.js` to ensure the `apiKey` column exists on the `teams` table, fixing `table teams has no column named apiKey`.

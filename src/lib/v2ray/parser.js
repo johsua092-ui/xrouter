@@ -53,6 +53,8 @@ function parseVmess(link) {
     const tls = data.tls || "none";
     const sni = data.sni || host || server;
     const name = data.ps || `vmess-${server}:${port}`;
+    const fp = data.fp || "chrome";
+    const alpn = data.alpn ? String(data.alpn).split(",").map((s) => s.trim()).filter(Boolean) : undefined;
 
     const outbound = {
       tag: "proxy",
@@ -81,6 +83,8 @@ function parseVmess(link) {
     if (tls === "tls") {
       outbound.streamSettings.tlsSettings = {
         serverName: sni,
+        fingerprint: fp,
+        ...(alpn && alpn.length ? { alpn } : {}),
       };
     }
 
