@@ -1,5 +1,9 @@
 # v0.1.0 (2026-11-08)
 
+- **Helicone-Grade Observability Enhancement in Request Logs**:
+  - Enhanced request logging in `usageRepo.js` and `RequestLogger.js` with per-request real-time USD cost metrics and status badges inspired by Helicone observability patterns.
+  - Added auto-rebind support in `testProxyUrl` and `proxy-pools/[id]/test` for `v2ray-builtin-tunnel` so Xray child processes automatically respawn if offline.
+
 - **Enhance VMess TLS Profile Parsing (ALPN & Fingerprint)**:
   - Extracted `fp` and `alpn` parameters from VMess JSON configs in `src/lib/v2ray/parser.js` and forwarded to Xray TLS stream settings for optimal handshake negotiation.
 

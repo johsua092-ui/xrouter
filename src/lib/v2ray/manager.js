@@ -50,6 +50,34 @@ export function getV2RayStatus() {
   };
 }
 
+export async function ensureV2RayRunning() {
+  const v2rayDir = ensureV2RayDir();
+  const configFile = path.join(v2rayDir, "config.json");
+  if (!fs.existsSync(configFile)) return false;
+
+  if (xrayChild && !xrayChild.killed && xrayChild.exitCode === null) {
+    return true;
+  }
+
+  try {
+    const bin = getXrayBinaryPath();
+    const child = spawn(bin, ["run", "-c", configFile], {
+      detached: false,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    child.on("exit", () => {
+      if (xrayChild === child) xrayChild = null;
+    });
+
+    xrayChild = child;
+    await new Promise((r) => setTimeout(r, 600));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 export async function stopV2Ray() {
   if (xrayChild) {
     try {

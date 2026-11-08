@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getProxyPoolById, updateProxyPool } from "@/models";
 import { testProxyUrl } from "@/lib/network/proxyTest";
 import { fetch as undiciFetch } from "undici";
+import { ensureV2RayRunning } from "@/lib/v2ray/manager.js";
 
 async function testVercelRelay(relayUrl, timeoutMs = 10000) {
   const controller = new AbortController();
@@ -41,6 +42,10 @@ export async function POST(request, { params }) {
 
     if (!proxyPool) {
       return NextResponse.json({ error: "Proxy pool not found" }, { status: 404 });
+    }
+
+    if (id === "v2ray-builtin-tunnel" || proxyPool.proxyUrl?.includes("10856") || proxyPool.proxyUrl?.includes("10855")) {
+      await ensureV2RayRunning();
     }
 
     const result = proxyPool.type === "vercel" || proxyPool.type === "cloudflare" || proxyPool.type === "deno" || proxyPool.type === "netlify"

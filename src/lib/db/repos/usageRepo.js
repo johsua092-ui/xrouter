@@ -1154,11 +1154,11 @@ export async function getRecentLogs(limit = 200, filterApiKey = null) {
     // same scoping getUsageStats already applies via filterApiKey.
     const rows = filterApiKey
       ? db.all(
-          `SELECT timestamp, provider, model, connectionId, promptTokens, completionTokens, status, tokens FROM usageHistory WHERE apiKey = ? ORDER BY id DESC LIMIT ?`,
+          `SELECT timestamp, provider, model, connectionId, promptTokens, completionTokens, cost, status, tokens FROM usageHistory WHERE apiKey = ? ORDER BY id DESC LIMIT ?`,
           [filterApiKey, limit],
         )
       : db.all(
-          `SELECT timestamp, provider, model, connectionId, promptTokens, completionTokens, status, tokens FROM usageHistory ORDER BY id DESC LIMIT ?`,
+          `SELECT timestamp, provider, model, connectionId, promptTokens, completionTokens, cost, status, tokens FROM usageHistory ORDER BY id DESC LIMIT ?`,
           [limit],
         );
     if (!rows.length) return [];
@@ -1178,7 +1178,8 @@ export async function getRecentLogs(limit = 200, filterApiKey = null) {
       const tk = r.tokens ? parseJson(r.tokens, {}) : {};
       const sent = r.promptTokens ?? tk.prompt_tokens ?? "-";
       const received = r.completionTokens ?? tk.completion_tokens ?? "-";
-      return `${ts} | ${m} | ${p} | ${account} | ${sent} | ${received} | ${r.status || "-"}`;
+      const costFormatted = Number(r.cost) > 0 ? `$${Number(r.cost).toFixed(4)}` : "$0.00";
+      return `${ts} | ${m} | ${p} | ${account} | ${sent} | ${received} | ${r.status || "-"} | ${costFormatted}`;
     });
   } catch (e) {
     console.error("[usageRepo] getRecentLogs failed:", e.message);
