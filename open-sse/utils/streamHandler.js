@@ -222,12 +222,27 @@ export function pipeWithDisconnect(providerResponse, transformStream, streamCont
       armStall();
       controller.enqueue(chunk);
     },
-    flush() { dbg(tag, `upstream EOF | chunks=${chunkCount} | bytes=${totalBytes} | dur=${Date.now() - t0}ms`); clearStall(); }
+    flush() {
+      dbg(tag, `upstream EOF | chunks=${chunkCount} | bytes=${totalBytes} | dur=${Date.now() - t0}ms`);
+      clearStall();
+    }
+  });
+
+  // Tap transform output as well so downstream backpressure doesn't trigger false stalls
+  const downstreamTap = new TransformStream({
+    transform(chunk, controller) {
+      armStall();
+      controller.enqueue(chunk);
+    },
+    flush() {
+      clearStall();
+    }
   });
 
   const transformedBody = providerResponse.body
     .pipeThrough(upstreamTap)
     .pipeThrough(transformStream)
+    .pipeThrough(downstreamTap)
     .pipeThrough(createEmptyStreamGuard({ tag, emptyStreamTerminal, stats: () => `upstream chunks=${chunkCount} bytes=${totalBytes}` }));
 
   return createDisconnectAwareStream(

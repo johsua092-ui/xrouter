@@ -1,5 +1,9 @@
 # v0.1.0 (2026-11-08)
 
+- **Fix Stream Stall Timeout on Long-Running Reasoning Models (GLM-5.3-Flash)**:
+  - Extended default stall watchdog `STREAM_STALL_TIMEOUT_MS` from 360s to 600s (10 minutes) in `runtimeConfig.js` and set explicit 600s stall threshold for `glm` provider.
+  - Added downstream tap monitoring in `pipeWithDisconnect` (`open-sse/utils/streamHandler.js`) to continuously reset watchdog activity during slow token emission and reasoning phases.
+
 - **Dynamic Cooldown Registry & Intelligent 429 Rate-Limit Quarantine (voidllm pattern)**:
   - Implemented `src/sse/services/cooldownRegistry.js` inspired by VoidLLM (`internal/cooldown/registry.go`).
   - Separates temporary rate limits (`HTTP 429` / `FreeUsageLimitError`) from permanent circuit-breaker failures, preventing premature key deletion.

@@ -42,6 +42,7 @@ export default {
       "anthropic-version": "2023-06-01",
       "User-Agent": "ZCode/3.16.3",
     },
+    stallTimeoutMs: 600 * 1000,
     auth: {
       combined: true,
       header: "x-api-key",
