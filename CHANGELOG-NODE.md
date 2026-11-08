@@ -1,5 +1,10 @@
 # v0.1.0 (2026-11-05)
 
+- **Port OpenCode Zen 4-Pillar Playbook Validations**:
+  - Enforced atomic mathematical sequence clamping `counter = (counter + 1) & 0x0F` on `generateSessionId` to satisfy upstream backend's `0xfff - low < 16` integrity check.
+  - Automatically deleted prohibited `tool_choice: "none"` across all request lanes to prevent upstream `403 FreeTierError`.
+  - Clamped `reasoning_effort` (`xhigh`/`max` -> `high`) in `dropAdaptiveReasoningEffort` to avoid HTTP 400 parameter errors.
+
 - **Native V2Ray / VLESS / Trojan Link Ingestion in Proxy Pools**:
   - Implemented `parseV2RayLink` in `src/lib/v2ray/parser.js` supporting `vmess://`, `vless://`, `trojan://`, and `ss://` with automatic TLS, WebSocket, Reality, and gRPC profile mapping.
   - Added Xray lifecycle manager (`src/lib/v2ray/manager.js`) auto-binding local SOCKS5 (`10855`) and HTTP (`10856`) proxy ports and registering directly into `proxyPools`.

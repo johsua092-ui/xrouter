@@ -83,7 +83,7 @@ export function generateSessionId(timestamp = Date.now()) {
     lastTimestamp = timestamp;
     counter = 0;
   }
-  counter++;
+  counter = (counter + 1) & 0x0F;
   return `ses_${descendingTimeHex(timestamp, counter)}${unstableRandom()}`;
 }
 
@@ -361,7 +361,11 @@ function normalizeOpencodeReasoning(model, body) {
 // the upstream pick its own default, which is what adaptive means; same rationale
 // as the Responses path above, which rejects "unknown variant `auto`".
 function dropAdaptiveReasoningEffort(body) {
-  if (body?.reasoning_effort === "auto") delete body.reasoning_effort;
+  if (!body || typeof body !== "object") return;
+  if (body.reasoning_effort === "auto") delete body.reasoning_effort;
+  if (body.reasoning_effort === "xhigh" || body.reasoning_effort === "max") {
+    body.reasoning_effort = "high";
+  }
 }
 
 function textFromServiceContent(content) {

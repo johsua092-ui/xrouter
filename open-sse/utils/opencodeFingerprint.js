@@ -434,6 +434,11 @@ export function applyFingerprintTools(body, flat, { claude = false } = {}) {
   // The `<env>` marker is required on every free-lane request, with or without tools.
   applyEnvFingerprint(body, flat, { claude });
 
+  // OpenCode Zen rejects tool_choice: "none" with 403 FreeTierError across all lanes.
+  if (body.tool_choice === "none" || (typeof body.tool_choice === "object" && body.tool_choice?.type === "none")) {
+    delete body.tool_choice;
+  }
+
   // Responses keeps its explicit auto default. Never default to "none": upstream
   // answers tool_choice "none" with 403 FreeTierError.
   if (!body.tool_choice && flat) body.tool_choice = "auto";
