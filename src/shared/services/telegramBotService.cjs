@@ -104,7 +104,14 @@ const os = require("node:os");
 const http = require("node:http");
 const https = require("node:https");
 const { exec, execSync } = require("node:child_process");
-const { DatabaseSync } = require("node:sqlite");
+let DatabaseSync;
+try {
+  DatabaseSync = require("node:sqlite").DatabaseSync;
+} catch {
+  try {
+    DatabaseSync = require("better-sqlite3");
+  } catch {}
+}
 const { machineIdSync } = require("node-machine-id");
 
 const ENCRYPT_ALGO = "aes-256-gcm";

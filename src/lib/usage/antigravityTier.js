@@ -11,7 +11,16 @@
  * (loadCodeAssist for the tier, fetchAvailableModels for the catalog), reusing
  * the stored OAuth token from the active Antigravity connection.
  */
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
+const req = createRequire(import.meta.url);
+let DatabaseSync;
+try {
+  DatabaseSync = req("node:sqlite").DatabaseSync;
+} catch {
+  try {
+    DatabaseSync = req("better-sqlite3");
+  } catch {}
+}
 
 const DB_PATH = process.env.DATABASE_PATH || "/root/.xrouter/db/data.sqlite";
 const AG_BASE = "https://daily-cloudcode-pa.googleapis.com/v1internal";
