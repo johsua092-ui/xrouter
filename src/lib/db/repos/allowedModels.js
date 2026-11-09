@@ -11,8 +11,26 @@
  * can never see a model it would be refused at request time.
  */
 export function parseAllowedModels(allowedModels) {
+  if (Array.isArray(allowedModels)) {
+    const list = allowedModels.map((model) => String(model).trim().toLowerCase()).filter(Boolean);
+    if (!list.length || list.includes("*") || list.includes("all")) return null;
+    return list;
+  }
   const raw = String(allowedModels ?? "").trim();
   if (!raw || raw === "*" || raw.toLowerCase() === "all") return null;
+
+  // Support JSON array string from teams table
+  if (raw.startsWith("[") && raw.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const list = parsed.map((model) => String(model).trim().toLowerCase()).filter(Boolean);
+        if (!list.length || list.includes("*") || list.includes("all")) return null;
+        return list;
+      }
+    } catch {}
+  }
+
   const patterns = raw.split(",").map((model) => model.trim().toLowerCase()).filter(Boolean);
   if (patterns.includes("*") || patterns.includes("all")) return null;
   return patterns.length ? patterns : null;

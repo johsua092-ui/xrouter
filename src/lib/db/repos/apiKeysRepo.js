@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
-import { DEFAULT_PERMISSIONS } from "@/lib/auth/permissionPaths";
+import { DEFAULT_PERMISSIONS } from "../../auth/permissionPaths.js";
 // The allowed-model pattern language lives in a dependency-free module of its own:
 // the request gate, the /v1/models listing and the usage dashboards all read it, and
 // the self-check loads it without dragging in the database driver and uuid. Re-exported
@@ -66,8 +66,8 @@ export async function getApiKeyByKey(key) {
   const row = db.get(`SELECT * FROM apiKeys WHERE key = ?`, [key]);
   if (row) return rowToKey(row);
 
-  // Fallback: check if this is an xteam key from teams table
-  if (key && (key.startsWith("xteam-") || key.startsWith("team_"))) {
+  // Fallback: check if this key belongs to a team from teams table (supports custom keys/prefixes)
+  if (key) {
     try {
       const teamRow = db.get(`SELECT * FROM teams WHERE apiKey = ? AND enabled = 1`, [key]);
       if (teamRow) {
@@ -272,7 +272,11 @@ export async function getAllowedModelsOfKey(key) {
  try {
  const db = await getAdapter();
  const row = db.get(`SELECT allowedModels FROM apiKeys WHERE key = ?`, [raw]);
- return row ? parseAllowedModels(row.allowedModels) : null;
+ if (row) return parseAllowedModels(row.allowedModels);
+ // Fallback: check teams table for team API key permitted models
+ const teamRow = db.get(`SELECT allowedModels FROM teams WHERE apiKey = ? AND enabled = 1`, [raw]);
+ if (teamRow) return parseAllowedModels(teamRow.allowedModels);
+ return null;
  } catch {
  return null;
  }
@@ -296,7 +300,7 @@ export async function validateApiKey(key, requestedModel = null, clientIp = null
   db.transaction(() => {
     let row = db.get(`SELECT * FROM apiKeys WHERE key = ?`, [key]);
     let teamRecord = null;
-    if (!row && key && (key.startsWith("xteam-") || key.startsWith("team_"))) {
+    if (!row && key) {
       const teamRow = db.get(`SELECT * FROM teams WHERE apiKey = ?`, [key]);
       if (teamRow) {
         if (teamRow.enabled !== 1 && teamRow.enabled !== true) {
@@ -380,6 +384,37 @@ export async function validateApiKey(key, requestedModel = null, clientIp = null
         const monthSpent = Number(monthRow?.totalCost) || 0;
         if (monthSpent >= monthlySpendCap) {
           result = "QUOTA_EXCEEDED";
+          return;
+        }
+      }
+
+      // Check Team-level Request Volume Limits (Daily & Monthly Request Caps)
+      const dailyReqCap = Number(teamRecord.dailyLimit) || 0;
+      const monthlyReqCap = Number(teamRecord.monthlyLimit) || 0;
+
+      if (dailyReqCap > 0) {
+        const startOfDay = new Date();
+        startOfDay.setUTCHours(0, 0, 0, 0);
+        const dayReqRow = db.get(
+          `SELECT COUNT(*) as reqCount FROM usageHistory WHERE apiKey = ? AND timestamp >= ?`,
+          [key, startOfDay.toISOString()]
+        );
+        if ((Number(dayReqRow?.reqCount) || 0) >= dailyReqCap) {
+          result = "RATE_LIMIT_EXCEEDED";
+          return;
+        }
+      }
+
+      if (monthlyReqCap > 0) {
+        const startOfMonth = new Date();
+        startOfMonth.setUTCDate(1);
+        startOfMonth.setUTCHours(0, 0, 0, 0);
+        const monthReqRow = db.get(
+          `SELECT COUNT(*) as reqCount FROM usageHistory WHERE apiKey = ? AND timestamp >= ?`,
+          [key, startOfMonth.toISOString()]
+        );
+        if ((Number(monthReqRow?.reqCount) || 0) >= monthlyReqCap) {
+          result = "RATE_LIMIT_EXCEEDED";
           return;
         }
       }

@@ -422,16 +422,16 @@ export default function TeamsPage() {
 
             <div>
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Team API Key (Prefix: xteam-*)
+                Team API Key (Custom or xteam-*)
               </label>
               <Input
                 value={formData.apiKey}
                 onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                placeholder="xteam-..."
+                placeholder="e.g. xteam-..., yteam-..., custom-key"
                 className="mt-1.5 font-mono text-xs text-primary"
               />
               <span className="text-[11px] text-muted-foreground mt-1 block">
-                Auto-assigned with high-entropy token. Clients can authenticate with this key directly.
+                Auto-assigned or fully custom. Clients can authenticate with this key directly.
               </span>
             </div>
 
