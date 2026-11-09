@@ -66,6 +66,24 @@ function unstableRandom() {
 // (live probes: counter 0–16 pass, >=100 fail), so the counter must stay real.
 const SESSION_PREFIX_MASK = (1n << 48n) - 1n;
 
+// Burst pacing from opencode-cc: space request starts out by at least 400ms
+// to prevent rapid bursts from immediately triggering Cloudflare 429 rate limiters.
+let opencodeStartGate = Promise.resolve();
+let opencodeLastStartAt = 0;
+const MIN_START_GAP_MS = 400;
+
+function paceOpencodeStart() {
+  const slot = opencodeStartGate.then(async () => {
+    const wait = opencodeLastStartAt + MIN_START_GAP_MS - Date.now();
+    if (wait > 0 && wait <= 1000) {
+      await new Promise((r) => setTimeout(r, wait));
+    }
+    opencodeLastStartAt = Date.now();
+  });
+  opencodeStartGate = slot.catch(() => {});
+  return slot;
+}
+
 function descendingTimeHex(time, counterValue) {
   return (~(BigInt(time) * 0x1000n + BigInt(counterValue)) & SESSION_PREFIX_MASK)
     .toString(16)
@@ -588,15 +606,18 @@ export class OpenCodeExecutor extends BaseExecutor {
       ...args,
       proxyOptions: effectiveProxyOptions,
       credentials: preparedCredentials,
-      directFetch: (url, options, extra = {}) => opencodeTlsFetch(url, {
-        method: options.method,
-        headers: options.headers,
-        body: options.body,
-      }, {
-        signal: options.signal,
-        proxy: extra.proxyUrl || options.proxyUrl || proxyUrl,
-        timeoutMs: args.stream ? 0 : undefined,
-      }),
+      directFetch: async (url, options, extra = {}) => {
+        await paceOpencodeStart();
+        return opencodeTlsFetch(url, {
+          method: options.method,
+          headers: options.headers,
+          body: options.body,
+        }, {
+          signal: options.signal,
+          proxy: extra.proxyUrl || options.proxyUrl || proxyUrl,
+          timeoutMs: args.stream ? 0 : undefined,
+        });
+      },
       directFetchProxy: true,
     });
   }

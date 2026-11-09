@@ -439,6 +439,30 @@ export function applyFingerprintTools(body, flat, { claude = false } = {}) {
     delete body.tool_choice;
   }
 
+  // Normalization from opencode-cc: normalize legacy prompt_cache_retention to prompt_cache_options
+  if (body.prompt_cache_retention !== undefined) {
+    delete body.prompt_cache_retention;
+    if (!body.prompt_cache_options) body.prompt_cache_options = { mode: "implicit" };
+  }
+
+  // Tool surface guard from opencode-cc: free tier Cloudflare WAF rejects tool definitions exceeding 38K chars
+  const MAX_TOOL_CHARS = 38000;
+  if (Array.isArray(body.tools) && JSON.stringify(body.tools).length > MAX_TOOL_CHARS) {
+    const canonicalSet = new Set(["read", "shell", "edit", "glob", "grep"]);
+    const canonical = body.tools.filter((t) => canonicalSet.has(t?.function?.name || t?.name));
+    const extras = body.tools.filter((t) => !canonicalSet.has(t?.function?.name || t?.name));
+    let budget = MAX_TOOL_CHARS - JSON.stringify(canonical).length;
+    const kept = [];
+    for (const ex of extras) {
+      const sz = JSON.stringify(ex).length;
+      if (budget - sz > 0) {
+        kept.push(ex);
+        budget -= sz;
+      }
+    }
+    body.tools = [...canonical, ...kept];
+  }
+
   // Responses keeps its explicit auto default. Never default to "none": upstream
   // answers tool_choice "none" with 403 FreeTierError.
   if (!body.tool_choice && flat) body.tool_choice = "auto";

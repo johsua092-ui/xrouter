@@ -677,7 +677,8 @@ const scopedModelPatterns =
           } else if (event === "done") {
             setTsInstalled(true);
             setTsInstalling(false);
-            setTsStatus({ type: "success", message: "Tailscale successfully installed! Click Connect to start." });
+            setShowTsModal(false);
+            handleConnectTailscale();
             return;
           } else if (event === "error") {
             setTsStatus({ type: "error", message: data.error || "Install failed" });
@@ -2354,14 +2355,7 @@ console.log(res.choices[0].message.content);`;
           {/* Not installed */}
           {tsInstalled === false && !tsInstalling && (
             <div className="flex flex-col gap-3">
-              <p className="text-sm text-text-muted">Install Tailscale to enable Funnel.</p>
-              <Input
-                type="password"
-                label="Sudo Password (Optional if running as root)"
-                value={tsSudoPassword}
-                onChange={(e) => setTsSudoPassword(e.target.value)}
-                placeholder="Enter sudo password if required"
-              />
+              <p className="text-sm text-text-muted">Tailscale is not installed. Install it to enable Funnel.</p>
               <div className="flex gap-2">
                 <Button onClick={handleInstallTailscale} fullWidth>
                   Install Tailscale
@@ -2372,14 +2366,12 @@ console.log(res.choices[0].message.content);`;
           )}
 
           {/* Installing with progress log */}
-          {(tsInstalling || (tsInstallLog.length > 0 && !tsInstalled)) && (
+          {tsInstalling && (
             <div className="flex flex-col gap-2">
-              {tsInstalling && (
-                <div className="flex items-center gap-2 text-sm text-text-muted">
-                  <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
-                  Installing Tailscale...
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-sm text-text-muted">
+                <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+                Installing Tailscale...
+              </div>
               {tsInstallLog.length > 0 && (
                 <div ref={tsLogRef} className="bg-surface-2 rounded p-2 max-h-40 overflow-y-auto font-mono text-xs text-text-muted">
                   {tsInstallLog.map((line, i) => (

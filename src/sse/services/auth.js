@@ -2,7 +2,7 @@ import { getProviderConnections, validateApiKey, updateProviderConnection, getSe
 import { resolveConnectionProxyConfig, pickProxyPoolId, quarantineProxy, isProxyQuarantined } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
-import { resolveProviderId, FREE_PROVIDERS, AI_PROVIDERS } from "@/shared/constants/providers.js";
+import { resolveProviderId, FREE_PROVIDERS, FREE_TIER_PROVIDERS, AI_PROVIDERS } from "@/shared/constants/providers.js";
 import { getAntigravityQuotaCache, getAntigravityModelQuota } from "./antigravityQuota.js";
 import { getAffinityConnectionId, setAffinityConnection, touchAffinity, clearAffinity } from "./conversationAffinity.js";
 import { tripCircuitBreaker, isCircuitBreakerOpen, recordCircuitSuccess } from "./circuitBreaker.js";
@@ -53,7 +53,9 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     const isNoAuth =
       providerId === "opencode" ||
       providerId === "ovh" ||
+      providerId === "kilo-gateway" ||
       Boolean(FREE_PROVIDERS[providerId]?.noAuth) ||
+      Boolean(FREE_TIER_PROVIDERS[providerId]?.noAuth) ||
       Boolean(AI_PROVIDERS[providerId]?.noAuth);
 
     if (isNoAuth) {

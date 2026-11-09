@@ -52,6 +52,8 @@ const DEFAULT_CONFIG = {
   tgChatId: "",
   ghToken: "",
   ghRepo: "", // owner/repo
+  includeUsage: false, // Default false to prevent exceeding Telegram 45MB/50MB limit
+  sections: ["settings", "providers", "apiKeys", "combos", "customModels"],
 };
 
 export async function getAutoBackupConfig() {

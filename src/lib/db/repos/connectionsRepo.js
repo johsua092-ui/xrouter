@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
-import { sealCredential, unsealCredential } from "@/lib/vault/credentialVault.js";
+import { sealCredential, unsealCredential } from "../../vault/credentialVault.js";
 
 const OPTIONAL_FIELDS = [
   "displayName", "email", "globalPriority", "defaultModel",

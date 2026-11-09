@@ -92,7 +92,18 @@ export default function ProfilePage() {
   const [showDownloadBackupModal, setShowDownloadBackupModal] = useState(false);
   const pendingImportRef = useRef(null);
   const [tgModalOpen, setTgModalOpen] = useState(false);
-  const [tgForm, setTgForm] = useState({ enabled: false, channel: "telegram", interval: "24", customHours: "", tgBotToken: "", tgChatId: "", ghToken: "", ghRepo: "" });
+  const [tgForm, setTgForm] = useState({
+    enabled: false,
+    channel: "telegram",
+    interval: "24",
+    customHours: "",
+    tgBotToken: "",
+    tgChatId: "",
+    ghToken: "",
+    ghRepo: "",
+    includeUsage: false,
+    sections: ["settings", "providers", "apiKeys", "combos", "customModels"],
+  });
   const [tgHasTgToken, setTgHasTgToken] = useState(false);
   const [tgHasGhToken, setTgHasGhToken] = useState(false);
   const [tgLoading, setTgLoading] = useState(false);
@@ -841,13 +852,15 @@ export default function ProfilePage() {
   setTgNextRunAt(nextRunAt ?? null);
   const interval = [24, 168, 720].includes(config.intervalHours) ? String(config.intervalHours) : "custom";
   setTgForm((prev) => ({
-  ...prev,
-  enabled: config.enabled,
-  channel: config.channel,
-  interval,
-  customHours: interval === "custom" ? String(config.intervalHours) : "",
-  tgChatId: config.tgChatId || "",
-  ghRepo: config.ghRepo || "",
+    ...prev,
+    enabled: config.enabled,
+    channel: config.channel,
+    interval,
+    customHours: interval === "custom" ? String(config.intervalHours) : "",
+    tgChatId: config.tgChatId || "",
+    ghRepo: config.ghRepo || "",
+    includeUsage: config.includeUsage === true,
+    sections: Array.isArray(config.sections) ? config.sections : prev.sections,
   }));
   } catch (err) {
   console.error("Failed to load auto-backup config:", err);
@@ -860,11 +873,13 @@ export default function ProfilePage() {
   setBusy({ title: "Saving backup configuration", message: "Saving automatic backup settings" });
   try {
   const payload = {
-  enabled: tgForm.enabled,
-  channel: tgForm.channel,
-  intervalHours: Number(tgForm.interval === "custom" ? tgForm.customHours : tgForm.interval),
-  tgChatId: tgForm.tgChatId.trim(),
-  ghRepo: tgForm.ghRepo.trim(),
+    enabled: tgForm.enabled,
+    channel: tgForm.channel,
+    intervalHours: Number(tgForm.interval === "custom" ? tgForm.customHours : tgForm.interval),
+    tgChatId: tgForm.tgChatId.trim(),
+    ghRepo: tgForm.ghRepo.trim(),
+    includeUsage: tgForm.includeUsage,
+    sections: tgForm.sections,
   };
   if (tgForm.tgBotToken.trim()) payload.tgBotToken = tgForm.tgBotToken.trim();
   if (tgForm.ghToken.trim()) payload.ghToken = tgForm.ghToken.trim();
@@ -2223,6 +2238,54 @@ export default function ProfilePage() {
         />
         </div>
         )}
+        {/* Backup Scope Selection */}
+        <div className="flex flex-col gap-2 pt-2 border-t border-border/40">
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Backup Data Scope
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            {[
+              { id: "settings", label: "Settings & System Config" },
+              { id: "providers", label: "Providers, Nodes & Proxies" },
+              { id: "apiKeys", label: "API Keys & Teams" },
+              { id: "combos", label: "Model Combos & Fallbacks" },
+              { id: "customModels", label: "Custom Models & Aliases" },
+            ].map(({ id, label }) => {
+              const active = Array.isArray(tgForm.sections) && tgForm.sections.includes(id);
+              return (
+                <label key={id} className="flex items-center gap-2 cursor-pointer p-1.5 rounded hover:bg-surface-2 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={(e) => {
+                      const cur = Array.isArray(tgForm.sections) ? [...tgForm.sections] : [];
+                      const next = e.target.checked ? [...cur, id] : cur.filter((x) => x !== id);
+                      updateTgForm({ sections: next });
+                    }}
+                    className="rounded border-border"
+                  />
+                  <span>{label}</span>
+                </label>
+              );
+            })}
+            <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded hover:bg-surface-2 transition-colors col-span-1 sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={tgForm.includeUsage}
+                onChange={(e) => updateTgForm({ includeUsage: e.target.checked })}
+                className="rounded border-border"
+              />
+              <span className="flex items-center gap-1.5">
+                <span>Request History & Usage Logs</span>
+                <span className="text-[10px] px-1 py-0.5 rounded bg-warning/20 text-warning font-mono">Heavy (&gt;45MB)</span>
+              </span>
+            </label>
+          </div>
+          <p className="text-[11px] text-text-muted">
+            Unchecking Request History keeps backups small (&lt;1MB) so Telegram never rejects them with a 45MB/50MB upload limit.
+          </p>
+        </div>
+
         <div className="flex flex-col sm:flex-row gap-3">
         <Select
         label="Interval"

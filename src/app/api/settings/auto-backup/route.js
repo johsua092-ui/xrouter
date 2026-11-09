@@ -18,6 +18,8 @@ function publicConfig(config) {
     ghRepo: config.ghRepo || "",
     hasTgToken: Boolean(config.tgBotToken),
     hasGhToken: Boolean(config.ghToken),
+    includeUsage: config.includeUsage === true,
+    sections: Array.isArray(config.sections) ? config.sections : ["settings", "providers", "apiKeys", "combos", "customModels"],
   };
 }
 
@@ -78,6 +80,8 @@ export async function PATCH(request) {
       patch.tgChatId = digits;
     }
     if (typeof body.ghRepo === "string") patch.ghRepo = body.ghRepo.trim();
+    if (typeof body.includeUsage === "boolean") patch.includeUsage = body.includeUsage;
+    if (Array.isArray(body.sections)) patch.sections = body.sections.map(String);
     // Empty secrets mean "keep the stored ones" so partial saves never wipe them.
     if (typeof body.tgBotToken === "string" && body.tgBotToken.trim()) patch.tgBotToken = body.tgBotToken.trim();
     if (typeof body.ghToken === "string" && body.ghToken.trim()) patch.ghToken = body.ghToken.trim();
