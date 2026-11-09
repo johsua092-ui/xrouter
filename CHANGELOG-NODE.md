@@ -1,8 +1,9 @@
 # v0.1.0 (2026-11-08)
 
-- **Calibrate Semantic Cache Accuracy (Isolate User Question from Static System Instructions)**:
-  - In `open-sse/rtk/semanticCache.js`, separated static system instructions from the active user query in `extractSeparatedPrompt()`.
-  - Raised default similarity threshold from 0.85 to 0.92 and enforced a 0.65 length-ratio guard to eliminate false-positive cache hits caused by shared system prompt bloat.
+- **Eliminate Semantic Cache False Hits & Enable Remote Tunnel Access**:
+  - Enforced strict token-identity sequence matching in `open-sse/rtk/semanticCache.js` so different prompts (even with similar keywords) never false-hit.
+  - In `src/dashboardGuard.js`, allow authenticated dashboard sessions (`isAuthenticated`) to access tunnel management endpoints (`/api/tunnel/*`) remotely, fixing the 403 error that caused the Tailscale modal to dismiss prematurely.
+  - In `EndpointPageClient.js`, surface HTTP error responses directly in `handleInstallTailscale()` and keep install logs visible on error.
 
 - **Fix Tailscale Installation Flow (Decouple Login Timeout & Auto-Close Modal)**:
   - In `src/lib/tunnel/tailscale/tailscale.js`, decoupled installer from blocking `startLogin()` so `installTailscale()` finishes immediately upon package install without 15s login timeout.

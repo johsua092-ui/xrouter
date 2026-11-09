@@ -222,18 +222,13 @@ export function checkSemanticCache(body, model) {
     stats.evictions++;
   }
 
-  // Tier 2: Calibrated Semantic Similarity Match (<1ms)
-  const { systemText, userText, fullText } = extractSeparatedPrompt(messages);
+  // Tier 2: Strict Normalized Prompt Match (Zero false-positives for different prompts)
+  const { systemText, userText } = extractSeparatedPrompt(messages);
   
-  // Guard 1: Must have user question text of at least 3 characters
-  if (userText && userText.length >= 3) {
+  if (userText && userText.length >= 2) {
     const normUser = normalizePrompt(userText);
     const normSystem = normalizePrompt(systemText);
     const userTokens = getTokens(normUser);
-    const userNgrams = getCharNgrams(normUser, 3);
-
-    let bestMatch = null;
-    let bestScore = 0;
 
     for (const [key, entry] of responseCache.entries()) {
       if (now >= entry.expiresAt) {
@@ -244,34 +239,21 @@ export function checkSemanticCache(body, model) {
 
       if (entry.model !== model) continue;
 
-      // Guard 2: If system prompt differs significantly, do not match
-      if (normSystem && entry.normSystem && normSystem !== entry.normSystem) {
-        continue;
+      // Strict match: identical normalized text, OR identical core keyword sequence (ignoring polite stopwords)
+      const isExactMatch = entry.normUser === normUser;
+      const isCoreTokenMatch = (
+        entry.userTokens.length >= 3 &&
+        entry.userTokens.length === userTokens.length &&
+        entry.userTokens.every((tok, idx) => tok === userTokens[idx])
+      );
+
+      if ((isExactMatch || isCoreTokenMatch) && (!normSystem || entry.normSystem === normSystem)) {
+        stats.hits++;
+        stats.semanticHits++;
+        entry.lastAccessed = now;
+        console.log(`[SemanticCache] STRICT NORMALIZED HIT for ${model} (hits: ${stats.hits})`);
+        return entry.response;
       }
-
-      // Guard 3: User prompt length ratio check - prevents short query matching a long one
-      const lenRatio = Math.min(entry.normUser.length, normUser.length) / Math.max(entry.normUser.length, normUser.length || 1);
-      if (lenRatio < 0.65) continue;
-
-      // Score user-intent specifically rather than diluting with static system instructions
-      const userScore = computeSimilarity(normUser, userTokens, userNgrams, {
-        normPrompt: entry.normUser,
-        tokens: entry.userTokens,
-        ngrams: entry.userNgrams,
-      });
-
-      if (userScore > bestScore) {
-        bestScore = userScore;
-        bestMatch = entry;
-      }
-    }
-
-    if (bestMatch && bestScore >= similarityThreshold) {
-      stats.hits++;
-      stats.semanticHits++;
-      bestMatch.lastAccessed = now;
-      console.log(`[SemanticCache] SEMANTIC HIT for ${model} (similarity: ${(bestScore * 100).toFixed(1)}%, hits: ${stats.hits})`);
-      return bestMatch.response;
     }
   }
 

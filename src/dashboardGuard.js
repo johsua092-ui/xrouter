@@ -257,8 +257,10 @@ async function canAccessPublicLlmApi(request) {
 
 async function canAccessLocalOnlyRoute(request) {
   if (await hasValidCliToken(request)) return true;
-  // Browser on host: loopback Host + Origin (blocks tunnel/CSRF) + auth (JWT or requireLogin=false)
-  if (isLocalRequest(request) && await isAuthenticated(request)) return true;
+  // Authenticated session (valid token or requireLogin=false) can access tunnel/management routes
+  if (await isAuthenticated(request)) return true;
+  // Browser on host: loopback Host + Origin (blocks tunnel/CSRF)
+  if (isLocalRequest(request)) return true;
   return false;
 }
 

@@ -644,6 +644,13 @@ const scopedModelPatterns =
       });
       setTsSudoPassword("");
 
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        setTsStatus({ type: "error", message: errJson.error || `HTTP ${res.status}: Installation request failed` });
+        setTsInstalling(false);
+        return;
+      }
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -2365,12 +2372,14 @@ console.log(res.choices[0].message.content);`;
           )}
 
           {/* Installing with progress log */}
-          {tsInstalling && (
+          {(tsInstalling || (tsInstallLog.length > 0 && !tsInstalled)) && (
             <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-sm text-text-muted">
-                <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
-                Installing Tailscale...
-              </div>
+              {tsInstalling && (
+                <div className="flex items-center gap-2 text-sm text-text-muted">
+                  <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+                  Installing Tailscale...
+                </div>
+              )}
               {tsInstallLog.length > 0 && (
                 <div ref={tsLogRef} className="bg-surface-2 rounded p-2 max-h-40 overflow-y-auto font-mono text-xs text-text-muted">
                   {tsInstallLog.map((line, i) => (
