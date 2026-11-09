@@ -597,23 +597,36 @@ export async function startDaemonWithPassword(sudoPassword) {
   // Reclaim folder ownership (previous root daemon may have locked it)
   await ensureUserOwnedDir(TAILSCALE_DIR);
 
-  const tailscaledBin = IS_MAC ? "/usr/local/bin/tailscaled" : "tailscaled";
+  const tailscaledBin = IS_MAC
+    ? "/usr/local/bin/tailscaled"
+    : (UNIX_TAILSCALE_CANDIDATES.map((p) => p.replace(/tailscale$/, "tailscaled")).find((p) => fs.existsSync(p)) || "tailscaled");
   const daemonArgs = [
     `--socket=${TAILSCALE_SOCKET}`,
     `--statedir=${TAILSCALE_DIR}`,
   ];
   if (!wantTun) daemonArgs.push("--tun=userspace-networking");
 
+  const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
+
   if (wantTun) {
-    // TUN mode: spawn via sudo, password via stdin. Detached so it survives parent exit.
-    const child = spawn("sudo", ["-S", tailscaledBin, ...daemonArgs], {
-      detached: true,
-      stdio: ["pipe", "ignore", "ignore"],
-      cwd: os.tmpdir(),
-      env: { ...process.env, PATH: EXTENDED_PATH },
-    });
-    child.stdin.write(`${sudoPassword}\n`);
-    child.stdin.end();
+    // TUN mode: spawn via root/sudo, password via stdin if not root. Detached so it survives parent exit.
+    const child = isRoot
+      ? spawn(tailscaledBin, daemonArgs, {
+          detached: true,
+          stdio: "ignore",
+          cwd: os.tmpdir(),
+          env: { ...process.env, PATH: EXTENDED_PATH },
+        })
+      : spawn("sudo", ["-S", tailscaledBin, ...daemonArgs], {
+          detached: true,
+          stdio: ["pipe", "ignore", "ignore"],
+          cwd: os.tmpdir(),
+          env: { ...process.env, PATH: EXTENDED_PATH },
+        });
+    if (!isRoot && child.stdin) {
+      child.stdin.write(`${sudoPassword}\n`);
+      child.stdin.end();
+    }
     child.unref();
   } else {
     const child = spawn(tailscaledBin, daemonArgs, {
