@@ -367,8 +367,9 @@ async function installTailscaleMac(sudoPassword, log) {
 }
 
 async function installTailscaleLinux(sudoPassword, log) {
+  const isRoot = typeof process.getuid === "function" ? process.getuid() === 0 : false;
   // Reject password containing newline → prevents stdin command injection
-  if (typeof sudoPassword !== "string" || sudoPassword.includes("\n")) {
+  if (!isRoot && (typeof sudoPassword !== "string" || sudoPassword.includes("\n"))) {
     throw new Error("Invalid sudo password");
   }
   log("Downloading install script...");
@@ -392,7 +393,9 @@ async function installTailscaleLinux(sudoPassword, log) {
         return reject(new Error(`Failed to write install script: ${e.message}`));
       }
       const cleanup = () => { try { fs.unlinkSync(tmpScript); } catch {} };
-      const child = spawn("sudo", ["-S", "sh", tmpScript], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+      const child = isRoot
+        ? spawn("sh", [tmpScript], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true })
+        : spawn("sudo", ["-S", "sh", tmpScript], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
       let stderr = "";
       child.stdout.on("data", (d) => {
         const line = d.toString().trim();
@@ -410,8 +413,10 @@ async function installTailscaleLinux(sudoPassword, log) {
         }
       });
       child.on("error", (e) => { cleanup(); reject(e); });
-      child.stdin.write(`${sudoPassword}\n`);
-      child.stdin.end();
+      if (!isRoot) {
+        child.stdin.write(`${sudoPassword}\n`);
+        child.stdin.end();
+      }
     });
     curlChild.on("error", reject);
   });
@@ -555,9 +560,10 @@ export async function startDaemonWithPassword(sudoPassword) {
     return;
   }
 
+  const isRoot = typeof process.getuid === "function" ? process.getuid() === 0 : false;
   const currentMode = isDaemonTunMode(); // true=TUN, false=userspace, null=not running
-  // No password but a healthy TUN daemon already runs → keep TUN, never downgrade-kill it.
-  const wantTun = sudoPassword ? true : currentMode === true;
+  // No password but running as root or a healthy TUN daemon already runs → keep TUN, never downgrade-kill it.
+  const wantTun = (sudoPassword || isRoot) ? true : currentMode === true;
 
   // Daemon already running in correct mode → reuse
   if (currentMode !== null && currentMode === wantTun) {
@@ -575,7 +581,7 @@ export async function startDaemonWithPassword(sudoPassword) {
   try { execSync(`pkill -9 -f "tailscaled.*${TAILSCALE_SOCKET}"`, { stdio: "ignore", timeout: 3000 }); } catch { /* ignore */ }
   if (sudoPassword) {
     try { await execWithPassword(`pkill -9 -f "tailscaled.*${TAILSCALE_SOCKET}"`, sudoPassword); } catch { /* ignore */ }
-  } else {
+  } else if (!isRoot) {
     try { execSync(`sudo -n pkill -9 -f "tailscaled.*${TAILSCALE_SOCKET}"`, { stdio: "ignore", timeout: 3000 }); } catch { /* ignore */ }
   }
   await new Promise((r) => setTimeout(r, 1500));
@@ -590,7 +596,16 @@ export async function startDaemonWithPassword(sudoPassword) {
   ];
   if (!wantTun) daemonArgs.push("--tun=userspace-networking");
 
-  if (wantTun) {
+  if (wantTun && isRoot) {
+    // Root mode: spawn directly without sudo
+    const child = spawn(tailscaledBin, daemonArgs, {
+      detached: true,
+      stdio: "ignore",
+      cwd: os.tmpdir(),
+      env: { ...process.env, PATH: EXTENDED_PATH },
+    });
+    child.unref();
+  } else if (wantTun) {
     // TUN mode: spawn via sudo, password via stdin. Detached so it survives parent exit.
     const child = spawn("sudo", ["-S", tailscaledBin, ...daemonArgs], {
       detached: true,

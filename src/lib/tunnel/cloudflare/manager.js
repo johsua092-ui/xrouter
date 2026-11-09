@@ -193,7 +193,7 @@ export async function getTunnelStatus() {
   let publicUrl = shortId ? `https://r${shortId}.abc-tunnel.us` : "";
   const tunnelUrl = state?.tunnelUrl || "";
   // If shortlink worker is dead/unresponsive, fallback to direct trycloudflare tunnelUrl
-  if (!publicUrl || !tunnelActive) {
+  if (!publicUrl) {
     publicUrl = tunnelUrl;
   }
 

@@ -19,7 +19,8 @@ export async function POST(request) {
   const platform = os.platform();
   const isWindows = platform === "win32";
   const isBrew = platform === "darwin" && hasBrew();
-  const needsPassword = !isWindows && !isBrew;
+  const isRoot = typeof process.getuid === "function" ? process.getuid() === 0 : false;
+  const needsPassword = !isWindows && !isBrew && !isRoot;
 
   const sudoPassword = body.sudoPassword || getCachedPassword() || await loadEncryptedPassword() || "";
 

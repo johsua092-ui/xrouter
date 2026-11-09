@@ -37,12 +37,11 @@ function rowToConn(row) {
   if (!row) return null;
   const extra = parseJson(row.data, {});
 
-  // Unseal encrypted credentials in memory for active execution
-  if (extra.apiKey) extra.apiKey = unsealCredential(extra.apiKey);
-  if (extra.accessToken) extra.accessToken = unsealCredential(extra.accessToken);
-  if (extra.refreshToken) extra.refreshToken = unsealCredential(extra.refreshToken);
+  let unsealedApiKey;
+  let unsealedAccessToken;
+  let unsealedRefreshToken;
 
-  return {
+  const conn = {
     ...extra,
     id: row.id,
     provider: row.provider,
@@ -54,6 +53,43 @@ function rowToConn(row) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+
+  // Lazy unseal credentials on demand to prevent CPU stalls when loading thousands of rows
+  if (extra.apiKey && typeof extra.apiKey === "string" && extra.apiKey.startsWith("enc:v1:")) {
+    Object.defineProperty(conn, "apiKey", {
+      get() {
+        if (unsealedApiKey === undefined) unsealedApiKey = unsealCredential(extra.apiKey);
+        return unsealedApiKey;
+      },
+      set(v) { unsealedApiKey = v; extra.apiKey = v; },
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  if (extra.accessToken && typeof extra.accessToken === "string" && extra.accessToken.startsWith("enc:v1:")) {
+    Object.defineProperty(conn, "accessToken", {
+      get() {
+        if (unsealedAccessToken === undefined) unsealedAccessToken = unsealCredential(extra.accessToken);
+        return unsealedAccessToken;
+      },
+      set(v) { unsealedAccessToken = v; extra.accessToken = v; },
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  if (extra.refreshToken && typeof extra.refreshToken === "string" && extra.refreshToken.startsWith("enc:v1:")) {
+    Object.defineProperty(conn, "refreshToken", {
+      get() {
+        if (unsealedRefreshToken === undefined) unsealedRefreshToken = unsealCredential(extra.refreshToken);
+        return unsealedRefreshToken;
+      },
+      set(v) { unsealedRefreshToken = v; extra.refreshToken = v; },
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  return conn;
 }
 
 function connToRow(c) {
@@ -106,7 +142,7 @@ function deriveConnectionName(data, fallbackName) {
 // Memory snapshot cache for active connections to eliminate N+1 SQL queries during high-concurrency routing
 let connectionSnapshotCache = null;
 let connectionSnapshotTime = 0;
-const SNAPSHOT_TTL_MS = 1000; // 1-second memory snapshot
+const SNAPSHOT_TTL_MS = 5000; // 5-second memory snapshot
 
 export function invalidateConnectionSnapshot() {
   connectionSnapshotCache = null;
@@ -136,12 +172,24 @@ export async function getRouteSnapshot() {
 }
 
 export async function getProviderConnections(filter = {}) {
-  // Fast path for standard active provider query using route snapshot
-  if (filter.isActive === true && filter.provider) {
-    const snapshot = await getRouteSnapshot();
-    return snapshot.byProvider.get(filter.provider) || [];
+  // If provider is specified, use targeted SQL query directly (O(1) index hit instead of scanning thousands)
+  if (filter.provider) {
+    const db = await getAdapter();
+    const where = ["provider = ?"];
+    const params = [filter.provider];
+    if (filter.isActive !== undefined) {
+      where.push("isActive = ?");
+      params.push(filter.isActive ? 1 : 0);
+    }
+    const sql = `SELECT * FROM providerConnections WHERE ${where.join(" AND ")}`;
+    const rows = db.all(sql, params);
+    const list = rows.map(rowToConn);
+    list.sort((a, b) => (a.priority || 999) - (b.priority || 999));
+    return list;
   }
-  if (filter.isActive === true && !filter.provider) {
+
+  // Fast path for all active connections using route snapshot
+  if (filter.isActive === true) {
     const snapshot = await getRouteSnapshot();
     return snapshot.list;
   }
@@ -149,7 +197,6 @@ export async function getProviderConnections(filter = {}) {
   const db = await getAdapter();
   const where = [];
   const params = [];
-  if (filter.provider) { where.push("provider = ?"); params.push(filter.provider); }
   if (filter.isActive !== undefined) { where.push("isActive = ?"); params.push(filter.isActive ? 1 : 0); }
   const sql = `SELECT * FROM providerConnections${where.length ? ` WHERE ${where.join(" AND ")}` : ""}`;
   const rows = db.all(sql, params);
@@ -381,7 +428,9 @@ export async function bulkCreateProviderConnections(provider, keys = []) {
 
 // Critical: OAuth refresh token race — atomic merge inside transaction
 export async function updateProviderConnection(id, data) {
-  invalidateConnectionSnapshot();
+  // Only invalidate route snapshot if structural routing fields change, preventing thrashing on volatile stats/pings
+  const isStructural = data.isActive !== undefined || data.priority !== undefined || data.provider !== undefined || data.apiKey !== undefined || data.accessToken !== undefined || data.refreshToken !== undefined;
+  if (isStructural) invalidateConnectionSnapshot();
   const db = await getAdapter();
   let result;
   db.transaction(() => {

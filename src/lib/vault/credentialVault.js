@@ -5,21 +5,25 @@ const ENCRYPT_ALGO = "aes-256-gcm";
 const VAULT_SALT = "xrouter-credential-vault-salt-2026";
 
 let customMasterKey = null;
+let cachedDerivedKey = null;
 
 export function setVaultMasterKey(key) {
   if (typeof key === "string" && key.trim()) {
     customMasterKey = crypto.createHash("sha256").update(key.trim()).digest();
+    cachedDerivedKey = null;
   }
 }
 
 function deriveKey() {
   if (customMasterKey) return customMasterKey;
+  if (cachedDerivedKey) return cachedDerivedKey;
   try {
     const mid = machineIdSync();
-    return crypto.createHash("sha256").update(mid + VAULT_SALT).digest();
+    cachedDerivedKey = crypto.createHash("sha256").update(mid + VAULT_SALT).digest();
   } catch {
-    return crypto.createHash("sha256").update(VAULT_SALT).digest();
+    cachedDerivedKey = crypto.createHash("sha256").update(VAULT_SALT).digest();
   }
+  return cachedDerivedKey;
 }
 
 /**
