@@ -1,9 +1,9 @@
 /**
- * Dual-Stage Semantic Prompt Caching Helper for XRouter
+ * Dual-Stage High-Precision Semantic Prompt Caching Helper for XRouter
  * 
  * Inspired by messkan/prompt-cache:
- * - Tier 1: Exact SHA-256 Hash Match (0ms instant return)
- * - Tier 2: Lexical-Semantic N-Gram & Bag-of-Words Similarity (sub-millisecond evaluation)
+ * - Tier 1: Exact Request Hash Match (0ms instant return)
+ * - Tier 2: Strict Lexical-Semantic N-Gram & Bag-of-Words Similarity (calibrated high precision)
  * 
  * Caches and replays responses for duplicate & semantically identical prompts.
  */
@@ -14,7 +14,9 @@ const responseCache = new Map();
 
 let cacheTtlMs = 3 * 60 * 60 * 1000; // 3 hours default
 let maxEntries = 1000; // 1000 entries cap
-let similarityThreshold = 0.85; // 85% similarity threshold
+// Raised default threshold to 0.92 for strict high-accuracy matching.
+// Prevents false positives while still catching polite fillers/spaces.
+let similarityThreshold = 0.92;
 
 const STOPWORDS = new Set([
   "a", "an", "the", "and", "or", "in", "on", "at", "to", "for", "of", "with",
@@ -143,9 +145,20 @@ function computeSimilarity(normA, tokensA, ngramsA, entryB) {
   return 0.6 * wordSim + 0.4 * charSim;
 }
 
-function extractPromptText(messages) {
-  if (!Array.isArray(messages)) return String(messages || "");
-  const parts = [];
+/**
+ * Extract system instruction text vs active user question text separately.
+ * Prevents large shared system prompts from causing false semantic hits on different user queries.
+ */
+function extractSeparatedPrompt(messages) {
+  if (!Array.isArray(messages)) {
+    const s = String(messages || "");
+    return { systemText: "", userText: s, fullText: s };
+  }
+
+  const systemParts = [];
+  const userParts = [];
+  const allParts = [];
+
   for (const m of messages) {
     if (!m) continue;
     let content = "";
@@ -157,11 +170,22 @@ function extractPromptText(messages) {
         .filter(Boolean)
         .join(" ");
     }
+
     if (content) {
-      parts.push(`${m.role || "user"}: ${content}`);
+      allParts.push(`${m.role || "user"}: ${content}`);
+      if (m.role === "system") {
+        systemParts.push(content);
+      } else if (m.role === "user") {
+        userParts.push(content);
+      }
     }
   }
-  return parts.join("\n");
+
+  return {
+    systemText: systemParts.join("\n"),
+    userText: userParts.join("\n"),
+    fullText: allParts.join("\n"),
+  };
 }
 
 function hashObject(obj) {
@@ -198,12 +222,15 @@ export function checkSemanticCache(body, model) {
     stats.evictions++;
   }
 
-  // Tier 2: Semantic Similarity Match (<1ms)
-  const promptText = extractPromptText(messages);
-  if (promptText && promptText.length >= 4) {
-    const normPrompt = normalizePrompt(promptText);
-    const targetTokens = getTokens(normPrompt);
-    const targetNgrams = getCharNgrams(normPrompt, 3);
+  // Tier 2: Calibrated Semantic Similarity Match (<1ms)
+  const { systemText, userText, fullText } = extractSeparatedPrompt(messages);
+  
+  // Guard 1: Must have user question text of at least 3 characters
+  if (userText && userText.length >= 3) {
+    const normUser = normalizePrompt(userText);
+    const normSystem = normalizePrompt(systemText);
+    const userTokens = getTokens(normUser);
+    const userNgrams = getCharNgrams(normUser, 3);
 
     let bestMatch = null;
     let bestScore = 0;
@@ -217,12 +244,24 @@ export function checkSemanticCache(body, model) {
 
       if (entry.model !== model) continue;
 
-      const lenRatio = Math.min(entry.normPrompt.length, normPrompt.length) / Math.max(entry.normPrompt.length, normPrompt.length || 1);
-      if (lenRatio < 0.4) continue;
+      // Guard 2: If system prompt differs significantly, do not match
+      if (normSystem && entry.normSystem && normSystem !== entry.normSystem) {
+        continue;
+      }
 
-      const score = computeSimilarity(normPrompt, targetTokens, targetNgrams, entry);
-      if (score > bestScore) {
-        bestScore = score;
+      // Guard 3: User prompt length ratio check - prevents short query matching a long one
+      const lenRatio = Math.min(entry.normUser.length, normUser.length) / Math.max(entry.normUser.length, normUser.length || 1);
+      if (lenRatio < 0.65) continue;
+
+      // Score user-intent specifically rather than diluting with static system instructions
+      const userScore = computeSimilarity(normUser, userTokens, userNgrams, {
+        normPrompt: entry.normUser,
+        tokens: entry.userTokens,
+        ngrams: entry.userNgrams,
+      });
+
+      if (userScore > bestScore) {
+        bestScore = userScore;
         bestMatch = entry;
       }
     }
@@ -251,18 +290,19 @@ export function saveToSemanticCache(body, model, responseBody) {
   const hashKey = hashObject(keyData);
   if (!hashKey) return;
 
-  const promptText = extractPromptText(messages);
-  const normPrompt = normalizePrompt(promptText);
-  const tokens = getTokens(normPrompt);
-  const ngrams = getCharNgrams(normPrompt, 3);
+  const { systemText, userText, fullText } = extractSeparatedPrompt(messages);
+  const normUser = normalizePrompt(userText);
+  const normSystem = normalizePrompt(systemText);
+  const userTokens = getTokens(normUser);
+  const userNgrams = getCharNgrams(normUser, 3);
 
   const entry = {
     model,
     hashKey,
-    promptText,
-    normPrompt,
-    tokens,
-    ngrams,
+    normUser,
+    normSystem,
+    userTokens,
+    userNgrams,
     response: responseBody,
     expiresAt: Date.now() + cacheTtlMs,
     lastAccessed: Date.now(),

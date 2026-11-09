@@ -1,5 +1,9 @@
 # v0.1.0 (2026-11-08)
 
+- **Calibrate Semantic Cache Accuracy (Isolate User Question from Static System Instructions)**:
+  - In `open-sse/rtk/semanticCache.js`, separated static system instructions from the active user query in `extractSeparatedPrompt()`.
+  - Raised default similarity threshold from 0.85 to 0.92 and enforced a 0.65 length-ratio guard to eliminate false-positive cache hits caused by shared system prompt bloat.
+
 - **Fix Tailscale Installation Flow (Decouple Login Timeout & Auto-Close Modal)**:
   - In `src/lib/tunnel/tailscale/tailscale.js`, decoupled installer from blocking `startLogin()` so `installTailscale()` finishes immediately upon package install without 15s login timeout.
   - In `EndpointPageClient.js`, keep Tailscale modal open on successful install showing installed status and explicit Connect action rather than abruptly dismissing the modal.
