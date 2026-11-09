@@ -1,5 +1,5 @@
 import { loadState, generateShortId } from "../shared/state.js";
-import { startFunnel, stopFunnel, isTailscaleRunning, isTailscaleRunningStrict, isTailscaleLoggedIn, isTailscaleLoggedInStrict, startLogin, startDaemonWithPassword, provisionCert } from "./tailscale.js";
+import { startFunnel, stopFunnel, isTailscaleRunning, isTailscaleRunningStrict, isTailscaleLoggedIn, isTailscaleLoggedInStrict, startLogin, startDaemonWithPassword, provisionCert, getActualFunnelUrl } from "./tailscale.js";
 import { waitForHealth } from "./healthCheck.js";
 import { HEALTH_CHECK } from "./config.js";
 import { getSettings, updateSettings } from "@/lib/localDb";
@@ -21,7 +21,7 @@ function throwIfCancelled(token) {
   if (token.cancelled) throw new Error("tailscale cancelled");
 }
 
-export async function enableTailscale(localPort = 20128) {
+export async function enableTailscale(localPort = Number(process.env.PORT) || 3000) {
   console.log(`[Tailscale] enable start (port=${localPort})`);
   svc.cancelToken = { cancelled: false };
   svc.activeLocalPort = localPort;
@@ -115,15 +115,27 @@ export async function disableTailscale() {
 
 export async function getTailscaleStatus() {
   const settings = await getSettings();
-  const settingsEnabled = settings.tailscaleEnabled === true;
-  const tunnelUrl = settings.tailscaleUrl || "";
-  // Skip probes entirely when disabled; check login before running (device removed = not logged in)
-  const loggedIn = settingsEnabled ? isTailscaleLoggedIn() : false;
-  const running = loggedIn ? isTailscaleRunning() : false;
+  let settingsEnabled = settings.tailscaleEnabled === true;
+  let tunnelUrl = settings.tailscaleUrl || "";
+  
+  // Strict probe for live status
+  const loggedIn = await isTailscaleLoggedInStrict();
+  const running = loggedIn ? await isTailscaleRunningStrict() : false;
+
+  // Auto-sync if funnel is active on host but not yet marked in settings
+  if (running) {
+    const actualUrl = getActualFunnelUrl();
+    if (actualUrl && (!tunnelUrl || !settingsEnabled)) {
+      tunnelUrl = actualUrl;
+      settingsEnabled = true;
+      await updateSettings({ tailscaleEnabled: true, tailscaleUrl: actualUrl });
+    }
+  }
+
   return {
     enabled: settingsEnabled && running,
     settingsEnabled,
-    tunnelUrl,
+    tunnelUrl: tunnelUrl || getActualFunnelUrl() || "",
     running,
     loggedIn
   };
