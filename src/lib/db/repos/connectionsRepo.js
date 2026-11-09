@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
+import { sealCredential, unsealCredential } from "@/lib/vault/credentialVault.js";
 
 const OPTIONAL_FIELDS = [
   "displayName", "email", "globalPriority", "defaultModel",
@@ -35,6 +36,12 @@ function resetHealthStateOnActivation(existing, patch) {
 function rowToConn(row) {
   if (!row) return null;
   const extra = parseJson(row.data, {});
+
+  // Unseal encrypted credentials in memory for active execution
+  if (extra.apiKey) extra.apiKey = unsealCredential(extra.apiKey);
+  if (extra.accessToken) extra.accessToken = unsealCredential(extra.accessToken);
+  if (extra.refreshToken) extra.refreshToken = unsealCredential(extra.refreshToken);
+
   return {
     ...extra,
     id: row.id,
@@ -51,6 +58,13 @@ function rowToConn(row) {
 
 function connToRow(c) {
   const { id, provider, authType, name, email, priority, isActive, createdAt, updatedAt, ...rest } = c;
+
+  // Seal sensitive credential fields before writing to SQLite database
+  const toStore = { ...rest };
+  if (toStore.apiKey) toStore.apiKey = sealCredential(toStore.apiKey);
+  if (toStore.accessToken) toStore.accessToken = sealCredential(toStore.accessToken);
+  if (toStore.refreshToken) toStore.refreshToken = sealCredential(toStore.refreshToken);
+
   return {
     id,
     provider,
@@ -59,7 +73,7 @@ function connToRow(c) {
     email: email ?? null,
     priority: priority ?? null,
     isActive: isActive === false ? 0 : 1,
-    data: stringifyJson(rest),
+    data: stringifyJson(toStore),
     createdAt,
     updatedAt,
   };

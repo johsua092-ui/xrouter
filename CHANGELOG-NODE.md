@@ -1,5 +1,11 @@
 # v0.1.0 (2026-11-08)
 
+- **Complete Port of 9RouterX Features (A1, B1, B2, B4)**:
+  - **A1 (OpenCode Stealth)**: Preserved Bun/BoringSSL exact HTTP/2 pseudo-header and header order (`content-type`, `authorization`, `user-agent`, `x-opencode-*`) to evade Cloudflare WAF 403 FreeTierError.
+  - **B1 (Persona Enhancements)**: Implemented per-preset model exclusion rules and Gemini `safetySettings: BLOCK_NONE` API bypass in `promptInjectionRepo.js` and `openai-to-gemini.js`.
+  - **B2 (Credential Vault)**: Implemented AES-256-GCM sealed credential storage in `src/lib/vault/credentialVault.js` with automatic seal/unseal hooks in `connectionsRepo.js` (backward compatible with plaintext legacy data).
+  - **B4 (Multi-Key Policy Plans)**: Enforced Team & Plan governance constraints (RPM/TPM limit, daily/monthly spend USD cap, daily/monthly request volume caps) in `apiKeysRepo.js`.
+
 - **Fix Tailscale Installer Sudo Password Requirement for Root Users**:
   - In `src/app/api/tunnel/tailscale-install/route.js` and `tailscale.js`, allow passwordless install when running as `root` (`process.getuid() === 0`) using direct `sh` spawn.
   - Added optional Sudo Password input field in Tailscale installation modal on Endpoint page so users can provide credentials when required.
