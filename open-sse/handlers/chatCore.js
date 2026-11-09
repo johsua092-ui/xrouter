@@ -48,6 +48,7 @@ import { defaultClaudeToolType, shouldDefaultClaudeToolType } from "../translato
 import { repair as repairToolPayload, degrade as degradeToolPayload, isToolCallRejection, TOOL_FALLBACK_MAX_LEVEL } from "../translator/concerns/toolCallFallback.js";
 import { rescueRequest } from "../translator/concerns/toolCallRescue.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
+import { OverheadTracker } from "../utils/overheadTracker.js";
 import { applyCustomPlugins } from "@/lib/plugins/customPluginsRuntime.js";
 
 /**
@@ -80,6 +81,8 @@ export function stripContinuityFields(body) {
 export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, contextPruningEnabled, maxMessagesLimit, semanticCacheEnabled, semanticCacheTtlHours, semanticCacheMaxEntries, contextPruningLevel, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, kernelEnabled = false, kernelPrompt = "", pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, requestedModel, toolCallFallbackEnabled = true, providerOverrides }) {
   const { provider, model } = modelInfo;
   const requestStartTime = Date.now();
+  const overhead = new OverheadTracker();
+  overhead.start("ingress.format_detect");
   // Stable per-session color so all lines of one CLI conversation share a tag
   const sessionSeed = (() => {
     try {
@@ -515,6 +518,8 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // exception: it is decoded by the executor into OpenAI-compatible output.
   let providerResponseFormat = targetFormat;
   try {
+    overhead.end("ingress.format_detect");
+    overhead.start("upstream.execute");
     const result = await executor.execute({
       model,
       body: translatedBody,
@@ -527,6 +532,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       proxyOptions,
       providerOverrides,
     });
+    overhead.end("upstream.execute");
     providerResponse = result.response;
     providerUrl = result.url;
     providerHeaders = result.headers;

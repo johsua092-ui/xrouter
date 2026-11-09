@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
+import { sealCredential, unsealCredential } from "../../vault/credentialVault.js";
 
 const SCOPE = "promptInjections";
 
@@ -26,9 +27,12 @@ function rowToRule(row) {
     },
     // "system_prepend" | "system_append" | "system_override" | "user_prepend" | "user_append"
     position: val.position || "system_prepend",
-    content: typeof val.content === "string" ? val.content : "",
+    content: typeof val.content === "string" ? unsealCredential(val.content) : "",
     normalizeTriggers: val.normalizeTriggers === true,
     stripRefusal: val.stripRefusal === true,
+    blockNoneSafety: val.blockNoneSafety === true,
+    syncToHermes: val.syncToHermes === true,
+    excludeModels: Array.isArray(val.excludeModels) ? val.excludeModels : [],
     priority: Number.isFinite(val.priority) ? val.priority : 10,
     createdAt: val.createdAt || new Date().toISOString(),
     updatedAt: val.updatedAt || new Date().toISOString(),
@@ -77,16 +81,33 @@ export async function createPromptInjection(data) {
     content: typeof data.content === "string" ? data.content : "",
     normalizeTriggers: data.normalizeTriggers === true,
     stripRefusal: data.stripRefusal === true,
+    blockNoneSafety: data.blockNoneSafety === true,
+    syncToHermes: data.syncToHermes === true,
+    excludeModels: Array.isArray(data.excludeModels) ? data.excludeModels : [],
     priority: Number.isFinite(data.priority) ? Number(data.priority) : 10,
     createdAt: now,
     updatedAt: now,
   };
 
+  // Encrypt prompt content at rest using AES-256-GCM Vault
+  const storedRule = {
+    ...rule,
+    content: sealCredential(rule.content),
+  };
+
   db.run(
     `INSERT INTO kv(scope, key, value) VALUES(?, ?, ?)
      ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value`,
-    [SCOPE, id, stringifyJson(rule)]
+    [SCOPE, id, stringifyJson(storedRule)]
   );
+
+  // Auto-sync persona to Hermes/Synapse SOUL.md if enabled
+  if (data.syncToHermes === true && rule.content) {
+    import("@/lib/persona/hermesSync.js").then(({ syncPersonaToHermes }) => {
+      syncPersonaToHermes(rule.content);
+    }).catch(() => {});
+  }
+
   return rule;
 }
 
@@ -117,14 +138,31 @@ export async function updatePromptInjection(id, data) {
     } : existing.matchCondition,
     normalizeTriggers: data.normalizeTriggers !== undefined ? data.normalizeTriggers === true : existing.normalizeTriggers,
     stripRefusal: data.stripRefusal !== undefined ? data.stripRefusal === true : existing.stripRefusal,
+    blockNoneSafety: data.blockNoneSafety !== undefined ? data.blockNoneSafety === true : existing.blockNoneSafety,
+    syncToHermes: data.syncToHermes !== undefined ? data.syncToHermes === true : existing.syncToHermes,
+    excludeModels: Array.isArray(data.excludeModels) ? data.excludeModels : existing.excludeModels,
     updatedAt: now,
+  };
+
+  // Encrypt prompt content at rest using AES-256-GCM Vault
+  const storedUpdated = {
+    ...updated,
+    content: sealCredential(updated.content),
   };
 
   db.run(
     `INSERT INTO kv(scope, key, value) VALUES(?, ?, ?)
      ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value`,
-    [SCOPE, id, stringifyJson(updated)]
+    [SCOPE, id, stringifyJson(storedUpdated)]
   );
+
+  // Auto-sync persona to Hermes/Synapse SOUL.md if enabled
+  if ((data.syncToHermes === true || updated.syncToHermes === true) && updated.content) {
+    import("@/lib/persona/hermesSync.js").then(({ syncPersonaToHermes }) => {
+      syncPersonaToHermes(updated.content);
+    }).catch(() => {});
+  }
+
   return updated;
 }
 
@@ -218,6 +256,16 @@ function matchesPattern(target, pattern) {
 export async function isRuleMatching(rule, { modelStr = "", comboName = "", provider = "", model = "", apiKey = "", userText = "" } = {}) {
   if (!rule || !rule.enabled) return false;
   if (!rule.content || !rule.content.trim()) return false;
+
+  // Check exclude models list (Persona exclude rules)
+  if (Array.isArray(rule.excludeModels) && rule.excludeModels.length > 0) {
+    const fullTarget = `${provider}/${model}`.toLowerCase();
+    const isExcluded = rule.excludeModels.some((ex) => {
+      const e = ex.toLowerCase().trim();
+      return e === modelStr.toLowerCase() || e === model.toLowerCase() || fullTarget.includes(e);
+    });
+    if (isExcluded) return false;
+  }
 
   // 1. Target API Keys restriction check
   if (Array.isArray(rule.targetKeys) && rule.targetKeys.length > 0) {
@@ -508,6 +556,17 @@ export async function applyPromptInjectionsToBody(body, context = {}) {
       executeInjection(body, rule.position, promptText);
       body._appliedPromptInjections.push(rule.id);
       appliedRuleNames.push(rule.name || rule.id);
+
+      // Persona BLOCK_NONE Safety bypass injection for Gemini models
+      if (rule.blockNoneSafety === true && (provider === "google" || provider === "gemini" || model.toLowerCase().includes("gemini"))) {
+        body.safetySettings = [
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" }
+        ];
+      }
 
       // S4 Trigger Normalization: Clean trigger words from user input if rule has it enabled
       if (rule.normalizeTriggers === true) {

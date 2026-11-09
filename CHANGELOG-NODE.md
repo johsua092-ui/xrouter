@@ -1,8 +1,10 @@
 # v0.1.0 (2026-11-08)
 
-- **Port High-Performance Route Snapshot Caching (OhMyRouter OmopV2 2.E Pattern)**:
-  - In `src/lib/db/repos/connectionsRepo.js`, implemented `getRouteSnapshot()` with 1-second in-memory routing snapshot grouped by provider.
-  - Eliminated N+1 database queries on `getProviderConnections()` for high-concurrency routing with automatic cache invalidation on insert, update, and delete.
+- **Complete Port of OhMyRouter Features (2.A, 2.B, 2.D, 2.E) with Model Bypass Vault Encryption**:
+  - **2.A (Vercel Multi-Relay Deployment)**: Upgraded `/api/proxy-pools/vercel-deploy` and modal to support deploying up to 23 parallel Vercel Edge relays with auto-naming (`#1` to `#23`).
+  - **2.B (P99.9 Microsecond Latency Profiler)**: Implemented `OverheadTracker` ring-buffer in `open-sse/utils/overheadTracker.js` with phases (`ingress.format_detect`, `upstream.execute`) and exposed telemetry report at `/api/telemetry/latency`.
+  - **2.D (Hermes Sync + Model Bypass Encryption)**: Implemented `src/lib/persona/hermesSync.js` to mirror active persona to `$HERMES_HOME/SOUL.md` or `$SYNAPSE_HOME/SOUL.md` with automatic backups; encrypted all Model Bypass Prompt Injections at rest using AES-256-GCM Vault (`src/lib/vault/credentialVault.js`).
+  - **2.E (State Snapshot Routing)**: Implemented in-memory 1-second route snapshot grouped by provider in `connectionsRepo.js` eliminating N+1 queries.
 
 - **Fix Team Custom API Key Validation & Permitted Models Filtering**:
   - In `src/lib/db/repos/apiKeysRepo.js`, removed hardcoded `xteam-` prefix restrictions in `getApiKeyByKey()` and `validateApiKey()`, allowing any custom prefix or key name (e.g. `yteam-*`, `sk-*`, custom tokens) to authenticate against the `teams` table.

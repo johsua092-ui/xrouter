@@ -95,7 +95,7 @@ export default function ProxyPoolsPage() {
   const [formData, setFormData] = useState(normalizeFormData());
   const [batchImportText, setBatchImportText] = useState("");
   const [importProgress, setImportProgress] = useState(null);
-  const [vercelForm, setVercelForm] = useState({ vercelToken: "", projectName: "vercel-relay" });
+  const [vercelForm, setVercelForm] = useState({ vercelToken: "", projectName: "vercel-relay", count: 1 });
   const [cloudflareForm, setCloudflareForm] = useState({ accountId: "", apiToken: "", projectName: "cloudflare-relay" });
   const [denoForm, setDenoForm] = useState({ denoToken: "", orgDomain: "", projectName: "" });
   const [netlifyForm, setNetlifyForm] = useState({ netlifyToken: "", projectName: "netlify-relay" });
@@ -586,7 +586,7 @@ export default function ProxyPoolsPage() {
   };
 
   const openVercelModal = () => {
-    setVercelForm({ vercelToken: "", projectName: "vercel-relay" });
+    setVercelForm({ vercelToken: "", projectName: "vercel-relay", count: 1 });
     setShowVercelModal(true);
   };
 
@@ -626,7 +626,7 @@ export default function ProxyPoolsPage() {
       if (res.ok) {
         await fetchProxyPools();
         closeVercelModal();
-        notify.success(`Deployed: ${data.deployUrl}`);
+        notify.success(`Deployed ${data.count || 1} Vercel Relay nodes!`);
       } else {
         notify.error(data.error || "Deploy failed");
       }
@@ -1425,7 +1425,16 @@ export default function ProxyPoolsPage() {
             value={vercelForm.projectName}
             onChange={(e) => setVercelForm((prev) => ({ ...prev, projectName: e.target.value }))}
             placeholder="my-relay"
-            hint="Name for your Vercel project (leave empty to auto-generate)"
+            hint="Base name for your Vercel project"
+          />
+          <Input
+            label="Multi-Relay Count (1-23 Nodes)"
+            type="number"
+            min="1"
+            max="23"
+            value={vercelForm.count}
+            onChange={(e) => setVercelForm((prev) => ({ ...prev, count: Math.max(1, Math.min(23, Number(e.target.value) || 1)) }))}
+            hint="Deploys multiple parallel Edge relays like OhMyRouter for high-frequency IP rotation."
           />
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button
