@@ -1,5 +1,8 @@
 # v0.1.0 (2026-11-09)
 
+- **Show Tailscale Funnel Local Port in Dashboard + Robust Status Detection**:
+  - Added `getFunnelTargetPort()` (parses `funnel status --json` proxy target) and exposed `port`/`localPort` in `/api/tunnel/status` and `getTailscaleStatus()` in `src/lib/tunnel/tailscale/{tailscale,manager}.js`.
+  - Endpoint card in `EndpointPageClient.js` now renders a `PORT <n>` badge and `Funnel https://...ts.net → 127.0.0.1:<port>` line; badge state now falls back to `running` when `settingsEnabled` is stale, fixing the false "OFFLINE".
 - **Render Tailscale Auth URL Action Button in UI**:
   - Rendered explicit "Open Login Page" action button and copy button on the Tailscale card and inside the modal in `EndpointPageClient.js` when authentication is required, preventing dead states.
 - **Fix Tailscale Dynamic Socket Detection (Resolves 'timed out without auth URL')**:

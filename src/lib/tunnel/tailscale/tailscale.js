@@ -275,6 +275,28 @@ export function getActualFunnelUrl() {
   } catch { return null; }
 }
 
+/** Local port the Funnel proxies to (from funnel status). Returns number or null. */
+export function getFunnelTargetPort() {
+  const bin = getTailscaleBin();
+  if (!bin) return null;
+  try {
+    const out = execSync(`"${bin}" ${SOCKET_FLAG.join(" ")} funnel status --json`, {
+      encoding: "utf8", windowsHide: true,
+      env: { ...process.env, PATH: EXTENDED_PATH }, timeout: 4000,
+    });
+    const json = JSON.parse(out);
+    for (const hostKey of Object.keys(json.Web || {})) {
+      const handlers = json.Web[hostKey]?.Handlers || {};
+      for (const path of Object.keys(handlers)) {
+        const proxy = handlers[path]?.Proxy;
+        const m = typeof proxy === "string" && proxy.match(/:(\d+)\s*$/);
+        if (m) return Number(m[1]);
+      }
+    }
+    return null;
+  } catch { return null; }
+}
+
 /** Get funnel URL from tailscale status (cached, non-blocking) */
 export function getTailscaleFunnelUrl(port) {
   if (Date.now() - funnelUrlCache.fetchedAt > PROBE_TTL_MS || funnelUrlCache.port !== port) {

@@ -1,5 +1,5 @@
 import { loadState, generateShortId } from "../shared/state.js";
-import { startFunnel, stopFunnel, isTailscaleRunning, isTailscaleRunningStrict, isTailscaleLoggedIn, isTailscaleLoggedInStrict, startLogin, startDaemonWithPassword, provisionCert, getActualFunnelUrl } from "./tailscale.js";
+import { startFunnel, stopFunnel, isTailscaleRunning, isTailscaleRunningStrict, isTailscaleLoggedIn, isTailscaleLoggedInStrict, startLogin, startDaemonWithPassword, provisionCert, getActualFunnelUrl, getFunnelTargetPort } from "./tailscale.js";
 import { waitForHealth } from "./healthCheck.js";
 import { HEALTH_CHECK } from "./config.js";
 import { getSettings, updateSettings } from "@/lib/localDb";
@@ -137,6 +137,8 @@ export async function getTailscaleStatus() {
     settingsEnabled,
     tunnelUrl: tunnelUrl || getActualFunnelUrl() || "",
     running,
-    loggedIn
+    loggedIn,
+    port: running ? getFunnelTargetPort() : null,
+    localPort: Number(process.env.PORT) || 3000,
   };
 }

@@ -232,6 +232,7 @@ const scopedModelPatterns =
 
   // Tailscale state
   const [tsEnabled, setTsEnabled] = useState(false);
+  const [tsPort, setTsPort] = useState(null);
   const [tsReachable, setTsReachable] = useState(false);
   const [tsUrl, setTsUrl] = useState("");
   const [tsLoading, setTsLoading] = useState(false);
@@ -387,10 +388,11 @@ const scopedModelPatterns =
       setTunnelEnabled(tEnabled);
       updateReachable(null, tunnelClientReachableRef, tunnelMissRef, setTunnelReachable, tunnelEverReachableRef, setTunnelEverReachable);
 
-      const tsEn = data.tailscale?.settingsEnabled ?? data.tailscale?.enabled ?? false;
+      const tsEn = data.tailscale?.settingsEnabled ?? data.tailscale?.running ?? data.tailscale?.enabled ?? false;
       const tsUrlVal = data.tailscale?.tunnelUrl || "";
       setTsUrl(tsUrlVal);
       setTsEnabled(tsEn);
+      setTsPort(data.tailscale?.port ?? data.tailscale?.localPort ?? null);
       updateReachable(null, tsClientReachableRef, tsMissRef, setTsReachable, tsEverReachableRef, setTsEverReachable);
     } catch { /* ignore poll errors */ }
   };
@@ -418,10 +420,11 @@ const scopedModelPatterns =
         setTunnelEnabled(tEnabled);
         updateReachable(null, tunnelClientReachableRef, tunnelMissRef, setTunnelReachable, tunnelEverReachableRef, setTunnelEverReachable);
 
-        const tsEn = data.tailscale?.settingsEnabled ?? data.tailscale?.enabled ?? false;
+        const tsEn = data.tailscale?.settingsEnabled ?? data.tailscale?.running ?? data.tailscale?.enabled ?? false;
         const tsUrlVal = data.tailscale?.tunnelUrl || "";
         setTsUrl(tsUrlVal);
         setTsEnabled(tsEn);
+        setTsPort(data.tailscale?.port ?? data.tailscale?.localPort ?? null);
         updateReachable(null, tsClientReachableRef, tsMissRef, setTsReachable, tsEverReachableRef, setTsEverReachable);
       }
     } catch (error) {
@@ -1496,13 +1499,20 @@ console.log(res.choices[0].message.content);`;
                     )}>
                       {tsEnabled && tsReachable ? "MESH ACTIVE" : tsEnabled ? "CONNECTING" : "OFFLINE"}
                     </span>
+                    {(tsPort || tsEnabled) && (
+                      <span className="px-1.5 py-0.5 rounded-[3px] text-[9.5px] font-mono font-medium border border-border bg-surface text-text-muted">
+                        PORT {tsPort || 3000}
+                      </span>
+                    )}
                   </div>
                   <p className="text-[11px] font-mono text-text-muted truncate mt-0.5">
                     {tsEnabled && tsReachable
                       ? `${tsUrl}/v1`
                       : tsLoading
                         ? (tsProgress || "Connecting Tailscale...")
-                        : "Private tailnet mesh network access"}
+                        : tsEnabled
+                          ? `Funnel https://...ts.net \u2192 127.0.0.1:${tsPort || 3000}`
+                          : "Private tailnet mesh network access"}
                   </p>
                   {tsAuthUrl && (
                     <div className="flex items-center gap-2 mt-2">
