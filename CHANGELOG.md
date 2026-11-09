@@ -1,5 +1,7 @@
 # v0.1.0 (2026-11-09)
 
+- **Render Tailscale Auth URL Action Button in UI**:
+  - Rendered explicit "Open Login Page" action button and copy button on the Tailscale card and inside the modal in `EndpointPageClient.js` when authentication is required, preventing dead states.
 - **Fix Tailscale Dynamic Socket Detection (Resolves 'timed out without auth URL')**:
   - Dynamically detect and bind to the active system Tailscale daemon socket (`/run/tailscale/tailscaled.sock` or `/var/run/tailscale/tailscaled.sock`) when the local userspace socket is absent, allowing `tailscale up` and `tailscale status` to capture the login AuthURL immediately.
 - **Fix Dashboard Freeze, Event Loop Stalls & High CPU on Large Connection Tables (11.8k+)**:

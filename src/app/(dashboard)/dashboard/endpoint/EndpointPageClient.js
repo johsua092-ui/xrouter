@@ -740,6 +740,7 @@ const scopedModelPatterns =
 
       if (data.needsLogin && data.authUrl) {
         requestUserAuth(data.authUrl, "Open Login Page");
+        setShowTsModal(true);
         setTsProgress("Login required — click \"Open Login Page\" to continue");
         for (let i = 0; i < 40; i++) {
           await new Promise((r) => setTimeout(r, 3000));
@@ -1503,6 +1504,27 @@ console.log(res.choices[0].message.content);`;
                         ? (tsProgress || "Connecting Tailscale...")
                         : "Private tailnet mesh network access"}
                   </p>
+                  {tsAuthUrl && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <a
+                        href={tsAuthUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[4px] bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-all cursor-pointer shadow-xs animate-pulse"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">open_in_new</span>
+                        <span>{tsAuthLabel || "Open Login Page"}</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => copy(tsAuthUrl, "ts_auth_url")}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-[4px] border border-border bg-surface text-text-muted hover:text-text-main text-[11px] cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">{copied === "ts_auth_url" ? "check" : "content_copy"}</span>
+                        <span>{copied === "ts_auth_url" ? "Copied" : "Copy URL"}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2379,6 +2401,37 @@ console.log(res.choices[0].message.content);`;
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Auth Required Banner / Action */}
+          {tsAuthUrl && (
+            <div className="flex flex-col gap-3 p-3.5 rounded-[6px] border border-brand-500/40 bg-brand-500/10">
+              <div className="flex items-center gap-2 text-sm font-semibold text-text-main">
+                <span className="material-symbols-outlined text-primary text-[18px]">key</span>
+                Tailscale Authentication Required
+              </div>
+              <p className="text-xs text-text-muted">
+                Klik tombol di bawah ini untuk membuka halaman login Tailscale di tab baru:
+              </p>
+              <div className="flex gap-2">
+                <a
+                  href={tsAuthUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-[5px] bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-all text-center shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                  <span>{tsAuthLabel || "Open Login Page"}</span>
+                </a>
+                <Button
+                  onClick={() => copy(tsAuthUrl, "modal_auth_url")}
+                  variant="secondary"
+                  size="sm"
+                >
+                  {copied === "modal_auth_url" ? "Copied" : "Copy"}
+                </Button>
+              </div>
             </div>
           )}
 
