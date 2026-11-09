@@ -1,5 +1,9 @@
 # v0.1.0 (2026-11-08)
 
+- **Port High-Performance Route Snapshot Caching (OhMyRouter OmopV2 2.E Pattern)**:
+  - In `src/lib/db/repos/connectionsRepo.js`, implemented `getRouteSnapshot()` with 1-second in-memory routing snapshot grouped by provider.
+  - Eliminated N+1 database queries on `getProviderConnections()` for high-concurrency routing with automatic cache invalidation on insert, update, and delete.
+
 - **Fix Team Custom API Key Validation & Permitted Models Filtering**:
   - In `src/lib/db/repos/apiKeysRepo.js`, removed hardcoded `xteam-` prefix restrictions in `getApiKeyByKey()` and `validateApiKey()`, allowing any custom prefix or key name (e.g. `yteam-*`, `sk-*`, custom tokens) to authenticate against the `teams` table.
   - Linked `getAllowedModelsOfKey()` to the `teams` table so client requests fetching `/v1/models` with a team API key strictly see only their permitted models (e.g. `mine`).

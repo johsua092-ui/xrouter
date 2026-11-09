@@ -103,7 +103,49 @@ function deriveConnectionName(data, fallbackName) {
   return fallbackName;
 }
 
+// Memory snapshot cache for active connections to eliminate N+1 SQL queries during high-concurrency routing
+let connectionSnapshotCache = null;
+let connectionSnapshotTime = 0;
+const SNAPSHOT_TTL_MS = 1000; // 1-second memory snapshot
+
+export function invalidateConnectionSnapshot() {
+  connectionSnapshotCache = null;
+  connectionSnapshotTime = 0;
+}
+
+export async function getRouteSnapshot() {
+  const now = Date.now();
+  if (connectionSnapshotCache && now - connectionSnapshotTime < SNAPSHOT_TTL_MS) {
+    return connectionSnapshotCache;
+  }
+  const db = await getAdapter();
+  const rows = db.all(`SELECT * FROM providerConnections WHERE isActive = 1`);
+  const list = rows.map(rowToConn);
+  list.sort((a, b) => (a.priority || 999) - (b.priority || 999));
+  
+  // Group by provider for instant O(1) lookups
+  const byProvider = new Map();
+  for (const conn of list) {
+    if (!byProvider.has(conn.provider)) byProvider.set(conn.provider, []);
+    byProvider.get(conn.provider).push(conn);
+  }
+
+  connectionSnapshotCache = { list, byProvider };
+  connectionSnapshotTime = now;
+  return connectionSnapshotCache;
+}
+
 export async function getProviderConnections(filter = {}) {
+  // Fast path for standard active provider query using route snapshot
+  if (filter.isActive === true && filter.provider) {
+    const snapshot = await getRouteSnapshot();
+    return snapshot.byProvider.get(filter.provider) || [];
+  }
+  if (filter.isActive === true && !filter.provider) {
+    const snapshot = await getRouteSnapshot();
+    return snapshot.list;
+  }
+
   const db = await getAdapter();
   const where = [];
   const params = [];
@@ -147,6 +189,7 @@ function reorderInTx(db, providerId) {
 }
 
 export async function createProviderConnection(data) {
+  invalidateConnectionSnapshot();
   const db = await getAdapter();
   const now = new Date().toISOString();
   let result;
@@ -338,6 +381,7 @@ export async function bulkCreateProviderConnections(provider, keys = []) {
 
 // Critical: OAuth refresh token race — atomic merge inside transaction
 export async function updateProviderConnection(id, data) {
+  invalidateConnectionSnapshot();
   const db = await getAdapter();
   let result;
   db.transaction(() => {
@@ -354,6 +398,7 @@ export async function updateProviderConnection(id, data) {
 }
 
 export async function deleteProviderConnection(id) {
+  invalidateConnectionSnapshot();
   const db = await getAdapter();
   let ok = false;
   db.transaction(() => {
