@@ -2349,6 +2349,13 @@ console.log(res.choices[0].message.content);`;
           {tsInstalled === false && !tsInstalling && (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-text-muted">Install Tailscale to enable Funnel.</p>
+              <Input
+                type="password"
+                label="Sudo Password (Optional if running as root)"
+                value={tsSudoPassword}
+                onChange={(e) => setTsSudoPassword(e.target.value)}
+                placeholder="Enter sudo password if required"
+              />
               <div className="flex gap-2">
                 <Button onClick={handleInstallTailscale} fullWidth>
                   Install Tailscale

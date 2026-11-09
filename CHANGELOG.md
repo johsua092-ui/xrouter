@@ -1,5 +1,12 @@
 # v0.1.0 (2026-11-08)
 
+- **Fix Tailscale Installer Sudo Password Requirement for Root Users**:
+  - In `src/app/api/tunnel/tailscale-install/route.js` and `tailscale.js`, allow passwordless install when running as `root` (`process.getuid() === 0`) using direct `sh` spawn.
+  - Added optional Sudo Password input field in Tailscale installation modal on Endpoint page so users can provide credentials when required.
+
+- **Preserve Bun/BoringSSL HTTP Header Ordering in OpenCode Executor**:
+  - Aligned header order in `open-sse/executors/opencode.js` with OpenCode CLI upstream fingerprint (`opencode_stealth.go` specification) to prevent Cloudflare WAF header-order flagging on free-tier requests.
+
 - **Fix Stream Stall Timeout on Long-Running Reasoning Models (GLM-5.3-Flash)**:
   - Extended default stall watchdog `STREAM_STALL_TIMEOUT_MS` from 360s to 600s (10 minutes) in `runtimeConfig.js` and set explicit 600s stall threshold for `glm` provider.
   - Added downstream tap monitoring in `pipeWithDisconnect` (`open-sse/utils/streamHandler.js`) to continuously reset watchdog activity during slow token emission and reasoning phases.

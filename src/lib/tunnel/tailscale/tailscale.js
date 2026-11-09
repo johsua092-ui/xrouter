@@ -376,6 +376,7 @@ async function installTailscaleLinux(sudoPassword, log) {
   if (typeof sudoPassword !== "string" || sudoPassword.includes("\n")) {
     throw new Error("Invalid sudo password");
   }
+  const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
   log("Downloading install script...");
   return new Promise((resolve, reject) => {
     const curlChild = spawn("curl", ["-fsSL", "https://tailscale.com/install.sh"], {
@@ -397,7 +398,9 @@ async function installTailscaleLinux(sudoPassword, log) {
         return reject(new Error(`Failed to write install script: ${e.message}`));
       }
       const cleanup = () => { try { fs.unlinkSync(tmpScript); } catch {} };
-      const child = spawn("sudo", ["-S", "sh", tmpScript], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+      const child = isRoot
+        ? spawn("sh", [tmpScript], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true })
+        : spawn("sudo", ["-S", "sh", tmpScript], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
       let stderr = "";
       child.stdout.on("data", (d) => {
         const line = d.toString().trim();
@@ -419,8 +422,10 @@ async function installTailscaleLinux(sudoPassword, log) {
         }
       });
       child.on("error", (e) => { cleanup(); reject(e); });
-      child.stdin.write(`${sudoPassword}\n`);
-      child.stdin.end();
+      if (!isRoot && child.stdin) {
+        child.stdin.write(`${sudoPassword}\n`);
+        child.stdin.end();
+      }
     });
     curlChild.on("error", reject);
   });
