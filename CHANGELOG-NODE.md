@@ -1,5 +1,7 @@
 # v0.1.0 (2026-11-09)
 
+- **Fix Tailscale Dynamic Socket Detection (Resolves 'timed out without auth URL')**:
+  - Dynamically detect and bind to the active system Tailscale daemon socket (`/run/tailscale/tailscaled.sock` or `/var/run/tailscale/tailscaled.sock`) when the local userspace socket is absent, allowing `tailscale up` and `tailscale status` to capture the login AuthURL immediately.
 - **Fix Dashboard Freeze, Event Loop Stalls & High CPU on Large Connection Tables (11.8k+)**:
   - **Master Key Caching**: In `src/lib/vault/credentialVault.js`, cached the derived master key in memory to eliminate redundant synchronous `machineIdSync` sub-process calls on every single decryption.
   - **Lazy Credential Unsealing**: In `src/lib/db/repos/connectionsRepo.js`, implemented lazy property getters on `rowToConn` for `apiKey`, `accessToken`, and `refreshToken`, so loading table rows and route snapshots performs zero upfront AES decryptions until a specific connection is dispatched.

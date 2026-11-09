@@ -18,11 +18,31 @@ const TAILSCALE_BIN = path.join(BIN_DIR, IS_WINDOWS ? "tailscale.exe" : "tailsca
 // Custom socket for userspace-networking mode (no root required)
 const TAILSCALE_DIR = path.join(DATA_DIR, "tailscale");
 export const TAILSCALE_SOCKET = path.join(TAILSCALE_DIR, "tailscaled.sock");
-const SOCKET_FLAG = IS_WINDOWS ? [] : ["--socket", TAILSCALE_SOCKET];
+
+export function getActiveSocket() {
+  if (IS_WINDOWS) return null;
+  if (fs.existsSync(TAILSCALE_SOCKET)) return TAILSCALE_SOCKET;
+  const sysCandidates = ["/run/tailscale/tailscaled.sock", "/var/run/tailscale/tailscaled.sock"];
+  for (const s of sysCandidates) {
+    if (fs.existsSync(s)) return s;
+  }
+  return TAILSCALE_SOCKET;
+}
+
+export function getSocketFlag() {
+  if (IS_WINDOWS) return [];
+  const s = getActiveSocket();
+  return s ? ["--socket", s] : [];
+}
+
+const SOCKET_FLAG = {
+  join(sep) { return getSocketFlag().join(sep); },
+  [Symbol.iterator]() { return getSocketFlag()[Symbol.iterator](); },
+};
 
 // System daemon socket (sudo install: apt/snap/systemd) — read-only status detection
-const SYSTEM_TAILSCALE_SOCKET = IS_WINDOWS ? null : "/var/run/tailscale/tailscaled.sock";
-const SYSTEM_SOCKET_FLAG = SYSTEM_TAILSCALE_SOCKET ? ["--socket", SYSTEM_TAILSCALE_SOCKET] : [];
+const SYSTEM_TAILSCALE_SOCKET = IS_WINDOWS ? null : (fs.existsSync("/run/tailscale/tailscaled.sock") ? "/run/tailscale/tailscaled.sock" : "/var/run/tailscale/tailscaled.sock");
+const SYSTEM_SOCKET_FLAG = SOCKET_FLAG;
 
 // Well-known Windows install path
 const WINDOWS_TAILSCALE_BIN = "C:\\Program Files\\Tailscale\\tailscale.exe";
