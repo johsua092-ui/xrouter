@@ -670,8 +670,7 @@ const scopedModelPatterns =
           } else if (event === "done") {
             setTsInstalled(true);
             setTsInstalling(false);
-            setShowTsModal(false);
-            handleConnectTailscale();
+            setTsStatus({ type: "success", message: "Tailscale successfully installed! Click Connect to start." });
             return;
           } else if (event === "error") {
             setTsStatus({ type: "error", message: data.error || "Install failed" });

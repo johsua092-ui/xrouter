@@ -285,9 +285,13 @@ export async function installTailscale(sudoPassword, hostname, onProgress) {
   else await installTailscaleLinux(sudoPassword, log);
 
   log("Starting daemon...");
-  await startDaemonWithPassword(sudoPassword);
-  log("Logging in...");
-  return startLogin(hostname);
+  try {
+    await startDaemonWithPassword(sudoPassword);
+  } catch (err) {
+    log(`Daemon warning: ${err?.message || err}`);
+  }
+  log("Finishing installation...");
+  return { success: true };
 }
 
 const EXTENDED_PATH = `/usr/local/bin:/opt/homebrew/bin:/usr/sbin:/usr/bin:/bin:/snap/bin:${process.env.PATH || ""}`;

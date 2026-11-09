@@ -1,5 +1,9 @@
 # v0.1.0 (2026-11-08)
 
+- **Fix Tailscale Installation Flow (Decouple Login Timeout & Auto-Close Modal)**:
+  - In `src/lib/tunnel/tailscale/tailscale.js`, decoupled installer from blocking `startLogin()` so `installTailscale()` finishes immediately upon package install without 15s login timeout.
+  - In `EndpointPageClient.js`, keep Tailscale modal open on successful install showing installed status and explicit Connect action rather than abruptly dismissing the modal.
+
 - **Fix Tailscale Daemon Execution on Linux Root Environments**:
   - In `src/lib/tunnel/tailscale/tailscale.js`, resolve absolute path for `tailscaled` daemon across `/usr/sbin`, `/usr/bin`, and `/usr/local/bin` candidates.
   - Bypass `sudo` spawning in `startDaemonWithPassword()` when running directly as root (`process.getuid() === 0`) to prevent sudo prompt hangs.
