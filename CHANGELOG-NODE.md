@@ -1,5 +1,9 @@
 # v0.1.0 (2026-11-09)
 
+- **Anti-Abuse Controls Wired Into the Dashboard**:
+  - **Console Log** now has two tabs: the live log, and a **Banned IPs** panel listing manual bans next to the automatic auto-jail rows — with a ban form (IP, reason, minutes; `0` = permanent), refresh, and an Unban that clears whichever tier is holding the address.
+  - **Bulk edit keys** gained *Denied models pattern* and *Allowed providers*. They live in the separate `apiKeyAcls` table, so they travel as a nested `acl` and are written once per selected key rather than through `keys/bulk`.
+  - Every key row has a **Share usage** action: mint a read-only `/share/<token>` link (default 30 days, `0` = never), copy it, watch its view count, revoke it.
 - **Anti-Abuse Guard: Durable IP Bans, Per-Key Deny/Provider ACL, Public Usage Shares**:
   - Three **new** tables — `ipBans`, `apiKeyAcls`, `shareTokens` — with `SCHEMA_VERSION` 15 → 16 (additive sync creates them; the version bump also takes the pre-schema backup). They are separate on purpose: `apiKeys` and `teams` keep the exact shape an older build expects, so an exported database still restores into a build that has never heard of these tables.
   - New `src/lib/db/repos/abuseRepo.js`: ban CRUD + `isIpBanned` (an expired row prunes itself on read), per-key ACL get/set/delete, and share-token mint / resolve / revoke / touch. Model patterns reuse `allowedModels.js`, so a **deny** pattern means exactly what an **allow** pattern means (`gpt-4*`, `*opus`, exact id).

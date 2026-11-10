@@ -24,6 +24,7 @@ import { cn } from "@/shared/utils/cn";
 import useSettingsStore from "@/store/settingsStore";
 import EndpointRow from "./components/EndpointRow";
 import BulkEditKeys from "./components/BulkEditKeys";
+import KeyShareModal from "./components/KeyShareModal";
 import StatusAlert from "./components/StatusAlert";
 import Tooltip from "./components/Tooltip";
 import SecurityWarning from "./components/SecurityWarning";
@@ -189,6 +190,8 @@ export default function APIPageClient({ machineId }) {
   // Bulk edit state
   const [selectedKeyIds, setSelectedKeyIds] = useState(new Set());
   const [showBulkEdit, setShowBulkEdit] = useState(false);
+  // The key whose usage-share links are open, or null.
+  const [shareKey, setShareKey] = useState(null);
 
   const [requireApiKey, setRequireApiKey] = useState(false);
  const [tunnelDashboardAccess, setTunnelDashboardAccess] = useState(false);
@@ -1134,15 +1137,31 @@ const scopedModelPatterns =
   const handleBulkApply = async (patch) => {
     const ids = [...selectedKeyIds];
     if (ids.length === 0) return;
+    // `acl` is not a column on apiKeys — it is the separate apiKeyAcls table, so it is
+    // written once per selected key and never sent to the keys/bulk endpoint.
+    const { acl, ...keyPatch } = patch || {};
     try {
-      const res = await fetch("/api/keys/bulk", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids, patch }),
-      });
-      if (res.ok) {
-        setKeys((prev) =>
-          prev.map((k) => (selectedKeyIds.has(k.id) ? { ...k, ...patch } : k))
+      if (Object.keys(keyPatch).length) {
+        const res = await fetch("/api/keys/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids, patch: keyPatch }),
+        });
+        if (res.ok) {
+          setKeys((prev) =>
+            prev.map((k) => (selectedKeyIds.has(k.id) ? { ...k, ...keyPatch } : k))
+          );
+        }
+      }
+      if (acl && Object.keys(acl).length) {
+        await Promise.all(
+          ids.map((id) =>
+            fetch(`/api/keys/${id}/acl`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(acl),
+            }).catch(() => {})
+          )
         );
       }
     } catch (err) {
@@ -1764,6 +1783,15 @@ console.log(res.choices[0].message.content);`;
                         title="Reset token usage"
                       >
                         <span className="material-symbols-outlined text-[15px]">restart_alt</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShareKey(key)}
+                        className="p-1 rounded hover:bg-surface-3 text-text-muted hover:text-primary transition-colors cursor-pointer"
+                        title="Share usage monitor"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">share</span>
                       </button>
 
                       <button
@@ -2540,6 +2568,11 @@ console.log(res.choices[0].message.content);`;
           onApply={handleBulkApply}
           onClose={() => setShowBulkEdit(false)}
         />
+      )}
+
+      {/* Usage-share links for one key */}
+      {shareKey && (
+        <KeyShareModal keyId={shareKey.id} keyName={shareKey.name} onClose={() => setShareKey(null)} />
       )}
     </div>
   );

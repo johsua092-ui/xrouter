@@ -16,6 +16,8 @@ export default function BulkEditKeys({ selectedCount, onApply, onClose }) {
     rpmLimit: { on: false, value: "" },
     tpmLimit: { on: false, value: "" },
     allowedModels: { on: false, value: "" },
+    deniedModels: { on: false, value: "" },
+    allowedProviders: { on: false, value: "" },
     ipWhitelist: { on: false, value: "" },
     expiresAt: { on: false, value: "" },
     isActive: { on: false, value: "true" },
@@ -30,6 +32,9 @@ export default function BulkEditKeys({ selectedCount, onApply, onClose }) {
 
   const handleApply = async () => {
     const patch = {};
+    // Deny-list and provider allowlist live in their own table (apiKeyAcls), so they
+    // travel as a nested `acl` and are written once per selected key by the caller.
+    const acl = {};
     for (const [name, { on, value }] of Object.entries(fields)) {
       if (!on) continue;
       if (name === "isActive") {
@@ -47,14 +52,21 @@ export default function BulkEditKeys({ selectedCount, onApply, onClose }) {
           return;
         }
         patch.allowedModels = String(value).trim();
+      } else if (name === "deniedModels" || name === "allowedProviders") {
+        if (!String(value).trim()) {
+          setError(`${labelFor(name)} cannot be empty when enabled (turn the checkbox off to leave it alone)`);
+          return;
+        }
+        acl[name] = String(value).trim();
       } else {
         patch[name] = value;
       }
     }
-    if (!Object.keys(patch).length) {
+    if (!Object.keys(patch).length && !Object.keys(acl).length) {
       setError("Enable at least one field to change");
       return;
     }
+    if (Object.keys(acl).length) patch.acl = acl;
     setError("");
     setApplying(true);
     try {
@@ -67,7 +79,7 @@ export default function BulkEditKeys({ selectedCount, onApply, onClose }) {
     }
   };
 
-  const rows = ["tokenLimit", "resetInterval", "rpmLimit", "tpmLimit", "allowedModels", "ipWhitelist", "expiresAt", "isActive"];
+  const rows = ["tokenLimit", "resetInterval", "rpmLimit", "tpmLimit", "allowedModels", "deniedModels", "allowedProviders", "ipWhitelist", "expiresAt", "isActive"];
 
   return (
     <Modal isOpen onClose={onClose} title={`Bulk edit ${selectedCount} key${selectedCount === 1 ? "" : "s"}`}>
@@ -143,6 +155,8 @@ function labelFor(name) {
     rpmLimit: "Requests per minute (0 = unlimited)",
     tpmLimit: "Tokens per minute (0 = unlimited)",
     allowedModels: "Allowed models pattern",
+    deniedModels: "Denied models pattern",
+    allowedProviders: "Allowed providers",
     ipWhitelist: "IP whitelist",
     expiresAt: "Expiry date",
     isActive: "Status",
@@ -155,6 +169,8 @@ function placeholderFor(name) {
     rpmLimit: "e.g. 60",
     tpmLimit: "e.g. 100000",
     allowedModels: "e.g. anthropic/*, openai/gpt-4o",
+    deniedModels: "e.g. gpt-4*, *opus  (same pattern rules as allowed)",
+    allowedProviders: "e.g. opencode, anthropic, glm",
     ipWhitelist: "e.g. 203.0.113.5, 198.51.100.0/24",
     expiresAt: "leave blank for no expiry",
   }[name] || "";
