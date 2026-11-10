@@ -118,6 +118,18 @@ export async function handleChat(request, clientRawRequest = null) {
       log.warn("AUTH", `Model "${modelStr}" not allowed for this API key`);
       return errorResponse(HTTP_STATUS.FORBIDDEN, `Model "${modelStr}" is not allowed for this API key`);
     }
+    if (valid === "IP_BANNED") {
+      log.warn("AUTH", `Banned client IP ${clientIp} refused`);
+      return errorResponse(HTTP_STATUS.FORBIDDEN, "This client IP is banned");
+    }
+    if (valid === "MODEL_DENIED") {
+      log.warn("AUTH", `Model "${modelStr}" is denied for this API key`);
+      return errorResponse(HTTP_STATUS.FORBIDDEN, `Model "${modelStr}" is denied for this API key`);
+    }
+    if (valid === "PROVIDER_NOT_ALLOWED") {
+      log.warn("AUTH", `Provider behind "${modelStr}" is not allowed for this API key`);
+      return errorResponse(HTTP_STATUS.FORBIDDEN, `Provider behind "${modelStr}" is not allowed for this API key`);
+    }
  if (valid === "KEY_EXPIRED") {
  log.warn("AUTH", "API key expired");
  return errorResponse(HTTP_STATUS.FORBIDDEN, "API key has expired");

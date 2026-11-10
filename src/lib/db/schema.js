@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -298,6 +298,51 @@ export const TABLES = {
     indexes: [
       "CREATE INDEX IF NOT EXISTS idx_notif_created ON notifications(createdAt DESC)",
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_dedupe ON notifications(dedupeKey) WHERE dedupeKey IS NOT NULL",
+    ],
+  },
+  // IP bans — abusive clients (failed logins, key brute force, scraping) held
+  // out before any key is even looked at. banExpiresAt null means permanent.
+  ipBans: {
+    columns: {
+      ip: "TEXT PRIMARY KEY",
+      reason: "TEXT NOT NULL DEFAULT 'manual'",
+      failedAttempts: "INTEGER NOT NULL DEFAULT 1",
+      banStartedAt: "TEXT NOT NULL",
+      banExpiresAt: "TEXT",
+      notes: "TEXT DEFAULT ''",
+      createdAt: "TEXT NOT NULL",
+    },
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS idx_ipb_expires ON ipBans(banExpiresAt)",
+      "CREATE INDEX IF NOT EXISTS idx_ipb_started ON ipBans(banStartedAt DESC)",
+    ],
+  },
+  // Per-key deny-list + provider allowlist. A separate table on purpose: apiKeys
+  // keeps its own shape, so an exported database still restores into a build
+  // that has never heard of these columns.
+  apiKeyAcls: {
+    columns: {
+      apiKeyId: "TEXT PRIMARY KEY",
+      deniedModels: "TEXT DEFAULT ''",
+      allowedProviders: "TEXT DEFAULT ''",
+      notes: "TEXT DEFAULT ''",
+      updatedAt: "TEXT",
+    },
+  },
+  // Public usage-share links: one token shows one key's aggregates and nothing else.
+  shareTokens: {
+    columns: {
+      token: "TEXT PRIMARY KEY",
+      apiKeyId: "TEXT NOT NULL",
+      label: "TEXT DEFAULT ''",
+      expiresAt: "TEXT",
+      viewCount: "INTEGER NOT NULL DEFAULT 0",
+      lastViewedAt: "TEXT",
+      createdAt: "TEXT NOT NULL",
+    },
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS idx_sharetok_key ON shareTokens(apiKeyId)",
+      "CREATE INDEX IF NOT EXISTS idx_sharetok_expires ON shareTokens(expiresAt)",
     ],
   },
 };

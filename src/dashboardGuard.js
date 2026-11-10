@@ -48,7 +48,8 @@ const PUBLIC_API_PATHS = [
 const PUBLIC_PREFIXES = ["/v1", "/v1beta", "/api/v1", "/api/v1beta", "/codex", "/responses", "/models", "/model"];
 
 // Public static web pages that require no authentication
-const PUBLIC_WEB_PAGES = ["/claim", "/market"];
+// `/share/<token>` is a read-only usage monitor: the token is the whole authorisation.
+const PUBLIC_WEB_PAGES = ["/claim", "/market", "/share"];
 
 // Always require JWT token regardless of requireLogin setting
 const ALWAYS_PROTECTED = [

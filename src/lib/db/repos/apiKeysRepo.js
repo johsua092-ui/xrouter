@@ -6,6 +6,9 @@ import { DEFAULT_PERMISSIONS } from "../../auth/permissionPaths.js";
 // the self-check loads it without dragging in the database driver and uuid. Re-exported
 // here so the existing `from "./apiKeysRepo.js"` importers are unaffected.
 import { parseAllowedModels, matchesAllowedModels, buildAllowedModelsSql, applyModelChangesToAllowList } from "./allowedModels.js";
+// Abuse guard reads: an IP ban and a key's deny-list / provider allowlist. Both live in
+// their own tables, so apiKeys itself never changes shape and old exports still restore.
+import { isIpBanned, aclVerdict } from "./abuseRepo.js";
 
 export { parseAllowedModels, matchesAllowedModels, buildAllowedModelsSql };
 
@@ -294,6 +297,10 @@ export async function getTeamSpendUsd(apiKey, sinceIso) {
 }
 
 export async function validateApiKey(key, requestedModel = null, clientIp = null) {
+  // A banned address is refused before any key is looked at, so a blocked client
+  // cannot even probe which keys exist. Checked outside the transaction below.
+  if (clientIp && (await isIpBanned(clientIp))) return "IP_BANNED";
+
   const db = await getAdapter();
   let result = false;
 
@@ -471,6 +478,19 @@ export async function validateApiKey(key, requestedModel = null, clientIp = null
 
       if (!isAllowed) {
         result = "MODEL_NOT_ALLOWED";
+        return;
+      }
+    }
+
+    // Deny-list + provider allowlist. One lookup on row.id, which is the key id for a
+    // key and the team id for a team-wide key — so a team's restriction reaches its keys.
+    const acl = db.get(`SELECT deniedModels, allowedProviders FROM apiKeyAcls WHERE apiKeyId = ?`, [row.id]);
+    if (acl) {
+      const slash = typeof requestedModel === "string" ? requestedModel.indexOf("/") : -1;
+      const requestedProvider = slash > 0 ? requestedModel.slice(0, slash).trim().toLowerCase() : null;
+      const verdict = aclVerdict(acl, requestedModel, requestedProvider);
+      if (verdict) {
+        result = verdict;
         return;
       }
     }
