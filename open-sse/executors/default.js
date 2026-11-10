@@ -182,7 +182,7 @@ export class DefaultExecutor extends BaseExecutor {
   }
 
   buildHeaders(credentials, stream = true, url, model, body = null) {
-    if (this.provider === "ovh" || this.provider === "kilo-gateway" || this.config?.noAuth || this.config?.authType === "none") {
+    if (this.provider === "ovh" || this.config?.noAuth || this.config?.authType === "none") {
       const headers = { "Content-Type": "application/json", ...this.config.headers };
       delete headers["Authorization"];
       delete headers["authorization"];

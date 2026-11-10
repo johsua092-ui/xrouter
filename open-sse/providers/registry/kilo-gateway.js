@@ -8,8 +8,8 @@ export default {
   ],
   uiAlias: "kgw",
   category: "freeTier",
-  hasFree: true,
-  noAuth: true,
+  hasFree: false,
+  noAuth: false,
   display: {
     name: "Kilo Gateway",
     icon: "login",
@@ -20,8 +20,8 @@ export default {
       apiKeyUrl: "https://kilo.ai/dashboard?tab=apiKeys",
     },
   },
-  authType: "none",
-  authModes: ["none"],
+  authType: "apikey",
+  authModes: ["apikey"],
   transport: {
     baseUrl: "https://api.kilo.ai/api/gateway/chat/completions",
     validateUrl: "https://api.kilo.ai/api/gateway/models",
