@@ -17,15 +17,12 @@ const ICON_ALIASES = {
   "copilot-web": "copilot-web",
   "zai-web": "zai-web",
   "yuanbao-web": "yuanbao-web",
-  "duckduckgo-web": "duckduckgo-web",
   "notion-web": "notion-web",
   zcode: "zcode",
   zc: "zcode",
   "arena-ai": "arena-ai",
   arena: "arena-ai",
   lmsys: "arena-ai",
-  opensatan: "opensatan",
-  satan: "opensatan",
 };
 
 const TYPE_PREFIX_ALIASES = {

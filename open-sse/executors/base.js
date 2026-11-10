@@ -67,7 +67,7 @@ export class BaseExecutor {
       }
     } else {
       // Standard Bearer token auth for other providers (skip if provider is noAuth)
-      const isNoAuth = this.config.authType === "none" || this.config.noAuth || this.provider === "ovh" || this.provider === "opensatan";
+      const isNoAuth = this.config.authType === "none" || this.config.noAuth || this.provider === "ovh";
       if (!isNoAuth) {
         if (credentials.accessToken && credentials.accessToken !== "public") {
           headers["Authorization"] = `Bearer ${credentials.accessToken}`;

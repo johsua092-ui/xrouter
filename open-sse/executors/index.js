@@ -30,11 +30,7 @@ import { DefaultExecutor } from "./default.js";
 import { DevinCliExecutor } from "./devin-cli.js";
 import { ZCodeExecutor } from "./zcode.js";
 import { MinimaxCodeExecutor } from "./minimax-code.js";
-import { KiloGatewayExecutor } from "./kilo-gateway.js";
-import { OpenSatanExecutor } from "./opensatan.js";
-import { KomaFreeExecutor } from "./koma-free.js";
 import { AdcodeExecutor } from "./adcode.js";
-import { PteroExecutor } from "./ptero.js";
 
 const executors = {
   antigravity: new AntigravityExecutor(),
@@ -62,9 +58,6 @@ const executors = {
   "deepseek-web": new DeepSeekWebExecutor(),
   dsw: new DeepSeekWebExecutor(),
   "deepseek-cookie": new DeepSeekWebExecutor(),
-  "kilo-gateway": new KiloGatewayExecutor(),
-  kilogateway: new KiloGatewayExecutor(),
-  kgw: new KiloGatewayExecutor(),
   "arena-ai": new ArenaAIExecutor(),
   arena: new ArenaAIExecutor(),
   lmsys: new ArenaAIExecutor(),
@@ -88,13 +81,8 @@ const executors = {
   zcode: new ZCodeExecutor(),
   glm: new ZCodeExecutor("glm"),
   "glm-cn": new ZCodeExecutor("glm-cn"),
-  opensatan: new OpenSatanExecutor(),
-  satan: new OpenSatanExecutor(),
-  "koma-free": new KomaFreeExecutor(),
-  koma: new KomaFreeExecutor(),
   adcode: new AdcodeExecutor(),
   adc: new AdcodeExecutor(),
-  ptero: new PteroExecutor(),
 };
 
 const defaultCache = new Map();
@@ -138,7 +126,4 @@ export { default as ZedExecutor } from "./zed.js";
 export { default as WindsurfExecutor } from "./windsurf.js";
 export { DevinCliExecutor } from "./devin-cli.js";
 export { ZCodeExecutor } from "./zcode.js";
-export { OpenSatanExecutor } from "./opensatan.js";
-export { KomaFreeExecutor } from "./koma-free.js";
 export { AdcodeExecutor } from "./adcode.js";
-export { PteroExecutor } from "./ptero.js";

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { DefaultExecutor } from "./default.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
+import { getOpencodeUa } from "../services/opencodeVersion.js";
 import { isMuseSparkModel, isOpencodeFreeTierModel } from "../providers/models/helpers.js";
 import {
   normalizeResponsesInput,
@@ -15,7 +16,6 @@ const MAX_SESSION_LENGTH = 256;
 
 const RESPONSES_BASE_URL = "https://opencode.ai/inference/v1/responses";
 const MAX_TOOL_NAME_LEN = 128;
-const OPENCODE_UA = "opencode/latest/2.0.32/cli";
 export const OPENCODE_SESSION_RE = /^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
 const BASE62_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 import {
@@ -226,7 +226,7 @@ export class OpenCodeZenExecutor extends DefaultExecutor {
     for (const [k, v] of Object.entries(raw)) lower[k.toLowerCase()] = v;
     const downstreamUa = lower["user-agent"] || "";
     headers["Authorization"] = credentials?.apiKey ? `Bearer ${credentials.apiKey}` : "Bearer public";
-    headers["User-Agent"] = hasValidOpencodeVersion(downstreamUa) ? downstreamUa : OPENCODE_UA;
+    headers["User-Agent"] = hasValidOpencodeVersion(downstreamUa) ? downstreamUa : getOpencodeUa();
     headers["x-opencode-client"] = lower["x-opencode-client"] || "cli";
     headers["x-opencode-project"] = lower["x-opencode-project"] || "global";
     const prepared = credentials?.[SESSION_FIELD];

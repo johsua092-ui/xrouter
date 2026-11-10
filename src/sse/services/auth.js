@@ -53,7 +53,6 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     const isNoAuth =
       providerId === "opencode" ||
       providerId === "ovh" ||
-      providerId === "kilo-gateway" ||
       Boolean(FREE_PROVIDERS[providerId]?.noAuth) ||
       Boolean(FREE_TIER_PROVIDERS[providerId]?.noAuth) ||
       Boolean(AI_PROVIDERS[providerId]?.noAuth);

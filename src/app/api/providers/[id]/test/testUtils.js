@@ -757,11 +757,6 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
         const res = await fetchWithConnectionProxy("https://api.deepseek.com/models", { headers: { Authorization: `Bearer ${connection.apiKey}` } }, effectiveProxy);
         return { valid: res.ok, error: res.ok ? null : "Invalid API key" };
       }
-      case "kilo-gateway": {
-        const headers = connection.apiKey ? { Authorization: `Bearer ${connection.apiKey}` } : {};
-        const res = await fetchWithConnectionProxy("https://api.kilo.ai/api/gateway/models", { headers }, effectiveProxy);
-        return { valid: res.ok, error: res.ok ? null : "Kilo gateway unreachable" };
-      }
       case "groq": {
         const res = await fetchWithConnectionProxy("https://api.groq.com/openai/v1/models", { headers: { Authorization: `Bearer ${connection.apiKey}` } }, effectiveProxy);
         return { valid: res.ok, error: res.ok ? null : "Invalid API key" };

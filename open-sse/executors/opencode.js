@@ -15,6 +15,7 @@ import { resolveSessionId } from "../utils/sessionManager.js";
 import { isMuseSparkModel } from "../providers/models/helpers.js";
 import { applyFingerprintTools } from "../utils/opencodeFingerprint.js";
 import { opencodeTlsFetch } from "../services/opencodeTlsClient.js";
+import { getOpencodeUa } from "../services/opencodeVersion.js";
 import { ANTHROPIC_API_VERSION } from "../providers/shared.js";
 import {
   normalizeResponsesInput,
@@ -24,8 +25,9 @@ import {
 } from "../translator/formats/responsesApi.js";
 
 // OpenCode v2 UA shape: opencode/<channel>/<version>/<client>. Upstream rejects
-// the v1 "opencode/1.18.x" form with 403 FreeTierError since 2026-10-14.
-const OPENCODE_UA = "opencode/latest/2.2.5/cli";
+// the v1 "opencode/1.18.x" form with 403 FreeTierError since 2026-10-14. The
+// version comes from OpenCode's own updater (services/opencodeVersion.js) so it
+// never ages out; 2.2.5 is only the cold-start floor.
 const OPENCODE_CLIENT = "cli";
 const MAX_SESSION_LENGTH = 256;
 const MAX_TOOL_NAME_LEN = 128;
@@ -650,7 +652,7 @@ export class OpenCodeExecutor extends BaseExecutor {
     const headers = {
       "Content-Type": "application/json",
       "Authorization": "Bearer public",
-      "User-Agent": isOpencodeDownstream ? downstreamUa : OPENCODE_UA,
+      "User-Agent": isOpencodeDownstream ? downstreamUa : getOpencodeUa(),
       "b3": `${traceId}-${spanId}-1-${parentSpanId}`,
       "traceparent": `00-${traceId}-${spanId}-01`,
       "x-opencode-client": lower["x-opencode-client"] || OPENCODE_CLIENT,

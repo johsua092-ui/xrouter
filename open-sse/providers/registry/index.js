@@ -42,7 +42,6 @@ import p40 from "./deepgram.js";
 import p41 from "./deepseek-web.js";
 import p42 from "./deepseek.js";
 import p43 from "./devin-cli.js";
-import p44 from "./duckduckgo-web.js";
 import p45 from "./edge-tts.js";
 import p46 from "./elevenlabs.js";
 import p47 from "./exa.js";
@@ -69,7 +68,6 @@ import p67 from "./iflow.js";
 import p68 from "./inworld.js";
 import p69 from "./jina-ai.js";
 import p70 from "./jina-reader.js";
-import p71 from "./kilo-gateway.js";
 import p72 from "./kilocode.js";
 import p73 from "./kimchi.js";
 import p74 from "./kimi-web.js";
@@ -143,9 +141,6 @@ import p145 from "./nous.js";
 import p146 from "./minimax-code.js";
 import p147 from "./minimax-code-global.js";
 import p149 from "./dothoosh.js";
-import p150 from "./opensatan.js";
-import p151 from "./koma-free.js";
-import p153 from "./ptero.js";
 import p154 from "./zcode.js";
 import p155 from "./ovh.js";
 
@@ -194,7 +189,6 @@ export default [
   p41,
   p42,
   p43,
-  p44,
   p45,
   p46,
   p47,
@@ -221,7 +215,6 @@ export default [
   p68,
   p69,
   p70,
-  p71,
   p72,
   p73,
   p74,
@@ -295,9 +288,6 @@ export default [
   p146,
   p147,
   p149,
-  p150,
-  p151,
-  p153,
   p154,
   p155,
 ];

@@ -1,5 +1,12 @@
 # v0.1.0 (2026-11-09)
 
+- **Retire Five Providers (DuckDuckGo Web, Koma Free, OpenSatan, Ptero, Kilo Gateway)**:
+  - Deleted `open-sse/providers/registry/{duckduckgo-web,koma-free,opensatan,ptero,kilo-gateway}.js` and their executors `{koma-free,opensatan,ptero,kilo-gateway}.js`; removed every import/map/export from `providers/registry/index.js` and `executors/index.js`.
+  - Dropped the leftover special-cases: the `opensatan` no-auth shortlist in `executors/base.js`, the `kilo-gateway` no-auth injection in `src/sse/services/auth.js`, the `kilo-gateway` validation case in `/api/providers/[id]/test/testUtils.js`, the icon-map entries in `providerIcon.js`, and the Telegram bot's provider menu + callback regex.
+  - Purged any `providerConnections` rows for those ids (0 rows existed).
+- **OpenCode UA Version Now Read From OpenCode's Own Updater**:
+  - New `open-sse/services/opencodeVersion.js`: the version comes from `https://opencode.ai/update/api/latest/cli/npm`, refreshed in the background at most every 6h, with `2.2.5` as the cold-start floor and `OPENCODE_VERSION` as an explicit pin. Never blocks a request.
+  - `executors/opencode.js` and `executors/opencode-zen.js` no longer carry hardcoded versions (`2.2.5` / `2.0.32`) — both compose the UA per request via `getOpencodeUa()`. The updater already names `2.2.6`, so the old literal was one release stale.
 - **Fix Kilo Gateway 401 INVALID_TOKEN (Kilo Now Requires Auth)**:
   - `open-sse/providers/registry/kilo-gateway.js` was registered as keyless (`noAuth: true`, `authType: "none"`), but `api.kilo.ai/api/gateway/chat/completions` now returns `401 INVALID_TOKEN` for all 12 models (only `/models` is still public). Switched to `authType: "apikey"` / `authModes: ["apikey"]` with `hasFree: false` so the dashboard collects a real key.
   - Removed the hardcoded `kilo-gateway` no-auth bypass in `open-sse/executors/default.js#buildHeaders`, so the `Authorization: Bearer <key>` header is actually sent upstream.
