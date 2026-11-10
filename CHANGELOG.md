@@ -1,5 +1,10 @@
 # v0.1.0 (2026-11-09)
 
+- **Share Monitor Restyled to the Workspace Theme, Now With Latency and Usage Detail**:
+  - The public share page used a standalone dark palette of its own, so it ignored the workspace theme. Rebuilt in the dashboard's own instrument-plate language from the shared tokens — `rounded-[6px]`, one hairline border, divided header strip, ember accent bar, uppercase micro-labels, tabular figures — so it now follows the ember palette in both light and dark.
+  - Added real readings rather than decoration: time-to-first-token and total latency (avg / p50 / p95 plus a spread bar, read from the retained request details), a 14-day requests-per-day column chart, a model-mix bar list, a succeeded/failed split, and a newest-first recent-requests table.
+  - Every chart is hand-authored inline SVG bound to the theme's colour tokens — no chart library, no generated imagery, no placeholder data; a panel with nothing to show says so instead of drawing a zero.
+  - Verified: `/share/<token>` answers 200 with every panel populated.
 - **Fix Share Links Pointing at the Server's Own Bind Address**:
   - Links minted from a key row came out as `http://0.0.0.0:3000/share/<token>` — unopenable — because the URL was built from the Next server's own origin, and that server binds `0.0.0.0`. New `src/lib/publicUrl.js` resolves the origin from the host the caller actually used (`x-forwarded-host` + `x-forwarded-proto`, `x-9r-forwarded-host`, then `host`), falls back to a configured `PUBLIC_BASE_URL` / `BASE_URL` / `NEXT_PUBLIC_BASE_URL`, and only then to the request origin with a loopback/wildcard host rewritten. A bind address is never handed out.
   - `GET`/`POST /api/keys/[id]/share` now use it, and the share modal prefers the browser's own `window.location.origin` when displaying and copying a link — so the copied URL is the host the operator is actually on, whatever the proxy does.
