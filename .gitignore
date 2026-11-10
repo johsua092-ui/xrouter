@@ -47,6 +47,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Tailscale Funnel TLS material is host-local; a private key must never be committed.
+*.ts.net.crt
+*.ts.net.key
+
 # vercel
 .vercel
 
