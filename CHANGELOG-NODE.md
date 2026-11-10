@@ -1,5 +1,9 @@
 # v0.1.0 (2026-11-09)
 
+- **Fix Share Links Pointing at the Server's Own Bind Address**:
+  - Links minted from a key row came out as `http://0.0.0.0:3000/share/<token>` — unopenable — because the URL was built from the Next server's own origin, and that server binds `0.0.0.0`. New `src/lib/publicUrl.js` resolves the origin from the host the caller actually used (`x-forwarded-host` + `x-forwarded-proto`, `x-9r-forwarded-host`, then `host`), falls back to a configured `PUBLIC_BASE_URL` / `BASE_URL` / `NEXT_PUBLIC_BASE_URL`, and only then to the request origin with a loopback/wildcard host rewritten. A bind address is never handed out.
+  - `GET`/`POST /api/keys/[id]/share` now use it, and the share modal prefers the browser's own `window.location.origin` when displaying and copying a link — so the copied URL is the host the operator is actually on, whatever the proxy does.
+  - Verified live: behind the proxy the link resolves to `https://x.aikernel.qzz.io/share/KYXy7rNbJZhneR_JWV85DElJ`; hit directly it resolves to `http://127.0.0.1:3000/share/<token>`. Equivalence of the resolver was checked against its predecessor across proxy, direct, wildcard, funnel and no-header requests — identical output on every case.
 - **Anti-Abuse Controls Wired Into the Dashboard**:
   - **Console Log** now has two tabs: the live log, and a **Banned IPs** panel listing manual bans next to the automatic auto-jail rows — with a ban form (IP, reason, minutes; `0` = permanent), refresh, and an Unban that clears whichever tier is holding the address.
   - **Bulk edit keys** gained *Denied models pattern* and *Allowed providers*. They live in the separate `apiKeyAcls` table, so they travel as a nested `acl` and are written once per selected key rather than through `keys/bulk`.

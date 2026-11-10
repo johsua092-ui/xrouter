@@ -83,6 +83,15 @@ export default function KeyShareModal({ keyId, keyName, onClose }) {
     }
   };
 
+  // The browser is the only party that knows the public host the operator is on —
+  // the server binds 0.0.0.0, so its own idea of the origin is unusable. Prefer it.
+  const linkFor = (token, serverUrl) => {
+    if (typeof window !== "undefined" && window.location?.origin) {
+      return `${window.location.origin}/share/${token}`;
+    }
+    return serverUrl || `/share/${token}`;
+  };
+
   const describeExpiry = (iso) => {
     if (!iso) return "never expires";
     const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
@@ -119,7 +128,7 @@ export default function KeyShareModal({ keyId, keyName, onClose }) {
             shares.map((s) => (
               <div key={s.token} className="p-3 flex items-center gap-2">
                 <div className="flex-1 min-w-0">
-                  <div className="font-mono text-xs text-text-main truncate">{s.url || `/share/${s.token}`}</div>
+                  <div className="font-mono text-xs text-text-main truncate">{linkFor(s.token, s.url)}</div>
                   <div className="text-[11px] text-text-muted">
                     {describeExpiry(s.expiresAt)} · {s.viewCount || 0} view{(s.viewCount || 0) === 1 ? "" : "s"}
                     {s.lastViewedAt ? ` · last ${s.lastViewedAt.slice(0, 10)}` : ""}
@@ -129,7 +138,7 @@ export default function KeyShareModal({ keyId, keyName, onClose }) {
                   size="sm"
                   variant="outline"
                   icon={copied === s.token ? "check" : "content_copy"}
-                  onClick={() => copy(s.url || `/share/${s.token}`, s.token)}
+                  onClick={() => copy(linkFor(s.token, s.url), s.token)}
                 >
                   {copied === s.token ? "Copied" : "Copy"}
                 </Button>
