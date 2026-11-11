@@ -1,5 +1,11 @@
 # v0.1.0 (2026-11-09)
 
+- **Rotate an API Key From the API (Secret Swap Without Losing Access)**:
+  - New `POST /api/keys/[id]/rotate` mints a fresh secret for an existing key and keeps its id, name, `isActive` and access config — a leaked or shared key can be swapped without rebuilding its restrictions by hand. `rotateApiKey()` sits with the other key repositories and uses the server's own machine id, so a legacy `sk-{random}` key also upgrades to the current `sk-{machineId}-{keyId}-{crc8}` shape as it rotates.
+  - The response uses the same flat shape as `POST /api/keys` (the object carries the new secret in `key`), so a client that created a key does not have to special-case this endpoint.
+  - Rename already existed in this fork — `PUT /api/keys/[id]` accepted `name` with duplicate detection — and its validation now runs through the same shared `keyName` helper as create, which adds the 100-character cap.
+  - Verified live on a throwaway key: secret changed; id, name, `allowedModels` and `isActive` preserved; the old secret is rejected with **401**; the new secret is accepted with **200**. Probe keys were deleted afterwards (9 keys remain, none of them test keys).
+  - The upstream PR also shipped dashboard UI for rename + rotate. That is not ported here because this fork's `EndpointPageClient` has since diverged (anti-abuse work); the endpoint is fully usable over the API in the meantime.
 - **Image Generation Now Honours the Proxy Configuration**:
   - The image pipeline ignored proxies entirely: unlike `chatCore`, `imageGenerationCore` never read `connectionProxyEnabled` / `connectionProxyUrl` / `vercelRelayUrl` / `connectionProxyPoolId`, so every image request left on the host's own address while chat traffic was tunnelled. It now resolves the same `proxyOptions` shape chat uses, logs the same `[PROXY]` line, and routes through `proxyAwareFetch`.
   - Covered: the main request and the post-refresh retry, `refreshCredentials`, `urlToBase64` (image-URL providers plus both base64 fallbacks), the adapter `parseResponse` bag, and the executor-delegating adapters. The polling loops in `blackForestLabs`, `falAi`, `nanobanana` and `runwayml` poll through the proxy too, and the Antigravity adapter forwards `proxyOptions` into the executor along with its own 401/403 refresh-and-retry.

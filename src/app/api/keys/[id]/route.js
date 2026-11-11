@@ -3,6 +3,7 @@ import { deleteApiKey, getApiKeyById, getApiKeys, updateApiKey } from "@/lib/loc
 import { getSessionContext, DEFAULT_PERMISSIONS } from "@/lib/auth/dashboardPermissions";
 import { parseAllowedModels, matchesAllowedModels } from "@/lib/db/repos/apiKeysRepo";
 import { bumpVersion } from "@/lib/auth/sessionVersions";
+import { validateKeyName } from "@/shared/utils/keyName.js";
 import { audit } from "@/lib/auth/auditLog";
 
 // GET /api/keys/[id] - Get single key
@@ -56,10 +57,12 @@ export async function PUT(request, { params }) {
 
     let trimmedName;
     if (body.name !== undefined) {
-      trimmedName = typeof body.name === "string" ? body.name.trim() : "";
-      if (!trimmedName) {
-        return NextResponse.json({ error: "Name is required" }, { status: 400 });
+      // Shared with create: trimmed, non-empty, and capped at 100 characters.
+      const checkedName = validateKeyName(body.name);
+      if (!checkedName.ok) {
+        return NextResponse.json({ error: checkedName.error }, { status: 400 });
       }
+      trimmedName = checkedName.value;
       const existingKeys = await getApiKeys();
       if (existingKeys.some((k) => k.id !== id && k.name === trimmedName)) {
         return NextResponse.json({ error: `A key named "${trimmedName}" already exists. Use a different name.` }, { status: 409 });
