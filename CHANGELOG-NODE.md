@@ -1,3 +1,16 @@
+# v0.0.2 (2026-11-11)
+
+**Framework migration release — Next.js 16 + React 19, with the defects the jump exposed fixed.**
+
+- **Next.js 14 → 16 and React 18 → 19**: the gateway now runs on the same generation as upstream. `next` `^16.4.2` (resolved `16.4.6`), `react`/`react-dom` `19.2.4`, builds pinned to the webpack compiler via `next build --webpack` so the project's own bundler configuration still applies instead of being silently ignored by the new default.
+- **`src/middleware.js` → `src/proxy.js`**: Next 16 renamed the request-interception convention. The file was moved and the export renamed to `proxy()`, with the origin/`Sec-Fetch-Site` gate for state-changing `/api/*` requests preserved exactly. Both conventions must never coexist — with both present the build refuses the conflict, and with only the old one on Next 16 the gate would have stopped running with no error to show for it.
+- **Defect fixed — obfuscated route segment export**: `src/app/api/keys/[id]/share/route.js` had its `export const dynamic = "force-dynamic"` rewritten into a computed expression over ~150 decoy symbols. Next 16 validates segment configuration exports and rejects the computed form outright, so the route would not build; the value was also not guaranteed to resolve to `force-dynamic` at all. Restored to the literal.
+- **Defect fixed — synchronous `headers()`**: `src/app/api/shutdown/route.js` called `headers().get(...)` without an await. `headers()` became asynchronous in Next 15, so the call throws instead of returning a response.
+- **Configuration brought up to the framework**: removed `experimental.serverComponentsExternalPackages` and `experimental.serverComponentsHmrCache` (both removed from Next 16; the top-level `serverExternalPackages` form was already in use), and raised `eslint-config-next` to match the framework.
+- **Build isolation**: verification used a separate dist directory (`NEXT_DIST_DIR=.next16`), a copy of the database, and an alternate port, so the running service and the live database were never in the path of the migration.
+- **Audited for the jump** and confirmed already correct: `cookies()` awaited everywhere, route-handler `params` awaited, page-level `searchParams` only read through the `useSearchParams()` hook, no `useFormState`, no `next/legacy/image`.
+- Verified: production build completes with `166/166` static pages and exit 0 into its own dist directory; live service, its build directory, and the production database untouched throughout.
+
 # v0.1.0 (2026-11-09)
 
 - **Build Directory Is Now Configurable End to End (`NEXT_DIST_DIR`)**:

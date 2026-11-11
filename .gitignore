@@ -116,3 +116,6 @@ graphify-out/*
 .start-dev.ps1
 start-dev-silent.cjs
 debug.log
+
+# Next build output for any dist dir (NEXT_DIST_DIR)
+.next*/
