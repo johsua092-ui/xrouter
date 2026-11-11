@@ -31,6 +31,24 @@ const tracingRoot = process.env.NEXT_TRACING_ROOT_MODE === "workspace"
   : projectRoot;
 const proxyClientMaxBodySize = process.env.NINEROUTER_PROXY_CLIENT_MAX_BODY_SIZE || "128mb";
 
+// Next 14 keeps the tracing keys under `experimental`; Next 15 moved them to the top level and
+// renamed `serverComponentsExternalPackages` to `serverExternalPackages`. Declaring both sets at
+// once makes the older framework warn and — the part that actually hurts — silently ignore the
+// tracing keys, which is how the file tracer ends up walking a Windows user profile into the
+// legacy "Application Data" junction loop (EPERM scandir) instead of staying inside the repo.
+function detectNextMajor() {
+  try {
+    const pkg = JSON.parse(readFileSync(join(projectRoot, "node_modules", "next", "package.json"), "utf8"));
+    const major = Number(String(pkg.version).split(".")[0]);
+    return Number.isFinite(major) ? major : 0;
+  } catch {
+    // Next not installed yet (fresh checkout before `npm install`): assume the modern layout.
+    return 0;
+  }
+}
+const nextMajor = detectNextMajor();
+const legacyConfig = nextMajor > 0 && nextMajor <= 14;
+
 const externalPkgs = ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite", "open", "wreq-js"];
 const tracingExcludes = {
   "*": [
@@ -50,20 +68,38 @@ const nextConfig = {
   poweredByHeader: false,
   distDir: process.env.NEXT_DIST_DIR || ".next",
   output: "standalone",
-  // Top-level keys for Next.js 15 / 16
-  outputFileTracingRoot: tracingRoot,
-  outputFileTracingExcludes: tracingExcludes,
-  serverExternalPackages: externalPkgs,
-  turbopack: {
-    root: tracingRoot
-  },
+  // Tracing, externals and the bundler root, written in the dialect of the framework that is
+  // actually installed: top level on Next 15+, under `experimental` on Next 14 (where the
+  // top-level names do not exist at all).
+  ...(legacyConfig
+    ? {}
+    : {
+        outputFileTracingRoot: tracingRoot,
+        outputFileTracingExcludes: tracingExcludes,
+        serverExternalPackages: externalPkgs,
+        turbopack: {
+          root: tracingRoot
+        },
+      }),
   images: {
     unoptimized: true
   },
   env: stampBuild(),
   experimental: {
-    // #1529/#1572: LLM clients can send long context or base64 image payloads through /v1 rewrites.
-    proxyClientMaxBodySize,
+    ...(legacyConfig
+      ? {
+          outputFileTracingRoot: tracingRoot,
+          outputFileTracingExcludes: tracingExcludes,
+          serverComponentsExternalPackages: externalPkgs,
+        }
+      : {
+          // Next 15+ knows these under their new names only; the old `experimental.`
+          // spellings moved out and are rejected by the config validator.
+          // #1529/#1572: LLM clients can send long context or base64 image payloads through /v1 rewrites.
+          proxyClientMaxBodySize,
+          // Cache fetch responses across HMR refreshes for faster dev reloads.
+          serverComponentsHmrCache: true,
+        }),
     // Tree-shake heavy barrel imports to cut compile + bundle size
     optimizePackageImports: ["@xyflow/react", "@dnd-kit/core", "@dnd-kit/sortable", "material-symbols", "marked"],
   },
