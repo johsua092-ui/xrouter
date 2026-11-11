@@ -1,5 +1,9 @@
 # v0.1.0 (2026-11-09)
 
+- **Expose Reasoning Levels on `/v1/models` and Write Effort Variants for OpenCode**:
+  - `/v1/models` now publishes `thinking_levels` — the same selectable set the dashboard picker uses — so a client can build its effort selector straight from the gateway instead of keeping a per-model table of its own. The field is omitted entirely for a model with no reasoning.
+  - **Live: 505 of 674 models now carry it (was 0).** e.g. `ag/gemini-4-argon-high → ["low","medium","high"]`, `cc/claude-opus-5-5 → ["low","medium","high","xhigh","max"]`, `oc/glm-5.3-flash-free → ["minimal","low","medium","high","xhigh"]`.
+  - `POST /api/cli-tools/opencode-settings` now writes opencode `variants` (`{level: {reasoningEffort: level}}`) per model, derived from those same levels, resolving the `alias/model` form through `ALIAS_TO_ID` / `PROVIDER_ID_TO_ALIAS`. Variants the user has already tuned are preserved — generated only when absent.
 - **OpenCode Free Lane: Retry Transient Overload, Drop Spent Sessions**:
   - The free lane sheds load with `429 {"message":"The inference service is overloaded…"}` even after the request passes the TLS gate. The executor now classifies a gated rejection: `overloaded` → retry with backoff (8 attempts, 800 ms → 4 s, ~20 s total, abort-aware); any other 429 or a 403 → treat the session as spent and drop the memoised id, so the next request mints a fresh one instead of reusing a flagged session until restart. Every other response is handed back untouched, and the discarded 429's stream is released rather than left half-read.
   - Verified live: a real quota 429 (`Free usage limit reached`) is classified as session-spent and returns in ~4 s instead of looping for 20 s.
