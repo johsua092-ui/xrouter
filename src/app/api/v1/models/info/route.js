@@ -3,6 +3,7 @@ import { AI_PROVIDERS, ALIAS_TO_ID } from "@/shared/constants/providers";
 import { getModelKind } from "@/shared/constants/models";
 import { getSettings } from "@/lib/localDb";
 import { isValidApiKey, apiKeyGateFailure } from "@/sse/services/auth.js";
+import { getClientIp } from "@/lib/auth/loginLimiter";
 
 const KIND_ENDPOINT = {
   llm: "/v1/chat/completions",
@@ -91,7 +92,7 @@ export async function GET(request) {
   const bearer = auth.match(/^Bearer\s+(.+)$/i);
   const apiKey = (bearer?.[1] || request?.headers?.get("x-api-key") || "").trim() || null;
   if (settings?.requireApiKey && apiKey) {
-    const failure = apiKeyGateFailure(await isValidApiKey(apiKey), true);
+    const failure = apiKeyGateFailure(await isValidApiKey(apiKey, null, getClientIp(request)), true);
     if (failure) {
       return Response.json(
         { error: { message: failure.message, type: "invalid_request_error" } },

@@ -26,6 +26,7 @@ import { getLiveCatalogSnapshot, requestLiveCatalogRefresh } from "@/lib/modelCa
 import { capabilitiesFromServiceKind, getCapabilitiesForModel, aggregateComboCapabilities } from "open-sse/providers/capabilities.js";
 import { getThinkingLevels } from "open-sse/providers/thinkingLevels.js";
 import { fetchSuggestedModelsServer } from "@/app/api/providers/suggested-models/filters.js";
+import { getClientIp } from "@/lib/auth/loginLimiter";
 
 // Qoder shares one live resolver across intl (qoder) and CN (qoder-cn); the
 // credentials carry the provider id so qoderModels picks the right region's
@@ -751,7 +752,7 @@ export async function GET(request) {
           { status: 401, headers: { "Access-Control-Allow-Origin": "*" } }
         );
       }
-      const failure = apiKeyGateFailure(await isValidApiKey(apiKey), true);
+      const failure = apiKeyGateFailure(await isValidApiKey(apiKey, null, getClientIp(request)), true);
       if (failure) {
         return Response.json(
           { error: { message: failure.message, type: "invalid_request_error" } },

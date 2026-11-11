@@ -59,7 +59,7 @@ export async function handleFetch(request) {
     return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
   }
   if (apiKey) {
-    const failure = apiKeyGateFailure(await isValidApiKey(apiKey), settings.requireApiKey);
+    const failure = apiKeyGateFailure(await isValidApiKey(apiKey, null, getClientIp(request)), settings.requireApiKey);
     if (failure) {
       if (shouldLogAuthFailure("fetch", getClientIp(request), apiKey.slice(0, 8))) {
         log.warn("AUTH", `${failure.message} (requireApiKey=${settings.requireApiKey})`);

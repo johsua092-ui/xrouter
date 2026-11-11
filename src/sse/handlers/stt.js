@@ -9,6 +9,7 @@ import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import { AI_PROVIDERS } from "@/shared/constants/providers";
 import * as log from "../utils/logger.js";
+import { getClientIp } from "@/lib/auth/loginLimiter";
 
 // Providers requiring credentials for STT
 const CREDENTIALED_PROVIDERS = new Set(
@@ -51,7 +52,7 @@ export async function handleStt(request) {
     return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
   }
   if (apiKey) {
-    const failure = apiKeyGateFailure(await isValidApiKey(apiKey), settings.requireApiKey);
+    const failure = apiKeyGateFailure(await isValidApiKey(apiKey, null, getClientIp(request)), settings.requireApiKey);
     if (failure) {
       return errorResponse(failure.status, failure.message);
     }

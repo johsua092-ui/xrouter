@@ -2,6 +2,7 @@ import { buildModelsList } from "../route.js";
 import { getSettings } from "@/lib/localDb";
 import { isValidApiKey } from "@/sse/services/auth.js";
 import { apiKeyGateFailure } from "@/sse/services/keyGate.js";
+import { getClientIp } from "@/lib/auth/loginLimiter";
 
 // URL slug → service kind(s). `web` covers both webSearch and webFetch.
 const KIND_SLUG_MAP = {
@@ -47,7 +48,7 @@ export async function GET(request, { params }) {
     const bearer = auth.match(/^Bearer\s+(.+)$/i);
     const apiKey = (bearer?.[1] || request?.headers?.get("x-api-key") || "").trim() || null;
     if (settings?.requireApiKey && apiKey) {
-      const failure = apiKeyGateFailure(await isValidApiKey(apiKey), true);
+      const failure = apiKeyGateFailure(await isValidApiKey(apiKey, null, getClientIp(request)), true);
       if (failure) {
         return json(
           { error: { message: failure.message, type: "invalid_request_error" } },

@@ -13,6 +13,7 @@ import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import * as log from "../utils/logger.js";
+import { getClientIp } from "@/lib/auth/loginLimiter";
 
 // Video generation is xAI-only today; requests without a provider prefix
 // (bare model id, or multipart bodies we deliberately don't parse) land here.
@@ -49,7 +50,7 @@ async function requireValidApiKey(request) {
     return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
   }
   if (apiKey) {
-    const failure = apiKeyGateFailure(await isValidApiKey(apiKey), settings.requireApiKey);
+    const failure = apiKeyGateFailure(await isValidApiKey(apiKey, null, getClientIp(request)), settings.requireApiKey);
     if (failure) {
       return errorResponse(failure.status, failure.message);
     }

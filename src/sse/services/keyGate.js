@@ -10,6 +10,11 @@ const KEY_GATE_FAILURES = {
   KEY_EXPIRED: { status: 403, message: "API key has expired" },
   IP_NOT_ALLOWED: { status: 403, message: "Client IP is not authorized to use this API key" },
   MODEL_NOT_ALLOWED: { status: 403, message: "This model is not allowed for the API key" },
+  // Verdicts from the abuse guard. Without these the fallback below reports a ban as
+  // "Invalid API key" with a 401, which is both the wrong status and misleading.
+  IP_BANNED: { status: 403, message: "This client IP is banned" },
+  MODEL_DENIED: { status: 403, message: "This model is denied for this API key" },
+  PROVIDER_NOT_ALLOWED: { status: 403, message: "The provider behind this model is not allowed for this API key" },
   QUOTA_EXCEEDED: { status: 429, message: "API key token limit exceeded" },
   RPM_EXCEEDED: { status: 429, message: "API key rate limit exceeded (RPM limit reached)" },
   TPM_EXCEEDED: { status: 429, message: "API key rate limit exceeded (TPM limit reached)" },
