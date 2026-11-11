@@ -210,12 +210,23 @@ async function getWreqModule() {
   throw new Error("wreq-js runtime missing createSession");
 }
 
-async function getSession(proxyUrl = "") {
-  let normalizedProxy = proxyUrl ? String(proxyUrl).trim() : "";
-  if (normalizedProxy && !/^[a-zA-Z0-9+.-]+:\/\//.test(normalizedProxy)) {
-    normalizedProxy = `http://${normalizedProxy}`;
+/** Accept both "host:port" and a full URL; the cache key is always the normalized form. */
+function normalizeProxyUrl(proxyUrl = "") {
+  const trimmed = proxyUrl ? String(proxyUrl).trim() : "";
+  if (trimmed && !/^[a-zA-Z0-9+.-]+:\/\//.test(trimmed)) {
+    return `http://${trimmed}`;
   }
-  const cacheKey = normalizedProxy || "direct";
+  return trimmed;
+}
+
+/** The session-cache key for a proxy. One definition, so every delete hits the right entry. */
+function sessionKeyFor(proxyUrl = "") {
+  return normalizeProxyUrl(proxyUrl) || "direct";
+}
+
+async function getSession(proxyUrl = "") {
+  const normalizedProxy = normalizeProxyUrl(proxyUrl);
+  const cacheKey = sessionKeyFor(proxyUrl);
   if (sessionCache.has(cacheKey)) {
     return sessionCache.get(cacheKey);
   }
@@ -262,6 +273,10 @@ export function resetOpencodeTlsSession() {
  */
 export async function opencodeTlsFetch(url, init = {}, { signal, timeoutMs = DEFAULT_TIMEOUT_MS, proxy } = {}) {
   const proxyUrl = proxy || init.proxy || "";
+  // The same key getSession cached under — a raw `proxyUrl` here would miss the entry,
+  // and reading an out-of-scope name here used to throw a ReferenceError inside the
+  // request path, which surfaced as a 502 on every proxied call.
+  const cacheKey = sessionKeyFor(proxyUrl);
   let session;
 
   try {
@@ -297,7 +312,7 @@ export async function opencodeTlsFetch(url, init = {}, { signal, timeoutMs = DEF
     });
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   } catch (fetchErr) {
-    sessionCache.delete(proxyUrl || "direct");
+    sessionCache.delete(cacheKey);
     console.warn(`[OpenCodeTLS] Session fetch failed (${fetchErr.message})`);
 
     // Strict proxy mode: if a proxy was requested and failed, propagate the error so the router
