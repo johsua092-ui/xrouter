@@ -1,4 +1,4 @@
-# v0.0.2 (2026-11-11)
+# v0.2.0 (2026-11-11)
 
 **Framework migration release — Next.js 16 + React 19, with the defects the jump exposed fixed.**
 
