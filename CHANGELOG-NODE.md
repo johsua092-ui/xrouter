@@ -20,6 +20,11 @@
   - Verified against production, which still shows the old behaviour: this build answers **400 / 200 / 200** where production answers **500 / 500 / 500**, and the two path leaks are gone.
   - Known and deliberately not touched here: a scan finds **125** places under `src/app/api/**/route.js` that still send a raw `error.message` to the client. Most are deliberate validation messages; the subset wrapping filesystem or network errors is the same leak, and deserves its own pass with a shared sanitiser rather than a mass rewrite inside this release.
 
+- **Local Builds Can Skip Standalone Tracing (`NEXT_DISABLE_TRACING=1`)**:
+  - On Windows the file tracer can leave the project through a junction — npm keeps its cache under the user profile — and land in the legacy `Application Data` folder, which points at itself. It loops there and the build ends with `EPERM: operation not permitted, scandir 'C:\Users\...\Application Data'` → `unhandledRejection`, before any output is written. The version-aware config fix removed the config warnings and made the tracing root take effect, but it cannot stop a junction from being followed.
+  - `NEXT_DISABLE_TRACING=1` now drops both `output: "standalone"` and the tracing keys, so `npm run build` completes and `next start` serves the app for local testing. Default behaviour is untouched: tracing on, standalone output as before.
+  - Verified: tracing on → `166/166` pages, `standalone/server.js` present, two nft manifests emitted; tracing off → `166/166` pages, no standalone directory, and the resulting build answers `/v1/models` with 401 (authentication working) and `/dashboard` with 200.
+
 # v0.1.0 (2026-11-09)
 
 - **Build Directory Is Now Configurable End to End (`NEXT_DIST_DIR`)**:

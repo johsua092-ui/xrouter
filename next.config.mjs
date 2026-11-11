@@ -49,7 +49,15 @@ function detectNextMajor() {
 const nextMajor = detectNextMajor();
 const legacyConfig = nextMajor > 0 && nextMajor <= 14;
 
+// Local builds on Windows can get stuck before they finish: a junction or symlink reachable
+// from inside the project (npm keeps its cache under the user profile, and the legacy
+// "Application Data" folder points at itself) sends the file tracer into the profile, where
+// it loops and dies with EPERM. NEXT_DISABLE_TRACING=1 skips standalone tracing so the app
+// can still be built and run locally with `next start`. Default is unchanged: tracing on.
+
 const externalPkgs = ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite", "open", "wreq-js"];
+const tracingDisabled = process.env.NEXT_DISABLE_TRACING === "1";
+
 const tracingExcludes = {
   "*": [
     "./gitbook/**/*",
@@ -67,11 +75,13 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
   distDir: process.env.NEXT_DIST_DIR || ".next",
-  output: "standalone",
+  // Standalone output is what production ships, but it is also what runs the file tracer.
+  // The escape hatch above turns both off together.
+  ...(tracingDisabled ? {} : { output: "standalone" }),
   // Tracing, externals and the bundler root, written in the dialect of the framework that is
   // actually installed: top level on Next 15+, under `experimental` on Next 14 (where the
   // top-level names do not exist at all).
-  ...(legacyConfig
+  ...(legacyConfig || tracingDisabled
     ? {}
     : {
         outputFileTracingRoot: tracingRoot,
@@ -86,10 +96,12 @@ const nextConfig = {
   },
   env: stampBuild(),
   experimental: {
-    ...(legacyConfig
+    ...(legacyConfig || tracingDisabled
       ? {
-          outputFileTracingRoot: tracingRoot,
-          outputFileTracingExcludes: tracingExcludes,
+          // Tracing keys only when tracing is actually on; on Next 14 they belong here.
+          ...(tracingDisabled
+            ? {}
+            : { outputFileTracingRoot: tracingRoot, outputFileTracingExcludes: tracingExcludes }),
           serverComponentsExternalPackages: externalPkgs,
         }
       : {
