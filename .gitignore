@@ -116,3 +116,6 @@ graphify-out/*
 .start-dev.ps1
 start-dev-silent.cjs
 debug.log
+
+# Build outputs of any name (probe/side-by-side builds must never be committed)
+.next*/
