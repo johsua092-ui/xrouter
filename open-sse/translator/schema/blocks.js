@@ -65,6 +65,7 @@ export const RESPONSES_EVENT = {
   OUTPUT_ITEM_ADDED: "response.output_item.added",
   OUTPUT_TEXT_DELTA: "response.output_text.delta",
   REASONING_SUMMARY_TEXT_DELTA: "response.reasoning_summary_text.delta",
+  REASONING_TEXT_DELTA: "response.reasoning_text.delta",
   FUNCTION_CALL_ARGS_DELTA: "response.function_call_arguments.delta",
   OUTPUT_ITEM_DONE: "response.output_item.done",
   COMPLETED: "response.completed",

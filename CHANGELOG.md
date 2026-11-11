@@ -1,5 +1,13 @@
 # v0.1.0 (2026-11-09)
 
+- **OpenCode Free Lane: Retry Transient Overload, Drop Spent Sessions**:
+  - The free lane sheds load with `429 {"message":"The inference service is overloaded…"}` even after the request passes the TLS gate. The executor now classifies a gated rejection: `overloaded` → retry with backoff (8 attempts, 800 ms → 4 s, ~20 s total, abort-aware); any other 429 or a 403 → treat the session as spent and drop the memoised id, so the next request mints a fresh one instead of reusing a flagged session until restart. Every other response is handed back untouched, and the discarded 429's stream is released rather than left half-read.
+  - Verified live: a real quota 429 (`Free usage limit reached`) is classified as session-spent and returns in ~4 s instead of looping for 20 s.
+- **Stream Watchdog: One Budget, Two Named Phases + Antigravity Headroom**:
+  - The stall timer now reports the phase it caught: with no upstream byte yet it aborts as `stream first-chunk timeout` (prefill), mid-stream as `stream stall timeout`.
+  - Antigravity declares `stallTimeoutMs: 600000` — Argon high-reasoning prefill can exceed the global budget on large contexts.
+  - `RESPONSES_EVENT.REASONING_TEXT_DELTA` added to the stream-event schema.
+  - Note: the upstream companion change (releasing the empty-content peek on the first non-empty reasoning frame) belongs to the combo empty-failover subsystem, which this fork does not carry, so that release is not part of this port.
 - **Port Upstream Fixes: Codex/Claude Identity Staleness, Antigravity Schemas, STT Multipart, Zed Tool Errors**:
   - **Codex identity**: advertises CLI `0.167.1` (was `0.159.0`). OpenAI began refusing `gpt-6.1-sol` from older identities with *"The 'gpt-6.1-sol' model requires a newer version of Codex"*.
   - **Codex extended context**: registered `gpt-6.1-sol[1m]` and `gpt-6.1-terra[1m]`, and taught `handleChat` to keep the `[1m]` marker when the registry genuinely resolves it — an extended-context request used to be stripped down to the base model and quietly ran on the base window. Client-annotation cases are still stripped as before.

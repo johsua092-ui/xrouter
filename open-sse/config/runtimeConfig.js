@@ -56,12 +56,17 @@ function envUrl(name, def) {
 // Configure this for a separate Docker service or remote SearXNG instance.
 export const SEARXNG_URL = envUrl("SEARXNG_URL", "http://localhost:8888/search");
 
-// Inter-chunk stall timeout (once tokens are flowing). Generous headroom so
-// Keep stall watchdog generous (600s = 10m) so long reasoning/generation streams
-// from slow models (GLM-5.3-Flash, Claude 3.7 Thinking, DeepSeek R1) aren't aborted mid-stream.
+// Stream watchdog budget: one timer covering BOTH phases — before the first upstream byte
+// (prefill, aborts as "stream first-chunk timeout") and between chunks once tokens flow
+// (aborts as "stream stall timeout"). Keep it generous (600s = 10m) so long reasoning /
+// generation streams from slow models (GLM-5.3-Flash, Claude 3.7 Thinking, DeepSeek R1)
+// aren't aborted mid-stream. A provider registry `transport.stallTimeoutMs` overrides it
+// per provider. Env: STREAM_STALL_TIMEOUT_MS.
 export const STREAM_STALL_TIMEOUT_MS = envMs("STREAM_STALL_TIMEOUT_MS", 600 * 1000);
 
-// Time-to-first-token timeout (prompt prefill). Env: STREAM_FIRST_CHUNK_TIMEOUT_MS.
+// Kiro tool-call-repair first-chunk timeout ONLY (consumed by executors/kiro.js). Chat
+// streaming does NOT use this: its first-chunk phase is covered by the provider stall budget
+// above. Env: STREAM_FIRST_CHUNK_TIMEOUT_MS.
 export const STREAM_FIRST_CHUNK_TIMEOUT_MS = envMs("STREAM_FIRST_CHUNK_TIMEOUT_MS", 200 * 1000);
 
 export const ALLOW_INSECURE_TLS_FALLBACK = envBool("ALLOW_INSECURE_TLS_FALLBACK", false) && !envBool("STRICT_SSL", false);

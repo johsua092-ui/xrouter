@@ -26,6 +26,8 @@ export default {
       "https://autopush-cloudcode-pa.sandbox.googleapis.com",
     ],
     format: "antigravity",
+    // Argon high-reasoning prefill can exceed the global 360s budget on large contexts.
+    stallTimeoutMs: 600000,
     headers: {
       "User-Agent": ANTIGRAVITY_IDE_USER_AGENT,
     },
