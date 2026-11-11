@@ -1,5 +1,10 @@
 # v0.1.0 (2026-11-09)
 
+- **Image Generation Now Honours the Proxy Configuration**:
+  - The image pipeline ignored proxies entirely: unlike `chatCore`, `imageGenerationCore` never read `connectionProxyEnabled` / `connectionProxyUrl` / `vercelRelayUrl` / `connectionProxyPoolId`, so every image request left on the host's own address while chat traffic was tunnelled. It now resolves the same `proxyOptions` shape chat uses, logs the same `[PROXY]` line, and routes through `proxyAwareFetch`.
+  - Covered: the main request and the post-refresh retry, `refreshCredentials`, `urlToBase64` (image-URL providers plus both base64 fallbacks), the adapter `parseResponse` bag, and the executor-delegating adapters. The polling loops in `blackForestLabs`, `falAi`, `nanobanana` and `runwayml` poll through the proxy too, and the Antigravity adapter forwards `proxyOptions` into the executor along with its own 401/403 refresh-and-retry.
+  - Verified in-process with a dead proxy (`http://127.0.0.1:1`): without one there is no proxy log and the call goes direct; with one the line `[PROXY] BLACK-FOREST-LABS | probe-model | conn=unknown | pool=none | url=http://127.0.0.1:1` appears and `proxyAwareFetch` attempts the hop. Live image request still answers 200 with a real image.
+  - Note: as with chat, a failed proxy falls back to a direct connection unless `strictProxy` is set — unchanged semantics, now applied to image traffic as well.
 - **Expose Reasoning Levels on `/v1/models` and Write Effort Variants for OpenCode**:
   - `/v1/models` now publishes `thinking_levels` — the same selectable set the dashboard picker uses — so a client can build its effort selector straight from the gateway instead of keeping a per-model table of its own. The field is omitted entirely for a model with no reasoning.
   - **Live: 505 of 674 models now carry it (was 0).** e.g. `ag/gemini-4-argon-high → ["low","medium","high"]`, `cc/claude-opus-5-5 → ["low","medium","high","xhigh","max"]`, `oc/glm-5.3-flash-free → ["minimal","low","medium","high","xhigh"]`.
