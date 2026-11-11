@@ -1,5 +1,10 @@
 # v0.1.0 (2026-11-09)
 
+- **Build Directory Is Now Configurable End to End (`NEXT_DIST_DIR`)**:
+  - `custom-server.js` hardcoded `.next` when looking for the standalone server, so a build produced into any other directory could never be launched.
+  - `scripts/copy-standalone-assets.mjs` read `NEXT_DIST_DIR` from the process environment only. `npm run build` does not load `.env`, so a dist dir pinned there was silently ignored by the postbuild hook and assets were copied to the wrong place. Resolution is now explicit argument → environment → `.env` → `.next`.
+  - Verified: all three resolution cases (from `.env`, from the environment, explicit argument winning) plus a real launch — `NEXT_DIST_DIR=probe-dist node custom-server.js` loaded `<repo>/probe-dist/standalone/server.js`. With no variable set the behaviour is unchanged (`.next`).
+  - This is the enabler for upgrading safely: a second build can now sit beside the one the running service uses, and be verified before anything is switched over.
 - **Rotate an API Key From the API (Secret Swap Without Losing Access)**:
   - New `POST /api/keys/[id]/rotate` mints a fresh secret for an existing key and keeps its id, name, `isActive` and access config — a leaked or shared key can be swapped without rebuilding its restrictions by hand. `rotateApiKey()` sits with the other key repositories and uses the server's own machine id, so a legacy `sk-{random}` key also upgrades to the current `sk-{machineId}-{keyId}-{crc8}` shape as it rotates.
   - The response uses the same flat shape as `POST /api/keys` (the object carries the new secret in `key`), so a client that created a key does not have to special-case this endpoint.
