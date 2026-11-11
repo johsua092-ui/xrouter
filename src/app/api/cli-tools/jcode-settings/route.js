@@ -207,10 +207,12 @@ export async function DELETE() {
       message: "xrouter configuration removed from jcode",
     });
   } catch (error) {
+    // Nothing installed means nothing to remove: removing twice must not look like a fault.
+    if (error?.code === "ENOENT") {
+      return NextResponse.json({ success: true, message: "No jcode configuration to remove" });
+    }
     console.error("Error removing jcode configuration:", error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    // Deliberately not error.message: it carries absolute filesystem paths.
+    return NextResponse.json({ error: "Failed to remove jcode configuration" }, { status: 500 });
   }
 }

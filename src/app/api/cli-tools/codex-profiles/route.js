@@ -98,7 +98,14 @@ export async function POST(request) {
 // DELETE - Remove a profile ~/.codex/<name>.config.toml
 export async function DELETE(request) {
   try {
-    const { name } = await request.json();
+    let payload = {};
+    try {
+      payload = (await request.json()) || {};
+    } catch {
+      // An empty or malformed body is the caller's mistake, not a server fault.
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { name } = payload;
     const cleanName = typeof name === "string" ? name.trim().toLowerCase() : "";
 
     if (!isValidProfileName(cleanName)) {

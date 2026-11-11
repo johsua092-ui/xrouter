@@ -14,6 +14,11 @@
 - **Build isolation**: verification used a separate dist directory (`NEXT_DIST_DIR=.next16`), a copy of the database, and an alternate port, so the running service and the live database were never in the path of the migration.
 - **Audited for the jump** and confirmed already correct: `cookies()` awaited everywhere, route-handler `params` awaited, page-level `searchParams` only read through the `useSearchParams()` hook, no `useFormState`, no `next/legacy/image`.
 - Verified: production build completes with `166/166` static pages and exit 0 into its own dist directory; live service, its build directory, and the production database untouched throughout.
+- **Defect fixes — CLI-tool routes answered a bad request with a 500, and two of them echoed filesystem paths**:
+  - `DELETE /api/cli-tools/codex-profiles` parsed the request body outside its own guard, so an empty or malformed body surfaced as `500 {"error":"Failed to delete profile"}` — the server log showed `SyntaxError: Unexpected end of JSON input` behind it. A body that is not valid JSON is the caller's mistake, so it now answers **400** with `Invalid JSON body`; a well-formed request naming a profile that does not exist still answers **404**.
+  - `DELETE /api/cli-tools/jcode-settings` and `DELETE /api/cli-tools/omp-settings` answered **500** and echoed the raw error, which carried absolute filesystem paths (`/root/.jcode/config.toml`, `/root/.omp/agent/models.yml`). Removing a configuration that was never installed is now an idempotent **200**, and the remaining 500 replies carry a generic message instead of a path. The `GET` and `POST` handlers in the same file had the identical path-leaking catch and were fixed with it.
+  - Verified against production, which still shows the old behaviour: this build answers **400 / 200 / 200** where production answers **500 / 500 / 500**, and the two path leaks are gone.
+  - Known and deliberately not touched here: a scan finds **125** places under `src/app/api/**/route.js` that still send a raw `error.message` to the client. Most are deliberate validation messages; the subset wrapping filesystem or network errors is the same leak, and deserves its own pass with a shared sanitiser rather than a mass rewrite inside this release.
 
 # v0.1.0 (2026-11-09)
 

@@ -82,7 +82,13 @@ export async function GET() {
       configPath: getOmpModelsYmlPath(),
     });
   } catch (err) {
-    return NextResponse.json({ error: { message: err.message } }, { status: 500 });
+    // Installed but no models.yml yet: report it plainly instead of a 500 whose message
+    // carries an absolute path.
+    if (err?.code === "ENOENT") {
+      return NextResponse.json({ installed: true, hasXRouter: false, configPath: getOmpModelsYmlPath() });
+    }
+    console.error("Error reading Oh My Pi configuration:", err);
+    return NextResponse.json({ error: { message: "Failed to read Oh My Pi configuration" } }, { status: 500 });
   }
 }
 
@@ -153,7 +159,8 @@ export async function POST(request) {
       configPath: getOmpModelsYmlPath(),
     });
   } catch (err) {
-    return NextResponse.json({ error: { message: err.message } }, { status: 500 });
+    console.error("Error applying Oh My Pi configuration:", err);
+    return NextResponse.json({ error: { message: "Failed to apply Oh My Pi configuration" } }, { status: 500 });
   }
 }
 
@@ -174,6 +181,11 @@ export async function DELETE() {
       message: "X Router removed from Oh My Pi",
     });
   } catch (err) {
-    return NextResponse.json({ error: { message: err.message } }, { status: 500 });
+    // No file on disk means X Router was never installed there: treat it as done.
+    if (err?.code === "ENOENT") {
+      return NextResponse.json({ success: true, message: "No Oh My Pi configuration to remove" });
+    }
+    console.error("Error removing Oh My Pi configuration:", err);
+    return NextResponse.json({ error: { message: "Failed to remove Oh My Pi configuration" } }, { status: 500 });
   }
 }
