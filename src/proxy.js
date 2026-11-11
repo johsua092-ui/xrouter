@@ -2,13 +2,16 @@
 // Complements SameSite=lax cookies: even if a cookie policy ever loosens, a
 // cross-site browser POST never reaches a handler. Non-browser clients (no
 // Origin / no Sec-Fetch-Site headers) pass untouched.
-// Build-time & runtime conflict prevention: avoid having both middleware.js and proxy.js in src/
-// Xiaomi MiMo reverse proxy logic is safely routed through src/lib/mimoReverseProxy.js
+//
+// Next 16 renamed this convention: the file is `src/proxy.js` and the exported
+// function is `proxy()`. On Next 14 this file is ignored and `src/middleware.js`
+// is the one that runs, so the two must never both exist — with both present the
+// build refuses the conflicting convention.
 import { NextResponse } from "next/server";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-export function middleware(request) {
+export function proxy(request) {
   if (!MUTATING.has(request.method)) return NextResponse.next();
 
   // Auth login/logout and status routes need to be accessible from any client
