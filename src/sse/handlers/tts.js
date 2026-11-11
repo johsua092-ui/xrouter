@@ -40,7 +40,7 @@ export async function handleTts(request) {
     return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
   }
   if (apiKey) {
-    const failure = apiKeyGateFailure(await isValidApiKey(apiKey, null, getClientIp(request)), settings.requireApiKey);
+    const failure = apiKeyGateFailure(await isValidApiKey(apiKey, modelStr || null, getClientIp(request)), settings.requireApiKey);
     if (failure) {
       return errorResponse(failure.status, failure.message);
     }
