@@ -13,7 +13,7 @@ import { parseJsonBody } from "@/shared/utils/parseJsonBody.js";
 import { handleAntigravityQuotaError, clearAntigravityStrikes } from "../services/antigravityQuota.js";
 import { getSettings } from "@/lib/localDb";
 import { getClientIp } from "@/lib/auth/loginLimiter";
-import { getModelInfo, getComboModels } from "../services/model.js";
+import { getModelInfo, getComboModels, parseModel } from "../services/model.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
 import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
 import { getTransform as getPxpipeTransform } from "@/lib/pxpipe/loader.js";
@@ -32,6 +32,7 @@ import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
+import { isValidModel } from "open-sse/config/providerModels.js";
 import { resolveTokenmaxxingOrder } from "../services/tokenmaxxing.js";
 
 
@@ -61,8 +62,21 @@ export async function handleChat(request, clientRawRequest = null) {
   // Claude Code marks a 1M-context request as `<model>[1m]`; the marker matches
   // no combo, alias or provider/model pair, so it must not reach resolution.
   // The capability travels in the anthropic-beta header, forwarded as-is.
-  let { model: modelStr, contextMarker } = stripModelContextMarker(body.model);
-  if (contextMarker) body.model = modelStr;
+  //
+  // Exception: codex publishes real bracketed variants in the registry
+  // (`gpt-6-astra[1m]` -> upstream `gpt-6-astra`), and there the marker is a
+  // routing key rather than a client annotation. Stripping it routed the
+  // request to the base model, so an extended-context request silently ran on
+  // the base window. Only keep the marker when the registry resolves it.
+  const { model: modelStripped, contextMarker } = stripModelContextMarker(body.model);
+  const markerRoutable = contextMarker
+    ? (() => {
+        const parsed = parseModel(body.model);
+        return Boolean(parsed.provider) && isValidModel(parsed.providerAlias, parsed.model);
+      })()
+    : false;
+  const modelStr = markerRoutable ? body.model.trim() : modelStripped;
+  if (contextMarker && !markerRoutable) body.model = modelStripped;
 
 
   // Request summary is emitted as the unified "▶" line in chatCore (has fmt/thinking/account)
@@ -267,7 +281,12 @@ export async function handleChat(request, clientRawRequest = null) {
     });
   }
 
-  return handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey, contextMarker ? `${modelStr.slice(modelStr.indexOf("/") + 1)}[${contextMarker}]` : null);
+  // `modelStr` still carries the marker when it was routable as a variant, so
+  // only rebuild the requested id from the stripped form in the other case.
+  const requestedModel = contextMarker && !markerRoutable
+    ? `${modelStr.slice(modelStr.indexOf("/") + 1)}[${contextMarker}]`
+    : null;
+  return handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey, requestedModel);
 }
 
 /**

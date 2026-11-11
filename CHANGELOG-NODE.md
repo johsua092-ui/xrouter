@@ -1,5 +1,13 @@
 # v0.1.0 (2026-11-09)
 
+- **Port Upstream Fixes: Codex/Claude Identity Staleness, Antigravity Schemas, STT Multipart, Zed Tool Errors**:
+  - **Codex identity**: advertises CLI `0.167.1` (was `0.159.0`). OpenAI began refusing `gpt-6.1-sol` from older identities with *"The 'gpt-6.1-sol' model requires a newer version of Codex"*.
+  - **Codex extended context**: registered `gpt-6.1-sol[1m]` and `gpt-6.1-terra[1m]`, and taught `handleChat` to keep the `[1m]` marker when the registry genuinely resolves it — an extended-context request used to be stripped down to the base model and quietly ran on the base window. Client-annotation cases are still stripped as before.
+  - **Claude identity**: advertises Claude Code `2.1.290` (was `2.1.280`, which Fable 5.2 rejects as `claude_code_version_too_old`), and registers `claude-fable-5-2` with its capabilities and pricing.
+  - **Antigravity schemas**: `~optional` added to the unsupported annotations, so a tool schema carrying it no longer earns `400 INVALID_ARGUMENT: Unknown name "~optional"`.
+  - **STT multipart**: uses undici's `FormData`. The global Web-API polyfill lacks undici's internal symbols, so Node's `fetch` fell back to `String(body)` and sent a literal `"[object FormData]"`.
+  - **Zed / Claude wire**: every `tool_result` now carries `is_error` as a bool, so a failed tool call is no longer presented as a success.
+  - Verified: the new codex identity, the `[1m]` marker resolving through `parseModel` / `isValidModel`, the new Claude model, `~optional` in the constraint list, and the extended-context capability; build clean and service live.
 - **Fix 502 on Proxied OpenCode Requests — `cacheKey is not defined`**:
   - `opencodeTlsFetch` read a `cacheKey` that only existed inside `getSession`. When a proxied OpenCode call came back **429**, the cleanup line threw `ReferenceError: cacheKey is not defined`; the catch logged `[OpenCodeTLS] Session fetch failed (cacheKey is not defined)` and, in strict-proxy mode, rethrew it — which surfaced as **502** on proxied traffic while direct calls quietly fell back to native `fetch` and kept working. That asymmetry is exactly what the request log showed.
   - Proxy normalization and the cache key are now one pair of helpers — `normalizeProxyUrl()` / `sessionKeyFor()` — used by **both** functions, so a session is deleted under the same key it was stored with. The failure path also deletes the normalised key now instead of the raw `proxyUrl`, which used to miss the cache entry entirely and leave a broken session behind.
