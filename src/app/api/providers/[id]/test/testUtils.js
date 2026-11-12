@@ -44,8 +44,12 @@ const OAUTH_TEST_CONFIG = {
     authHeader: "Authorization",
     authPrefix: "Bearer ",
     extraHeaders: { "Content-Type": "application/json", "originator": "codex_cli_rs", "User-Agent": `codex_cli_rs/${CODEX_CLI_VERSION}` },
-    // Minimal invalid body — triggers fast 400 without consuming quota
-    body: JSON.stringify({ model: "gpt-5.3-codex", input: [], stream: false, store: false }),
+    // Minimal invalid body — triggers fast 400 without consuming quota. The model id
+    // must be one the ChatGPT backend recognises, otherwise it rejects the request
+    // with a model_not_found 400 rather than the auth-shaped 400 this probe relies on.
+    // Resolved from the registry (first cx model) instead of a literal: "gpt-5.3-codex"
+    // did not exist in the model list, so a healthy account looked like a dead one.
+    body: JSON.stringify({ model: getDefaultModel("codex"), input: [], stream: false, store: false }),
     // 400 (bad request) means auth succeeded; only 401/403 means token is bad
     acceptStatuses: [400],
     refreshable: true,

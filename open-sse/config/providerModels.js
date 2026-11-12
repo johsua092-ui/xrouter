@@ -11,12 +11,22 @@ const isOpenCodeAlias = (aliasOrId) => !aliasOrId || ["oc", "opencode", "ocg", "
 
 
 // Helper functions
+// Model tables are keyed by SHORT ALIAS (`entry.alias || entry.id`, see providers/index.js),
+// not by provider id — a provider with an alias (codex → cx, claude → cc, github → gh)
+// has NO entry under its own id. Callers, however, overwhelmingly pass the canonical
+// provider id: the dashboard test/validate route takes it straight off the route param
+// (`/dashboard/providers/[id]` → ConnectionsCard providerId → POST body.provider), and it
+// survives normalizeProviderId() unchanged. Passing that id into a raw PROVIDER_MODELS[id]
+// lookup therefore returned nothing, and every such provider silently lost its default
+// model — the probe went out with `model: null`, upstream answered 400, and the connection
+// was persisted as unavailable. Resolve id → alias first so both spellings work.
 export function getProviderModels(aliasOrId) {
-  return PROVIDER_MODELS[aliasOrId] || [];
+  const alias = PROVIDER_ID_TO_ALIAS[aliasOrId] || aliasOrId;
+  return PROVIDER_MODELS[alias] || [];
 }
 
 export function getDefaultModel(aliasOrId) {
-  const models = PROVIDER_MODELS[aliasOrId];
+  const models = getProviderModels(aliasOrId);
   return models?.[0]?.id || null;
 }
 
