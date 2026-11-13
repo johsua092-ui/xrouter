@@ -1,3 +1,12 @@
+# v0.1.0 (2026-11-13)
+
+- **A Shadowed Reserved Prefix Can No Longer Dead-End the Route (Fixes `404` on `oc/*`)**:
+  - A provider node registered under a prefix that collides with a reserved built-in provider id or alias (`oc` is the built-in `opencode` alias) used to win model resolution unconditionally — by design, an operator-registered node outranks the built-in it shadows. With no credentialed connection behind it the node still won the lookup, had nothing to serve with, and the router answered `404 No credentials are serving oc/<model> right now`, dead-ending the model while the free built-in provider sat unused behind it.
+  - `src/sse/services/model.js` now confirms that a node shadowing a *reserved* prefix actually holds an active connection before honouring it. A node with connections still wins; a shadowing node without any is skipped and resolution falls through to the reserved built-in provider.
+  - Node prefixes that are not reserved are untouched — they keep winning outright, with or without credentials.
+  - The durable counterpart to the database-side prefix rename: the rename cleared one box, but a database reset or restore, a re-created colliding node, or a second deployment carrying the same prefix brings the dead route right back. The guard closes the whole class.
+  - `npm run build` (Next 14.2.35) exit 0.
+
 # v0.1.0 (2026-11-09)
 
 - **OpenCode Daemon Service Mode Reaches the Local Daemon Again**:

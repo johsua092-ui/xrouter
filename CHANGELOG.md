@@ -1,3 +1,13 @@
+# v0.1.0 (2026-11-13)
+
+- **A Shadowed Reserved Prefix Can No Longer Dead-End the Route (Fixes `404` on `oc/*`)**:
+  - A provider node registered by the operator under a prefix that collides with a reserved built-in provider id or alias (`oc` is the alias of the built-in `opencode` provider) used to win model resolution unconditionally, because resolution deliberately lets an explicitly registered node outrank the built-in it shadows. When that node carried no credentialed connection it still won the lookup and then had nothing to serve the request with, so the router answered `404 No credentials are serving oc/<model> right now` and the model became unreachable — while the built-in `opencode` provider, free and `noAuth`, sat right behind it fully able to serve the call.
+  - The resolver in `src/sse/services/model.js` now verifies, before honouring a node that shadows a *reserved* prefix, that the node actually holds an active connection. A node with connections wins exactly as before; a shadowing node with none is skipped and resolution falls through to the reserved built-in provider that can serve the request.
+  - Nodes registered under a non-reserved prefix are untouched — they still win outright, credentials or not, so operator-defined routing keeps its meaning.
+  - This is the durable half of the fix. Renaming the offending node prefix in the database cleared the symptom on one box, but the failure comes straight back the moment the database is reset or restored, a colliding node is created again, or a second deployment ships with the same prefix. The guard removes that entire class of dead routes at the source.
+  - Verified against the live router: `oc/*` free models resolve and serve, an unknown model on a shadowed reserved prefix reaches upstream instead of dead-ending at `404`, and a genuinely unknown provider prefix still returns `404` as a control.
+  - `npm run build` (Next 14.2.35) completes with exit 0 and every route compiled.
+
 # v0.1.0 (2026-11-09)
 
 - **OpenCode Daemon Service Mode Reaches the Local Daemon Again**:

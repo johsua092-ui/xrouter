@@ -1,5 +1,6 @@
 // Re-export from open-sse with localDb integration
 import { getModelAliases, getComboByName, getProviderNodes } from "@/lib/localDb";
+import { getProviderConnections } from "@/lib/db/repos/connectionsRepo";
 import { parseModel as parseModelCore, resolveModelAliasFromMap, getModelInfoCore } from "open-sse/services/model.js";
 import REGISTRY from "open-sse/providers/registry/index.js";
 
@@ -54,22 +55,47 @@ export async function getModelInfo(modelStr, studioHops = 0) {
     // route by name, so an existing node prefix takes precedence over the
     // built-in provider id/alias. When no node matches, fall through to the
     // built-in resolution below, so reserved ids keep working untouched.
+    //
+    // [ENI] Dead-route guard: a node that shadows a *reserved* provider prefix
+    // but holds no credentialed connection can never serve a request, and
+    // because it wins the lookup outright it turns `oc/<model>` into a hard
+    // `404 No credentials are serving ...` instead of reaching the built-in
+    // provider. Skip such a node so the reserved built-in keeps the route.
+    // Nodes that carry credentials keep winning exactly as before.
+    const hasCredentialedConnections = async (nodeId) => {
+      try {
+        const conns = await getProviderConnections({ provider: nodeId });
+        return Array.isArray(conns) && conns.some((c) => c && c.isActive !== 0 && c.isActive !== false);
+      } catch {
+        return true; // cannot verify -> preserve previous behaviour
+      }
+    };
+
     const openaiNodes = await getProviderNodes({ type: "openai-compatible" });
     const matchedOpenAI = openaiNodes.find((node) => node.prefix === parsed.providerAlias);
     if (matchedOpenAI) {
-      return { provider: matchedOpenAI.id, model: parsed.model };
+      const reserved = RESERVED_PROVIDER_PREFIXES.has(parsed.providerAlias);
+      if (!reserved || (await hasCredentialedConnections(matchedOpenAI.id))) {
+        return { provider: matchedOpenAI.id, model: parsed.model };
+      }
     }
 
     const anthropicNodes = await getProviderNodes({ type: "anthropic-compatible" });
     const matchedAnthropic = anthropicNodes.find((node) => node.prefix === parsed.providerAlias);
     if (matchedAnthropic) {
-      return { provider: matchedAnthropic.id, model: parsed.model };
+      const reserved = RESERVED_PROVIDER_PREFIXES.has(parsed.providerAlias);
+      if (!reserved || (await hasCredentialedConnections(matchedAnthropic.id))) {
+        return { provider: matchedAnthropic.id, model: parsed.model };
+      }
     }
 
     const embeddingNodes = await getProviderNodes({ type: "custom-embedding" });
     const matchedEmbedding = embeddingNodes.find((node) => node.prefix === parsed.providerAlias);
     if (matchedEmbedding) {
-      return { provider: matchedEmbedding.id, model: parsed.model };
+      const reserved = RESERVED_PROVIDER_PREFIXES.has(parsed.providerAlias);
+      if (!reserved || (await hasCredentialedConnections(matchedEmbedding.id))) {
+        return { provider: matchedEmbedding.id, model: parsed.model };
+      }
     }
 
     return {
