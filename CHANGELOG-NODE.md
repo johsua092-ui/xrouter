@@ -1,3 +1,31 @@
+# v0.1.1 (2026-11-13)
+
+## A shadowed reserved prefix falls through to its built-in
+
+A provider node whose prefix collides with a built-in provider id or alias
+(`oc`, `openai`, `anthropic`, `google`, `cf`, …) used to break the built-in
+route. The resolver skipped the node-lookup block entirely for reserved
+prefixes, so no node on `oc` could ever be reached; a node registered under a
+reserved prefix by an older layout still won the lookup and turned
+`oc/<model>` into a hard `404 No credentials are serving …`. Either way the
+built-in provider never saw the request.
+
+The node lookup now always runs, and a node that shadows a reserved prefix only
+wins when it holds an active connection. A node with no credentialed
+connection is skipped so the reserved built-in keeps the route. A node whose
+connections cannot be read preserves the previous behaviour, so a database
+hiccup cannot silently reroute traffic.
+
+This restores the three-way behaviour for reserved prefixes:
+
+- node with credentials → node wins, as before;
+- node without credentials → built-in takes over, no 404;
+- plain `npm start` with the bridge withdrawn → the built-in provider serves
+  `oc/<model>` unchanged, because the bridge is a dispatch concern and is not
+  registered as a node.
+
+`getProviderConnections` is now imported by the resolver to make that decision.
+
 # v0.1.0 (2026-11-13)
 
 - **The Endpoint Panel's Tunnel Badge Now Follows the Real Tunnel**: the client stopped polling once the badge looked healthy, so a tunnel that came up on its own left the badge stuck on `CONNECTING`/`OFFLINE` until a hard-refresh — and that refresh reset it to "dead" off a single failed browser ping. Both pollers keep a slow heartbeat now (`STATUS_POLL_SLOW_MS` 30s, `CLIENT_PING_SLOW_MS` 60s), and the reachability check treats the backend process probe as the authority, so the browser ping can only add confidence, never demote a live `cloudflared`. Enable no longer reads a missing `enabled` flag as failure.
