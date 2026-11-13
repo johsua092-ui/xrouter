@@ -1,5 +1,13 @@
 # v0.1.0 (2026-11-13)
 
+- **Every Model Listing Now Respects the Caller's Allowlist**:
+  - `src/app/api/v1beta/models` — the Gemini-shaped list — validated the API key but never consulted *what that key may call*, and enumerated `PROVIDER_MODELS` for every caller. A team locked to a single model could therefore read the whole catalogue through this endpoint: a live key allowed four models received `1422` of `1423` entries, 97 of them `glm*`. That is where a restricted team key was seeing every `glm` variant.
+  - The endpoint now resolves the caller's allowed-model patterns — the per-key list, or the team-wide list when the key is a team key — and drops every entry the key would be refused at request time. This is the same rule `/v1/models` already applied, so the two lists finally agree.
+  - `src/app/api/v1/models/info` returned metadata for any known id, including ids the caller may not call, so it stood beside the filtered `/v1/models/{id}` as an existence oracle. It now answers `404 Model not found` for those, identically to the other route.
+  - The caller's key and patterns are read in one place now, `src/sse/services/callerAllowlist.js`, so the four listing surfaces (`/v1/models`, `/v1/models/{kind}`, `/v1/models/info`, `/v1beta/models`) cannot drift apart again.
+  - Verified by running the routes against a copy of the production database: a team key allowed `glm-5.3` went from `1422` leaked of `1423` to `0` leaked of `10`, an unrestricted key still receives all `1423`, `/v1/models` output is unchanged, and `/v1/models/info?id=alicode/glm-5` now returns `404` for that key.
+
+
 - **A Shadowed Reserved Prefix Can No Longer Dead-End the Route (Fixes `404` on `oc/*`)**:
   - A provider node registered by the operator under a prefix that collides with a reserved built-in provider id or alias (`oc` is the alias of the built-in `opencode` provider) used to win model resolution unconditionally, because resolution deliberately lets an explicitly registered node outrank the built-in it shadows. When that node carried no credentialed connection it still won the lookup and then had nothing to serve the request with, so the router answered `404 No credentials are serving oc/<model> right now` and the model became unreachable — while the built-in `opencode` provider, free and `noAuth`, sat right behind it fully able to serve the call.
   - The resolver in `src/sse/services/model.js` now verifies, before honouring a node that shadows a *reserved* prefix, that the node actually holds an active connection. A node with connections wins exactly as before; a shadowing node with none is skipped and resolution falls through to the reserved built-in provider that can serve the request.

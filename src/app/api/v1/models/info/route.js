@@ -2,6 +2,8 @@ import { PROVIDER_MODELS } from "open-sse/config/providerModels.js";
 import { AI_PROVIDERS, ALIAS_TO_ID } from "@/shared/constants/providers";
 import { getModelKind } from "@/shared/constants/models";
 import { getSettings } from "@/lib/localDb";
+import { matchesAllowedModels } from "@/lib/db/repos/allowedModels";
+import { callerAllowedModels } from "@/sse/services/callerAllowlist";
 import { isValidApiKey, apiKeyGateFailure } from "@/sse/services/auth.js";
 
 const KIND_ENDPOINT = {
@@ -107,6 +109,14 @@ export async function GET(request) {
     return Response.json(
       { error: { message: "Missing required query param: id (e.g. ?id=openai/dall-e-3)", type: "invalid_request_error" } },
       { status: 400, headers: { "Access-Control-Allow-Origin": "*" } },
+    );
+  }
+  // Same rule as /v1/models/{id}: an id this key may not call comes back as
+  // not-found, never as forbidden, so the endpoint is not an existence oracle.
+  if (!matchesAllowedModels(await callerAllowedModels(request), id)) {
+    return Response.json(
+      { error: { message: `Model not found: ${id}`, type: "not_found" } },
+      { status: 404, headers: { "Access-Control-Allow-Origin": "*" } },
     );
   }
   const info = lookup(id, kind);

@@ -1,4 +1,6 @@
 import { PROVIDER_MODELS } from "@/shared/constants/models";
+import { matchesAllowedModels } from "@/lib/db/repos/allowedModels";
+import { callerAllowedModels } from "@/sse/services/callerAllowlist";
 
 /**
  * Handle CORS preflight
@@ -32,11 +34,16 @@ export async function GET(request) {
         return Response.json({ error: { message: failure.message } }, { status: failure.status });
       }
     }
+    // The Gemini-shaped list used to enumerate every provider in the catalogue
+    // regardless of the caller, so a team locked to one model could read the
+    // whole thing — every glm variant included — through this endpoint.
+    const allowedPatterns = await callerAllowedModels(request);
     const models = [];
     const seen = new Set();
 
     function addModel({ name, displayName, description, methods = ["generateContent"] }) {
       if (seen.has(name)) return;
+      if (!matchesAllowedModels(allowedPatterns, name.replace(/^models\//, ""))) return;
       seen.add(name);
       models.push({
         name,
