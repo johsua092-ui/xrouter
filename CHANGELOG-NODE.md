@@ -1,4 +1,37 @@
-# v0.2.1 (2026-11-13)
+# v0.2.2 (2026-11-13)
+
+## Give the Windows build worker an off switch, and read build toggles from .env
+
+The production build still died with `Ineffective mark-compacts near heap limit`
+on Windows after v0.2.1. The tracing fix was real and stayed in — the config
+validator warning is gone — but a second, independent cause was hiding behind it.
+
+`experimental.webpackBuildWorker` was hard-coded to `true`. Nothing could turn it
+off: `NEXT_DISABLE_WEBPACK_BUILD_WORKER=1` was named in the comment above it, but
+the flag was never wired to anything, so the value never changed and the run
+still climbed to the heap ceiling — 4 GB, 6 GB and 8 GB builds all died at the
+limit after 11-16 minutes, each one stopping within a few MB of whatever ceiling
+it was given.
+
+The same shell did not reach the other toggle either. `NEXT_DISABLE_MEMORY_OPTIMIZATIONS=1`
+was read straight from `process.env`, and on Windows the config is loaded in a
+child process that does not reliably inherit `set VAR=1` from the launching
+shell, so the documented escape hatch silently did nothing there.
+
+- `webpackBuildWorker` now follows a real toggle, and defaults to **off on
+  Windows** — where the forked child neither receives the shell's `NODE_OPTIONS`
+  nor frees its heap between invalidation passes — while staying on for
+  Linux and macOS. `NEXT_DISABLE_WEBPACK_BUILD_WORKER=1` forces it off
+  everywhere, `=0` forces it on.
+- Build toggles are read from the environment first and then from `.env`, so a
+  switch set in the project file works on every platform instead of only where
+  the variable happens to be inherited.
+- Linux behaviour is unchanged: worker on, `webpackMemoryOptimizations` on,
+  `Compiled successfully`, peak 2223 MB in 1:49.
+
+Verified on the server: default resolves `webpackMemoryOptimizations: true`,
+`webpackBuildWorker: true`; `NEXT_DISABLE_WEBPACK_BUILD_WORKER=1` resolves
+`false`; `NEXT_DISABLE_MEMORY_OPTIMIZATIONS=1` drops the key entirely.
 
 ## Stop the production build walking the Windows profile into a heap death spiral
 

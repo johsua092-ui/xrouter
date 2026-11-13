@@ -1,9 +1,47 @@
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
+
+// Build toggles are read from the real environment first, then from `.env`.
+// Reading `.env` here is deliberate: on Windows the framework loads the config
+// file in a child process that does not reliably inherit `set VAR=1` from the
+// launching shell, so `process.env` alone silently ignored every toggle below —
+// the old `NEXT_DISABLE_MEMORY_OPTIMIZATIONS=1` escape hatch never took effect
+// there. Re-reading the file keeps one documented switch working on every OS.
+function readDotEnv() {
+  const out = {};
+  try {
+    const raw = readFileSync(join(projectRoot, ".env"), "utf8");
+    for (const line of raw.split(/\r?\n/)) {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+      if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    }
+  } catch {
+    // No .env (CI, packaged build): the real environment is the only source.
+  }
+  return out;
+}
+const dotenv = readDotEnv();
+/** True when a toggle is set to "1" in the environment or in `.env`. */
+const toggle = (name) => (process.env[name] ?? dotenv[name]) === "1";
+
+// `webpackBuildWorker` moves compilation into a forked child. That helps on
+// Linux/macOS, but on Windows the child neither receives the shell's
+// NODE_OPTIONS nor frees its heap between invalidation passes: the run then
+// climbs to whatever ceiling it is given (observed 4 GB, 6 GB and 8 GB builds
+// all dying at the limit after 11-16 minutes) instead of finishing. Default it
+// off on Windows, keep it on elsewhere, and leave one switch to force either
+// way. NEXT_DISABLE_WEBPACK_BUILD_WORKER=1 off, =0 on.
+const buildWorkerDefault = process.platform !== "win32";
+const buildWorker = (() => {
+  const forced = process.env.NEXT_DISABLE_WEBPACK_BUILD_WORKER ?? dotenv.NEXT_DISABLE_WEBPACK_BUILD_WORKER;
+  if (forced === "1") return false;
+  if (forced === "0") return true;
+  return buildWorkerDefault;
+})();
 // Stamp the build with the revision and the release it was made from. A deploy
 // that ships without .git history still knows what it is, so the update banner can
 // compare it against the repository instead of staying silent forever.
@@ -129,10 +167,12 @@ const nextConfig = {
     // invalidation passes, which is exactly the retention that walks the heap
     // up. Set NEXT_DISABLE_MEMORY_OPTIMIZATIONS=1 to get the old behaviour back
     // when diagnosing an unrelated build failure.
-    ...(process.env.NEXT_DISABLE_MEMORY_OPTIMIZATIONS === "1" ? {} : { webpackMemoryOptimizations: true }),
+    ...(toggle("NEXT_DISABLE_MEMORY_OPTIMIZATIONS") ? {} : { webpackMemoryOptimizations: true }),
     // Run the compilation in a separate worker so the framework's own overhead
-    // is not stacked on the same heap the bundler is saturating.
-    webpackBuildWorker: true,
+    // is not stacked on the same heap the bundler is saturating. Off on Windows
+    // by default — see `buildWorker` above for why, and set
+    // NEXT_DISABLE_WEBPACK_BUILD_WORKER=0 to force it back on there.
+    webpackBuildWorker: buildWorker,
   },
   webpack: (config, { isServer }) => {
     // Ignore fs/path modules in browser bundle
