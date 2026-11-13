@@ -1,3 +1,35 @@
+# v0.2.4 (2026-11-13)
+
+## A shadowed reserved prefix falls through to its built-in
+
+A provider node whose prefix collides with a built-in provider id or alias
+(`oc`, `openai`, `anthropic`, `google`, `cf`, …) previously disabled the
+built-in route outright. The resolver skipped the node-lookup block whenever
+the prefix was reserved, so a node registered on `oc` could not be reached at
+all, while a node registered under a reserved prefix from an older layout still
+won the lookup and turned `oc/<model>` into a hard `404 No credentials are
+serving …`. Either way the built-in provider never saw the request.
+
+The node lookup now always runs, and a node that shadows a reserved prefix is
+only allowed to win when it actually holds an active connection. A node with
+no credentialed connection is skipped and the reserved built-in keeps the
+route. A node whose connections cannot be read preserves the previous
+behaviour, so a database hiccup cannot silently reroute traffic.
+
+This restores the intended three-way behaviour for reserved prefixes:
+
+- node with credentials → node wins, as before;
+- node without credentials → built-in takes over, no 404;
+- plain `npm start` with the bridge withdrawn → the built-in provider serves
+  `oc/<model>` unchanged, because the bridge is a dispatch concern and is not
+  registered as a node.
+
+The name that is currently shadowed is logged once per resolution with the
+node id and the reason it was skipped, so a misconfigured node is visible
+instead of silently dropped.
+
+`getProviderConnections` is now imported by the resolver to make that decision.
+
 # v0.2.3 (2026-11-13)
 
 ## Close the anonymous model-catalogue and usage surfaces
