@@ -1,3 +1,57 @@
+# v0.2.3 (2026-11-13)
+
+## Close the anonymous model-catalogue and usage surfaces
+
+Two families of dashboard read routes sat behind a path-prefix rule that was
+wider than the routes themselves. The guard compared a request path against a
+list of literals with `pathname === p || pathname.startsWith(p + "/")`, and two
+of those literals named a *parent*, not a leaf:
+
+- `/api/models` published every child under it.
+- `/api/usage` published every child under it.
+
+So `GET /api/models/catalog`, `/api/models/custom`, `/api/models/disabled`,
+`/api/models/alias`, `/api/models/availability` and `/api/models/catalog-sync`
+answered 200 to a caller carrying no credential at all. The catalogue route
+returns the installed-model inventory, every custom model declared per provider
+and the active node list, and it resolves each custom provider entry by calling
+that provider's own `/models` with the configured key. `/api/usage/api-keys`
+answered 200 too, returning one row per generated key with masked key values,
+quotas, token usage and creator names.
+
+The distinction that made this worse than a scoped allowlist leak: it was not
+tied to any one team or key. Anything that could reach the host read the whole
+inventory, and the usage children resolved an anonymous caller to the
+unrestricted session because `getSessionContext()` returns `FULL_PERMISSIONS`
+and a null key filter when there is no session — the routes below it were
+written assuming the guard had already rejected the request.
+
+- `PUBLIC_MODELS_DISCOVERY_PATHS` and `PUBLIC_USAGE_DISCOVERY_PATHS` are new
+  exact-match sets. The roots stay public (the claim/market portals and external
+  clients read `GET /api/models` and `GET /api/usage` with no session); every
+  child now falls through to the deny-by-default `/api/*` rule and requires
+  dashboard auth.
+- `isPublicApi` treats `/api/models` and `/api/usage` as exact-only; every other
+  entry in the flat public list keeps its old prefix behaviour, so nothing else
+  moved.
+- `isModelsDiscoveryPath` reads the same literal set instead of a hardcoded list
+  with `/api/models/` and `/api/model/` prefix branches, which is what let a
+  discovery classification bleed onto the catalogue children.
+- `/api/auth/oidc/*` and `/api/auth/saml/*` are unchanged: they stay reachable
+  unauthenticated by design (callback and ACS legs are the identity provider
+  calling in) and each handler runs its own check.
+
+Verified against the guard module directly: 20 routes that were reachable
+anonymously are closed, and 15 public routes including `/api/models`,
+`/api/models/test`, `/api/usage`, `/api/v1/models`, `/api/v1beta/models`,
+`/api/vouchers/claim` and the auth/health roots still return public, with zero
+regressions.
+
+Also carries the model-listing allowlist work: `/v1beta/models` and
+`/v1/models/info` now share one allowlist source, so the two endpoints agree on
+which ids a team-scoped key may see instead of one being the more permissive
+oracle for the other.
+
 # v0.2.2 (2026-11-13)
 
 ## Give the Windows build worker an off switch, and read build toggles from .env

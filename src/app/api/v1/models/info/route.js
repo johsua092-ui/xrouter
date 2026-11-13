@@ -3,6 +3,8 @@ import { AI_PROVIDERS, ALIAS_TO_ID } from "@/shared/constants/providers";
 import { getModelKind } from "@/shared/constants/models";
 import { getSettings } from "@/lib/localDb";
 import { isValidApiKey, apiKeyGateFailure } from "@/sse/services/auth.js";
+import { matchesAllowedModels } from "@/lib/db/repos/allowedModels";
+import { callerAllowedModels } from "@/sse/services/callerAllowlist";
 
 const KIND_ENDPOINT = {
   llm: "/v1/chat/completions",
@@ -111,6 +113,15 @@ export async function GET(request) {
   }
   const info = lookup(id, kind);
   if (!info) {
+    return Response.json(
+      { error: { message: `Model not found: ${id}`, type: "not_found" } },
+      { status: 404, headers: { "Access-Control-Allow-Origin": "*" } },
+    );
+  }
+  // This endpoint returned metadata for any known id, including ids the caller
+  // may not call, so it stood beside the filtered list as an existence oracle.
+  const allowedPatterns = await callerAllowedModels(request);
+  if (!matchesAllowedModels(allowedPatterns, id)) {
     return Response.json(
       { error: { message: `Model not found: ${id}`, type: "not_found" } },
       { status: 404, headers: { "Access-Control-Allow-Origin": "*" } },
