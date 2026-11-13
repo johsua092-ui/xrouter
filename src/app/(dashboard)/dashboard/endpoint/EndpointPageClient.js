@@ -16,8 +16,10 @@ import {
   TUNNEL_PING_INTERVAL_MS,
   TUNNEL_PING_MAX_MS,
   STATUS_POLL_FAST_MS,
+  STATUS_POLL_SLOW_MS,
   REACHABLE_MISS_THRESHOLD,
   CLIENT_PING_FAST_MS,
+  CLIENT_PING_SLOW_MS,
 } from "./endpointConstants";
 import { clientPingUrl, clientPingAny } from "./endpointPing";
 import { cn } from "@/shared/utils/cn";
@@ -310,7 +312,8 @@ const scopedModelPatterns =
     return () => clearInterval(pollTimer);
   }, []);
 
-  // Status poll: only while degraded (not yet reachable). Stop once healthy to avoid spam.
+  // Status poll: fast while degraded, slow heartbeat once healthy (never fully stops, so
+  // the badge recovers on its own when the process dies or comes back).
   // Visibility re-check: refresh once when tab becomes visible.
   useEffect(() => {
     const anyEnabled = tunnelEnabled || tsEnabled;
@@ -320,8 +323,7 @@ const scopedModelPatterns =
     const allHealthy = tunnelHealthy && tsHealthy;
     const onVisible = () => { if (!document.hidden) syncTunnelStatus(); };
     document.addEventListener("visibilitychange", onVisible);
-    if (allHealthy) return () => document.removeEventListener("visibilitychange", onVisible);
-    const timer = setInterval(() => { if (!document.hidden) syncTunnelStatus(); }, STATUS_POLL_FAST_MS);
+    const timer = setInterval(() => { if (!document.hidden) syncTunnelStatus(); }, allHealthy ? STATUS_POLL_SLOW_MS : STATUS_POLL_FAST_MS);
     return () => {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
@@ -356,15 +358,19 @@ const scopedModelPatterns =
     probeBoth();
     const tunnelHealthy = !tunnelEnabled || tunnelReachable;
     const tsHealthy = !tsEnabled || tsReachable;
-    if (tunnelHealthy && tsHealthy) return;
-    const id = setInterval(probeBoth, CLIENT_PING_FAST_MS);
+    // Keep a slow heartbeat even when healthy: a stopped interval is why the badge froze
+    // on CONNECTING/OFFLINE until the user hard-refreshed the page.
+    const id = setInterval(probeBoth, tunnelHealthy && tsHealthy ? CLIENT_PING_SLOW_MS : CLIENT_PING_FAST_MS);
     return () => clearInterval(id);
   }, [tunnelEnabled, tunnelUrl, tunnelPublicUrl, tsEnabled, tsUrl, tunnelReachable, tsReachable]);
 
-  // Client-side reachable only (server no longer probes; watchdog handles backend health).
+  // Server PID probe is the source of truth for "the tunnel is up"; the browser ping can
+  // only ADD confidence. A failing ping (CORS / CSP / DNS hiccup / dead shortlink worker)
+  // must never demote a live process — that is what made a refresh flash the badge back to
+  // dead while cloudflared was running.
   // Miss-debounce: only flip to false after N consecutive misses.
-  const updateReachable = useCallback((_unused, clientRef, missRef, setter, everRef, everSetter) => {
-    const reachable = clientRef.current;
+  const updateReachable = useCallback((serverUp, clientRef, missRef, setter, everRef, everSetter) => {
+    const reachable = serverUp === true || clientRef.current;
     if (reachable) {
       missRef.current = 0;
       setter(true);
@@ -389,14 +395,14 @@ const scopedModelPatterns =
       setTunnelUrl(tUrl);
       setTunnelPublicUrl(data.tunnel?.publicUrl || "");
       setTunnelEnabled(tEnabled);
-      updateReachable(null, tunnelClientReachableRef, tunnelMissRef, setTunnelReachable, tunnelEverReachableRef, setTunnelEverReachable);
+      updateReachable(data.tunnel?.running === true, tunnelClientReachableRef, tunnelMissRef, setTunnelReachable, tunnelEverReachableRef, setTunnelEverReachable);
 
       const tsEn = data.tailscale?.settingsEnabled ?? data.tailscale?.running ?? data.tailscale?.enabled ?? false;
       const tsUrlVal = data.tailscale?.tunnelUrl || "";
       setTsUrl(tsUrlVal);
       setTsEnabled(tsEn);
       setTsPort(data.tailscale?.port ?? data.tailscale?.localPort ?? null);
-      updateReachable(null, tsClientReachableRef, tsMissRef, setTsReachable, tsEverReachableRef, setTsEverReachable);
+      updateReachable(data.tailscale?.running === true, tsClientReachableRef, tsMissRef, setTsReachable, tsEverReachableRef, setTsEverReachable);
     } catch { /* ignore poll errors */ }
   };
 
@@ -421,14 +427,14 @@ const scopedModelPatterns =
         setTunnelUrl(tUrl);
         setTunnelPublicUrl(data.tunnel?.publicUrl || "");
         setTunnelEnabled(tEnabled);
-        updateReachable(null, tunnelClientReachableRef, tunnelMissRef, setTunnelReachable, tunnelEverReachableRef, setTunnelEverReachable);
+        updateReachable(data.tunnel?.running === true, tunnelClientReachableRef, tunnelMissRef, setTunnelReachable, tunnelEverReachableRef, setTunnelEverReachable);
 
         const tsEn = data.tailscale?.settingsEnabled ?? data.tailscale?.running ?? data.tailscale?.enabled ?? false;
         const tsUrlVal = data.tailscale?.tunnelUrl || "";
         setTsUrl(tsUrlVal);
         setTsEnabled(tsEn);
         setTsPort(data.tailscale?.port ?? data.tailscale?.localPort ?? null);
-        updateReachable(null, tsClientReachableRef, tsMissRef, setTsReachable, tsEverReachableRef, setTsEverReachable);
+        updateReachable(data.tailscale?.running === true, tsClientReachableRef, tsMissRef, setTsReachable, tsEverReachableRef, setTsEverReachable);
       }
     } catch (error) {
       console.log("Error loading settings:", error);
@@ -533,7 +539,7 @@ const scopedModelPatterns =
           const statusRes = await fetch("/api/tunnel/status");
           if (statusRes.ok) {
             const status = await statusRes.json();
-            if (!status.tunnel?.enabled) {
+            if (status.tunnel?.running === false) {
               setTunnelStatus({ type: "error", message: "Tunnel process stopped unexpectedly." });
               setTunnelLoading(false);
               setTunnelProgress("");
@@ -543,6 +549,25 @@ const scopedModelPatterns =
         } catch { /* ignore */ }
       }
     }
+    // Browser could not verify the URL from this network (CORS / CSP / DNS / dead shortlink
+    // worker). The backend PID probe is the source of truth: if the process is alive the
+    // tunnel IS up, so report success and let the badge anchor to the server.
+    try {
+      const finalRes = await fetch("/api/tunnel/status", { cache: "no-store" });
+      if (finalRes.ok) {
+        const finalStatus = await finalRes.json();
+        if (finalStatus.tunnel?.running === true) {
+          tunnelEverReachableRef.current = true;
+          setTunnelEverReachable(true);
+          setTunnelReachable(true);
+          setTunnelEnabled(true);
+          setTunnelStatus({ type: "success", message: "Tunnel is running (verified on the server; the URL is not reachable from this network)." });
+          setTunnelLoading(false);
+          setTunnelProgress("");
+          return true;
+        }
+      }
+    } catch { /* ignore */ }
     setTunnelStatus({ type: "error", message: "Tunnel created but not reachable. Please try again." });
     setTunnelLoading(false);
     setTunnelProgress("");

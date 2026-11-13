@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
-import { sealCredential, unsealCredential } from "../../vault/credentialVault.js";
+import { sealCredential, unsealCredential } from "@/lib/vault/credentialVault.js";
 
 const SCOPE = "promptInjections";
 

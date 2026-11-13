@@ -1,5 +1,16 @@
 # v0.1.0 (2026-11-13)
 
+- **Panel Endpoint No Longer Freezes or Resets the Tunnel Badge**:
+  - The endpoint page polled tunnel status only while the badge was still unhealthy — the interval returned early the moment both cloudflare and tailscale looked reachable. A tunnel that came up on its own therefore never re-probed, and the badge sat on `CONNECTING`/`OFFLINE` until a manual hard-refresh, at which point a single failed browser ping flipped it straight back to "dead" while `cloudflared` was demonstrably running.
+  - Both pollers (`syncTunnelStatus` and the reachability watchdog) now keep a slow heartbeat when healthy (`STATUS_POLL_SLOW_MS` 30s, `CLIENT_PING_SLOW_MS` 60s) instead of stopping, so the badge both recovers and demotes without a reload.
+  - The reachability check now treats the backend PID probe as the authority: `updateReachable` takes the server's `running` flag and *adds* it to whatever the browser ping observed. Client reachability can only raise confidence — a failing ping from this network (CORS, CSP, DNS hiccup, dead shortlink worker) can no longer demote a live process.
+  - The enable flow reads `status.tunnel.running === false` rather than the absence of `enabled`, so an existing live tunnel is not reported as a failure, and after the enable request the frontend falls back to `/api/tunnel/status` when the new URL cannot be verified from the browser.
+
+- **The Auth Guard No Longer Answers 503 for Every Route**:
+  - `src/lib/db/repos/connectionsRepo.js` imported the credential vault as `../../vault/credentialVault.js` — that escaped the `src/lib` tree and re-entered it, so the loader's `@/` alias never saw it and Node failed the whole guard import chain with `ERR_MODULE_NOT_FOUND: Cannot find package '@/lib'`. Because `custom-server.js` deliberately fails closed, the result was `{"error":"Auth guard unavailable"}` (503) on every path — dashboard, `/api/auth/session`, `/api/tunnel/status` — which is also why the page appeared frozen.
+  - The escaping specifier is gone: `connectionsRepo.js`, `promptInjectionRepo.js` and `src/sse/services/backgroundTokenRefresh.js` now use the `@/lib/...` alias the hooks understand. The guard loads, unauthenticated callers get a real `401`/`307`, and the 503 is gone.
+  - Verified by registering the guard hooks in a bare Node process and importing `src/dashboardGuard.js`: `isAuthenticated`, `isLocalRequest`, `proxy` all resolve; after restart `/api/tunnel/status` returns `401`, `/dashboard/endpoint` returns `307`, and no `[AuthGuard] load failed` line appears in the journal.
+
 - **Every Model Listing Now Respects the Caller's Allowlist**:
   - `src/app/api/v1beta/models` — the Gemini-shaped list — validated the API key but never consulted *what that key may call*, and enumerated `PROVIDER_MODELS` for every caller. A team locked to a single model could therefore read the whole catalogue through this endpoint: a live key allowed four models received `1422` of `1423` entries, 97 of them `glm*`. That is where a restricted team key was seeing every `glm` variant.
   - The endpoint now resolves the caller's allowed-model patterns — the per-key list, or the team-wide list when the key is a team key — and drops every entry the key would be refused at request time. This is the same rule `/v1/models` already applied, so the two lists finally agree.
