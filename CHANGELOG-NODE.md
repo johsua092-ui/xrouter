@@ -1,3 +1,63 @@
+# v0.2.0 (2026-11-13)
+
+## Update to Next 16, with a build that survives a small machine
+
+The dashboard and gateway move from Next 14 to Next 16 (React 19), matching the
+`next16` line. The more important half is why the previous attempt at that
+upgrade could not be built: the production build ran the JavaScript heap out of
+memory on a consumer Windows machine, and it did so twice — at the default
+ceiling and again with `--max-old-space-size=8192`. A larger ceiling cannot fix
+a run that already fails at the ceiling, so the peak itself had to come down.
+
+- `next.config.mjs` now sets `webpackMemoryOptimizations` and
+  `webpackBuildWorker`. The first drops the caches webpack retains between
+  invalidation passes, which is where the heap accumulates; the second runs the
+  compilation in its own worker so the framework's overhead no longer stacks on
+  the same heap the bundler is saturating. Both lower the peak rather than raise
+  the limit.
+- Both are reversible for diagnosis: `NEXT_DISABLE_MEMORY_OPTIMIZATIONS=1`
+  restores the previous behaviour without a code change.
+- `scripts/cleanBuild.mjs` and its `build:fresh` script remove the previous
+  `NEXT_DIST_DIR` before compiling. Reading a stale route graph back on top of
+  the new build is the largest avoidable per-run spike, so consecutive builds
+  stay flat.
+- `NEXT_DIST_DIR` is respected, so a parallel side-by-side build is not deleted.
+
+## Breaking
+
+Next 16 and React 19. Nothing else changes — the routing, translation and
+persistence paths are untouched.
+
+# v0.2.0 ({date})
+
+## Update to Next 16 with a build that survives a small machine
+
+The dashboard and gateway move from Next 14 to Next 16 (React 19), matching the
+ line. The more important half is why the previous attempt at that
+upgrade could not be built: the production build ran the JavaScript heap out of
+memory on a consumer Windows machine, and it did so twice — at the default
+ceiling and again with . A larger ceiling cannot fix
+a run that fails at the ceiling; the peak itself had to come down.
+
+-  now sets  and
+  . The first drops the caches webpack retains between
+  invalidation passes, which is where the heap accumulates; the second runs the
+  compilation in its own worker so the framework's overhead no longer stacks on
+  the same heap the bundler is saturating. Both lower the peak rather than raise
+  the limit.
+- Both are reversible for diagnosis: 
+  restores the previous behaviour without a code change.
+-  and its  script remove the previous
+   before compiling. Reading a stale route graph back on top of
+  the new build is the largest avoidable per-run spike; builds are now flat
+  between consecutive runs.
+-  is respected, so a parallel side-by-side build is not deleted.
+
+## Breaking
+
+Next 16 and React 19. The tree is unchanged otherwise; nothing else in the
+routing, translation or persistence paths is touched.
+
 # v0.1.0 (2026-11-09)
 
 - **Rotate an API Key From the API (Secret Swap Without Losing Access)**:

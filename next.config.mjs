@@ -69,6 +69,21 @@ const nextConfig = {
     serverComponentsHmrCache: true,
     // Tree-shake heavy barrel imports to cut compile + bundle size
     optimizePackageImports: ["@xyflow/react", "@dnd-kit/core", "@dnd-kit/sortable", "material-symbols", "marked"],
+    // --- Build memory ceiling -------------------------------------------------
+    // The build dies on "Ineffective mark-compacts near heap limit" on a
+    // consumer Windows machine. Raising --max-old-space-size does not help: the
+    // run already reached 8 GB and failed there, so the ceiling is not the
+    // problem — the peak is. These two settings lower the peak instead.
+    //
+    // `webpackMemoryOptimizations` trades a little build time for a much
+    // flatter memory curve by dropping the caches webpack keeps between
+    // invalidation passes, which is exactly the retention that walks the heap
+    // up. Set NEXT_DISABLE_MEMORY_OPTIMIZATIONS=1 to get the old behaviour back
+    // when diagnosing an unrelated build failure.
+    ...(process.env.NEXT_DISABLE_MEMORY_OPTIMIZATIONS === "1" ? {} : { webpackMemoryOptimizations: true }),
+    // Run the compilation in a separate worker so the framework's own overhead
+    // is not stacked on the same heap the bundler is saturating.
+    webpackBuildWorker: true,
   },
   webpack: (config, { isServer }) => {
     // Ignore fs/path modules in browser bundle
