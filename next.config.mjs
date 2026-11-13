@@ -32,6 +32,24 @@ const tracingRoot = process.env.NEXT_TRACING_ROOT_MODE === "workspace"
 const proxyClientMaxBodySize = process.env.NINEROUTER_PROXY_CLIENT_MAX_BODY_SIZE || "128mb";
 
 const externalPkgs = ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite", "open", "wreq-js"];
+
+// The tracing keys and `serverComponentsExternalPackages` have different homes
+// depending on the installed framework major: Next 14 keeps them under
+// `experimental`, Next 15/16 moved them to the top level and renamed the
+// packages key. Declaring the wrong spelling makes the config validator warn
+// and silently drops the tracing block.
+function detectNextMajor() {
+  try {
+    const pkg = JSON.parse(readFileSync(join(projectRoot, "node_modules", "next", "package.json"), "utf8"));
+    const major = Number(String(pkg.version).split(".")[0]);
+    return Number.isFinite(major) ? major : 0;
+  } catch {
+    // Next not installed yet (fresh checkout before `npm install`): assume the modern layout.
+    return 0;
+  }
+}
+const legacyConfig = detectNextMajor() > 0 && detectNextMajor() <= 14;
+
 const tracingExcludes = {
   "*": [
     "./gitbook/**/*",
@@ -40,6 +58,24 @@ const tracingExcludes = {
     "**/.config/**/*",
     "**/.codex/**/*",
     "**/Cookies/**/*",
+    // Windows local builds: npm keeps its cache under the user profile, and the
+    // legacy "Application Data" folder points at itself — the file tracer walks
+    // that junction forever (EPERM scandir) and the heap climbs until the build
+    // dies with "Ineffective mark-compacts near heap limit". Keep every profile
+    // junction, the npm cache and any previous build dir out of the trace graph.
+    "**/Application Data/**/*",
+    "**/Local Settings/**/*",
+    "**/My Documents/**/*",
+    "**/NetHood/**/*",
+    "**/PrintHood/**/*",
+    "**/Recent/**/*",
+    "**/SendTo/**/*",
+    "**/Start Menu/**/*",
+    "**/Templates/**/*",
+    "**/Temporary Internet Files/**/*",
+    "**/npm-cache/**/*",
+    "**/node_modules/.cache/**/*",
+    "**/.turbo/**/*",
   ],
 };
 
@@ -60,9 +96,22 @@ const nextConfig = {
   images: {
     unoptimized: true
   },
+  // Source maps are the second-largest memory consumer in a production webpack
+  // pass, and the standalone output never ships them. Keeping them off keeps the
+  // heap flatter on constrained runners.
+  productionBrowserSourceMaps: false,
   env: stampBuild(),
   experimental: {
-    serverComponentsExternalPackages: externalPkgs,
+    // Next 14 spells this key `experimental.serverComponentsExternalPackages`;
+    // Next 15 moved it to the top level as `serverExternalPackages` (declared
+    // above), and Next 16 rejects the old spelling outright — even `undefined`
+    // trips the validator, because the key itself must be absent from the object.
+    // Declaring it on Next 16+ therefore makes the validator warn and silently
+    // drops the whole tracing block from the resolved config, which is how the
+    // file tracer ends up walking a Windows user profile into the legacy
+    // "Application Data" junction loop (EPERM scandir) instead of staying inside
+    // the repo. Only Next 14 gets the legacy key.
+    ...(legacyConfig ? { serverComponentsExternalPackages: externalPkgs } : {}),
     // #1529/#1572: LLM clients can send long context or base64 image payloads through /v1 rewrites.
     proxyClientMaxBodySize,
     // Cache fetch responses across HMR refreshes for faster dev reloads.

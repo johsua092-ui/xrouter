@@ -1,3 +1,44 @@
+# v0.2.1 (2026-11-13)
+
+## Stop the production build walking the Windows profile into a heap death spiral
+
+The `next16` line still declared `experimental.serverComponentsExternalPackages`.
+Next 15 renamed that key to the top-level `serverExternalPackages`, and Next 16
+rejects the old spelling outright. The failure was not cosmetic: the unresolved
+key makes the config validator drop the tracing block from the resolved config,
+so `outputFileTracingRoot` and its excludes never applied. On a Windows checkout
+the file tracer then followed the legacy "Application Data" junction — which
+points at the profile it already lives in — until the scandir loop pushed the
+build heap past its ceiling.
+
+Symptoms it produced, all from the same root cause:
+
+- `Unrecognized key(s) in object: 'serverComponentsExternalPackages' at "experimental"`
+- `FATAL ERROR: Ineffective mark-compacts near heap limit` after ~11 minutes
+- `build worker exited with code: 134` (SIGABRT)
+
+### Fixes
+
+- `next.config.mjs` detects the installed Next major and only declares the
+  legacy `experimental.serverComponentsExternalPackages` key on Next <= 14. On
+  Next 15/16 the key is absent, which is what the validator requires — an
+  explicit `undefined` is not enough, the key itself must not be present.
+- The Windows profile junction set (`Application Data`, `Local Settings`,
+  `Recent`, `SendTo`, `Start Menu`, `Templates`, `NetHood`, `PrintHood`, and the
+  rest of the self-referencing legacy names) is excluded from file tracing, along
+  with `npm-cache` and `node_modules/.cache`.
+- `productionBrowserSourceMaps: false`. Source maps are the second-largest
+  consumer in a production webpack pass and the standalone output never ships
+  them.
+
+### Measured
+
+Same machine, same Next 16.4.6, build heap left at the Node default:
+
+- Peak resident set: 4062 MB (failing) to 1802 MB, a 56% drop
+- Wall clock: ~694 s to 50.8 s
+- Config validator warnings: 1 to 0
+
 # v0.2.0 (2026-11-13)
 
 ## Update to Next 16, with a build that survives a small machine
