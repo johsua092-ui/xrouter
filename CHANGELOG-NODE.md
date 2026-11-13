@@ -7,6 +7,23 @@
   - The durable counterpart to the database-side prefix rename: the rename cleared one box, but a database reset or restore, a re-created colliding node, or a second deployment carrying the same prefix brings the dead route right back. The guard closes the whole class.
   - `npm run build` (Next 14.2.35) exit 0.
 
+- **Provider Rows Stop Opening Credentials Just to Be Listed**:
+  - `src/lib/db/repos/connectionsRepo.js` exposed its credential accessors as enumerable, so the `{ ...connection }` spread in the providers listing opened every stored credential as soon as the dashboard loaded — one operation per row, plus a console line for any value this host could not open.
+  - The accessors are non-enumerable now and resolved on first read; a spread carries no credential, a failed read is memoised behind one throttled warning, and the stored value is kept in a hidden field so it survives a later write.
+  - Verified on a copy of the 829-connection production database: no credential rides along on a spread, all rows still load, and a status-only update leaves every credential unchanged.
+- **Connection Updates Can No Longer Drop a Credential**:
+  - The merge in `updateProviderConnection` / `createProviderConnection` / `bulkCreateProviderConnections` collects the three credential fields explicitly: a caller-supplied value is sealed, an unreadable value is preserved verbatim, and only an explicit `null` clears it.
+  - GLM / Z.ai connections whose sealed access token cannot be opened fall back to the plaintext business token stored during the OAuth exchange, so no re-authorization is needed.
+- **Usage API Answers Instead of Throwing for Inactive Connections**:
+  - `src/app/api/usage/[connectionId]/route.js` no longer attempts a refresh for an inactive connection (clean `{ plan: "None", quotas: {}, message: "Connection is inactive" }`), returns a clean `401` when the connection has neither token, and logs one concise `warn` line instead of a full stack trace per poll.
+- **Local Dashboard Keeps Its Port on Redirect**:
+  - `src/dashboardGuard.js` keeps the port when the final hostname is loopback (IPv6 host headers included), so `http://localhost:20128` no longer redirects to port 80 and `ERR_CONNECTION_REFUSED`; a `PUBLIC_BASE_URL` override still resolves to the public hostname.
+- **Stored Credentials Are Read With the Persisted Machine Identity**:
+  - `src/lib/vault/credentialVault.js` reads `DATA_DIR/machine-id` first (falling back to `node-machine-id`) and accepts `VAULT_MASTER_KEY` / `CREDENTIAL_VAULT_KEY`, so a data directory restored on another host stays readable.
+  - An unauthenticated value returns `null` instead of the raw ciphertext, and `src/sse/services/backgroundTokenRefresh.js` skips a refresh token that is still unreadable.
+- **Verified** on a throwaway copy of the production database (829 connections) with the app's own modules: credentials survive a status update, stay sealed at rest, and an unreadable value resolves to `null` while being preserved byte-for-byte. `npm run build` on this host is still pending.
+
+
 # v0.1.0 (2026-11-09)
 
 - **OpenCode Daemon Service Mode Reaches the Local Daemon Again**:

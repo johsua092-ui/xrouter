@@ -8,6 +8,29 @@
   - Verified against the live router: `oc/*` free models resolve and serve, an unknown model on a shadowed reserved prefix reaches upstream instead of dead-ending at `404`, and a genuinely unknown provider prefix still returns `404` as a control.
   - `npm run build` (Next 14.2.35) completes with exit 0 and every route compiled.
 
+- **Provider Rows Stop Opening Credentials Just to Be Listed**:
+  - `src/lib/db/repos/connectionsRepo.js` exposed its `apiKey`, `accessToken` and `refreshToken` accessors as *enumerable*, so the `{ ...connection }` spread used by the providers listing invoked every accessor and opened every stored credential the moment the dashboard loaded — one expensive operation per row, plus a console line for any value the current host cannot open. Reviewing or editing one key was enough to trigger the whole batch.
+  - The accessors are now non-enumerable and resolved on first actual read. A spread carries no credential at all, and a failed read is memoised — one throttled warning per session instead of a stack trace per row per poll.
+  - A connection object now also carries the stored value in a hidden field, so a credential this host cannot open survives a later write instead of being overwritten with `null`.
+  - Verified on a copy of the 829-connection production database: spreading a connection carries none of the three credential fields, all 829 rows still load, and a status-only update leaves every credential byte-identical.
+- **Connection Updates Can No Longer Drop a Credential**:
+  - Because the accessors were excluded from enumeration, the spread-and-merge in `updateProviderConnection`, `createProviderConnection` and `bulkCreateProviderConnections` was rewritten to collect the three credential fields explicitly: a value the caller supplied is sealed as before, a value that cannot be opened here is preserved verbatim, and only an explicit `null`/empty from the caller clears it.
+  - `cleanupProviderConnections` and any other routine that deletes unset fields can no longer erase an unreadable credential either.
+  - A GLM / Z.ai connection whose sealed access token cannot be opened now falls back to the plaintext business token the OAuth exchange already stored (`zaiBusinessToken` / `zcodeJwtToken`), so those accounts recover without a re-authorization round trip.
+- **Usage API Answers Instead of Throwing for Inactive Connections**:
+  - `src/app/api/usage/[connectionId]/route.js` attempted an OAuth refresh for every connection the dashboard polled. An inactive connection with no usable token threw `Failed to refresh credentials. Please re-authorize the connection.` and the handler dumped the whole stack trace to stdout once per poll.
+  - Inactive connections now return `{ plan: "None", quotas: {}, message: "Connection is inactive" }` before any network work, a connection with neither refresh nor access token returns a clean `401`, and a genuine refresh failure logs one concise `warn` line — and still falls through to the usage lookup when an access token is available.
+- **Local Dashboard Keeps Its Port on Redirect**:
+  - `src/dashboardGuard.js` strips the internal node ports (`8080`, `20128`) from redirect targets so they never leak onto a public domain — but it stripped them for loopback too, sending a browser on `http://localhost:20128` to port 80 and producing `ERR_CONNECTION_REFUSED` with nothing listening there.
+  - The port is now preserved when the *final* hostname is loopback (`localhost`, `127.0.0.0/8`, `[::1]`, `0.0.0.0`, `*.localhost`), including IPv6 host headers. A `PUBLIC_BASE_URL` / `BASE_URL` override still resolves to the public hostname, so no internal port reaches a public redirect.
+- **Stored Credentials Are Read With the Persisted Machine Identity**:
+  - `src/lib/vault/credentialVault.js` derived its key from `node-machine-id` directly, while the rest of the app persists and reads that identity at `DATA_DIR/machine-id`. The two agree only while the file was created by the same call on the same host — a database restored from another host, or a runtime where the file and the call disagree, leaves every stored value unreadable.
+  - The vault now reads `DATA_DIR/machine-id` first and falls back to `node-machine-id`, and accepts an explicit pinned key through `VAULT_MASTER_KEY` / `CREDENTIAL_VAULT_KEY` for a deployment whose data directory moved hosts.
+  - A value that cannot be authenticated now returns `null` instead of the raw ciphertext, which used to travel into upstream `Authorization: Bearer` headers and render as a plausible credential in the UI.
+  - `src/sse/services/backgroundTokenRefresh.js` skips a refresh token that is still unreadable, instead of burning an upstream call and logging a failure every five minutes.
+- **Verification for this group**: run against a throwaway copy of the production database (829 connections) with the app's own repository and vault modules loaded — credentials survive a status-only update, values stay sealed at rest, an unreadable value resolves to `null` and is preserved byte-for-byte through a write, and the 236 sealed fields in the copy still open. `npm run build` on this host is still pending; deploy not run yet.
+
+
 # v0.1.0 (2026-11-09)
 
 - **OpenCode Daemon Service Mode Reaches the Local Daemon Again**:

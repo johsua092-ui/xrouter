@@ -86,10 +86,28 @@ function redirectWithProto(targetPath, request) {
   url.protocol = isHttps ? "https:" : "http:";
 
   if (host) {
-    const [h, p] = host.split(":");
+    const bracketEnd = host.startsWith("[") ? host.indexOf("]") : -1;
+    const h = bracketEnd > 0 ? host.slice(0, bracketEnd + 1) : host.split(":")[0];
+    const p = bracketEnd > 0 ? host.slice(bracketEnd + 1).replace(/^:/, "") : host.slice(h.length + 1);
     url.hostname = h;
-    // Don't leak internal node ports (8080, 20128) onto public domains
-    if (p && !["8080", "20128", "80", "443"].includes(p)) {
+
+    // Keep the port on loopback: that is where this process actually listens, so
+    // stripping it sent the browser to port 80 and produced ERR_CONNECTION_REFUSED
+    // on http://localhost:20128. The test runs on the final hostname, so the
+    // PUBLIC_BASE_URL override above still takes the public branch below and no
+    // internal node port leaks onto a public domain.
+    const hostIsLoopback =
+      !h ||
+      h === "localhost" ||
+      h === "[::1]" ||
+      h === "::1" ||
+      h === "0.0.0.0" ||
+      /^127\./.test(h) ||
+      h.endsWith(".localhost");
+
+    if (hostIsLoopback) {
+      url.port = p || "";
+    } else if (p && !["8080", "20128", "80", "443"].includes(p)) {
       url.port = p;
     } else {
       url.port = "";
