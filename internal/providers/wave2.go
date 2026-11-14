@@ -130,6 +130,10 @@ func NewGrokCli() *GrokCli {
 
 func (g *GrokCli) Name() string { return "grok-cli" }
 
+// WireFormat declares the upstream dialect. xAI's CLI backend is the Responses
+// API, so a client's chat body is converted in, not forwarded raw.
+func (g *GrokCli) WireFormat() string { return FormatResponses }
+
 // Endpoint is the Responses API root: the executor uses config.baseUrl verbatim,
 // which the registry already points at /v1/responses.
 func (g *GrokCli) Endpoint(req Request, cred Credential) (string, error) {
@@ -513,6 +517,11 @@ func (q *Qoder) Name() string {
 	return "qoder"
 }
 
+// WireFormat declares the upstream dialect. Qoder answers in the Anthropic
+// Messages shape, which is why the executor unwraps a JSON envelope around it.
+// Declaring OpenAI here would send a chat body to a Messages endpoint.
+func (q *Qoder) WireFormat() string { return FormatClaude }
+
 // Endpoint composes the signed-path URL. The FetchKeys/AgentId/Encode query is
 // part of the upstream contract, not an optional hint.
 func (q *Qoder) Endpoint(req Request, cred Credential) (string, error) {
@@ -593,6 +602,11 @@ type Antigravity struct{}
 func NewAntigravity() *Antigravity { return &Antigravity{} }
 
 func (a *Antigravity) Name() string { return "antigravity" }
+
+// WireFormat declares the upstream dialect. The IDE endpoint is Google
+// generateContent, not chat-completions — a Claude or OpenAI body sent here would
+// be rejected by schema, not merely mis-served.
+func (a *Antigravity) WireFormat() string { return FormatGemini }
 
 // Endpoint selects the base url and the action. Image models must use the unary
 // generateContent action, everything else streams.

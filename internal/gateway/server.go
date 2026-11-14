@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,14 +18,16 @@ import (
 	"github.com/johsua092-ui/xrouter/internal/connection"
 	"github.com/johsua092-ui/xrouter/internal/database"
 	"github.com/johsua092-ui/xrouter/internal/providers"
+	"github.com/johsua092-ui/xrouter/internal/translate"
 )
 
 type Gateway struct {
-	cfg      *config.Config
-	db       *database.DB
-	mux      *chi.Mux
-	registry *providers.Registry
-	upstream *providers.Transport
+	cfg         *config.Config
+	db          *database.DB
+	mux         *chi.Mux
+	registry    *providers.Registry
+	translators *translate.Registry
+	upstream    *providers.Transport
 }
 
 func New(cfg *config.Config, db *database.DB) *Gateway {
@@ -53,12 +56,18 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 	providers.RegisterWave2(registry)
 	providers.RegisterWave3(registry)
 
+	// Translator registry. Every request and response converter self-registers
+	// from its own file's init(), so this only needs to hand out the shared set.
+	translators := translate.NewRegistry()
+	translate.RegisterDefaults(translators)
+
 	g := &Gateway{
-		cfg:      cfg,
-		db:       db,
-		mux:      mux,
-		registry: registry,
-		upstream: providers.NewTransport(nil),
+		cfg:         cfg,
+		db:          db,
+		mux:         mux,
+		registry:    registry,
+		translators: translators,
+		upstream:    providers.NewTransport(nil),
 	}
 
 	g.registerRoutes()
@@ -78,6 +87,10 @@ func (g *Gateway) registerRoutes() {
 	g.mux.Route("/v1", func(r chi.Router) {
 		r.Get("/models", g.handleModels)
 		r.Post("/chat/completions", g.handleChatCompletions)
+		// The Claude Messages endpoint. A Claude Code client posts here, so the
+		// path must exist for the translate-in path to be reachable at all —
+		// without it a Claude client 404s before translation is ever considered.
+		r.Post("/messages", g.handleChatCompletions)
 	})
 
 	// Diagnostic & Proxy Test Utility
@@ -301,6 +314,41 @@ func (g *Gateway) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 		Extra:      conn.Extra,
 	}, r.Header)
 
+	// Translate the request into the provider's dialect before it goes upstream.
+	//
+	// The client's dialect is detected from the message shape, the provider's from
+	// its registry format. When they match, the body passes through untouched —
+	// the translator is not allowed to reshape a body that is already correct.
+	sourceFormat, targetFormat := g.detectFormats(r, req.Body, providerName)
+	translateOpts := translate.PipelineOptions{
+		Source:   sourceFormat,
+		Target:   targetFormat,
+		Model:    req.Model,
+		Stream:   req.Stream,
+		Provider: providerName,
+	}
+
+	var upstreamBody []byte = req.Body
+	if sourceFormat != targetFormat {
+		var parsed map[string]any
+		if err := json.Unmarshal(req.Body, &parsed); err != nil {
+			jsonError(w, http.StatusBadRequest, "request body is not a JSON object", err)
+			return
+		}
+		translated, tErr := translate.TranslateRequest(g.translators, parsed, translateOpts)
+		if tErr != nil {
+			jsonError(w, http.StatusBadRequest,
+				fmt.Sprintf("could not translate %s request to %s", sourceFormat, targetFormat), tErr)
+			return
+		}
+		upstreamBody, err = json.Marshal(translated)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "could not serialise translated request", err)
+			return
+		}
+	}
+	req.Body = upstreamBody
+
 	proxied, err := g.upstream.Do(r.Context(), adapter, req, cred)
 	if err != nil {
 		jsonError(w, http.StatusBadGateway,
@@ -309,11 +357,184 @@ func (g *Gateway) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	}
 	defer proxied.Body.Close()
 
-	// Stream the upstream response through untouched. The gateway is a conduit
-	// here; reshaping belongs to the translator layer, not this hop.
+	// Stream the upstream response through. When dialects differ the frames are
+	// converted on the way out; when they match the stream is a straight conduit.
 	copyUpstreamHeaders(w.Header(), proxied.Header)
+
+	if sourceFormat == targetFormat || !req.Stream {
+		w.WriteHeader(proxied.StatusCode)
+		io.Copy(w, proxied.Body)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(proxied.StatusCode)
-	io.Copy(w, proxied.Body)
+	streamTranslated(w, proxied.Body, translateOpts)
+}
+
+// detectFormats picks the client and provider dialects for a request.
+//
+// The client side prefers the endpoint (a Claude client always posts to
+// /v1/messages) and falls back to sniffing the body shape. The provider side reads
+// the registry's declared format. An unported provider defaults to the OpenAI
+// dialect, which is what the generic fallback adapter speaks.
+func (g *Gateway) detectFormats(r *http.Request, body []byte, providerName string) (translate.Format, translate.Format) {
+	target := translate.FormatOpenAI
+	if adapter, ok := g.registry.Resolve(providerName); ok {
+		target = providers.RegistryFormat(adapter)
+	}
+
+	var parsed map[string]any
+	json.Unmarshal(body, &parsed)
+
+	source := translate.DetectFormatByEndpoint(r.URL.Path, parsed)
+	if source == "" {
+		source = sniffRequestBody(parsed)
+	}
+	return source, target
+}
+
+// sniffRequestBody infers the client dialect from field shape.
+//
+// A `system` array and block-shaped `content` is the Claude Messages API. An
+// `input` array is the Responses API. Everything else is chat completions.
+func sniffRequestBody(body map[string]any) translate.Format {
+	if body == nil {
+		return translate.FormatOpenAI
+	}
+	if _, ok := body["input"].([]any); ok {
+		return translate.FormatOpenAIResponses
+	}
+	if _, ok := body["system"].([]any); ok {
+		return translate.FormatClaude
+	}
+	for _, raw := range asSlice(body["messages"]) {
+		msg, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, isSlice := msg["content"].([]any); isSlice {
+			return translate.FormatClaude
+		}
+	}
+	return translate.FormatOpenAI
+}
+
+// streamTranslated reads the upstream SSE stream and writes converted frames.
+//
+// A frame that converts to nothing is dropped rather than forwarded as an empty
+// event, because a bare `event:` line desynchronises strict SSE clients. The
+// converter state lives for the whole stream so per-turn state (message id,
+// accumulated usage, open blocks) survives across frames.
+func streamTranslated(w http.ResponseWriter, body io.Reader, opts translate.PipelineOptions) {
+	flusher, _ := w.(http.Flusher)
+	state := translate.NewStreamState()
+	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 4<<20)
+
+	var eventLines []string
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// A blank line terminates one SSE frame.
+		if line == "" {
+			if len(eventLines) == 0 {
+				continue
+			}
+			emitTranslatedFrame(w, flusher, eventLines, state, opts)
+			eventLines = eventLines[:0]
+			continue
+		}
+		eventLines = append(eventLines, line)
+	}
+
+	if len(eventLines) > 0 {
+		emitTranslatedFrame(w, flusher, eventLines, state, opts)
+	}
+}
+
+// emitTranslatedFrame converts the data payload of one SSE frame and writes it out.
+func emitTranslatedFrame(w http.ResponseWriter, flusher http.Flusher, lines []string, state *translate.StreamState, opts translate.PipelineOptions) {
+	var dataParts []string
+	eventName := ""
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "data:") {
+			dataParts = append(dataParts, strings.TrimSpace(line[len("data:"):]))
+		} else if strings.HasPrefix(line, "event:") {
+			eventName = strings.TrimSpace(line[len("event:"):])
+		}
+	}
+
+	if len(dataParts) == 0 {
+		// A frame with no data carries nothing translatable; forward only its
+		// event name so a bare comment or keepalive is not silently swallowed.
+		if eventName != "" {
+			fmt.Fprintf(w, "event: %s\n\n", eventName)
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		return
+	}
+
+	payload := strings.Join(dataParts, "\n")
+	if payload == "[DONE]" {
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return
+	}
+
+	var chunk map[string]any
+	if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+		// Not JSON: relay the frame untouched rather than dropping provider data.
+		writeRawFrame(w, flusher, eventName, payload)
+		return
+	}
+
+	converted, err := translate.TranslateResponse(nil, chunk, state, opts)
+	if err != nil || len(converted) == 0 {
+		// A converted-to-nothing frame is intentionally dropped: emitting an
+		// empty event desynchronises strict SSE clients.
+		return
+	}
+
+	for _, frame := range converted {
+		out, mErr := json.Marshal(frame)
+		if mErr != nil {
+			continue
+		}
+		// The converted frame names its own event; the upstream event name would
+		// be wrong for the client dialect and is not forwarded.
+		if name, ok := frame["type"].(string); ok && name != "" {
+			fmt.Fprintf(w, "event: %s\n", name)
+		}
+		fmt.Fprintf(w, "data: %s\n\n", out)
+	}
+	if flusher != nil {
+		flusher.Flush()
+	}
+}
+
+func writeRawFrame(w http.ResponseWriter, flusher http.Flusher, eventName, payload string) {
+	if eventName != "" {
+		fmt.Fprintf(w, "event: %s\n", eventName)
+	}
+	fmt.Fprintf(w, "data: %s\n\n", payload)
+	if flusher != nil {
+		flusher.Flush()
+	}
+}
+
+// asSlice is a local type assertion helper for the sniffing path.
+func asSlice(v any) []any {
+	s, _ := v.([]any)
+	return s
 }
 
 // maxRequestBody bounds how much of a chat request is read into memory.
