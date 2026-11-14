@@ -1,4 +1,38 @@
 # v0.2.5 (2026-11-14)
+
+### Fixed — MiniMax Code: "this device code can no longer be exchanged" after a successful login
+
+- Root cause: the `/device-code` leg sends a PKCE S256 challenge for MiniMax Code,
+  but the `/poll` leg still listed both MiniMax providers in `noPkceProviders` and
+  passed `null` as the verifier. MiniMax binds the granted device code to the
+  challenge, so the first exchange failed on a PKCE mismatch — and because an OAuth
+  device code is single-use, the failed attempt burned it. The user saw
+  "Connection Failed / this device code can no longer be exchanged" *after*
+  finishing the browser login, which made it look like the login had failed.
+- `minimax-code` and `minimax-code-global` are removed from `noPkceProviders` so
+  they fall through to the PKCE branch and forward `codeVerifier`.
+- That branch now also forwards `extraData`; MiniMax still needs
+  `extraData._minimaxPollByUser` to select `user_code` over `device_code`.
+- Verified against account.minimax.io: device code is issued, then polled with the
+  verifier and returns `authorization_pending` (accepted, awaiting user) instead of
+  a burned code. Other `noPkceProviders` members are device-code flows without
+  PKCE and are unaffected.
+
+
+### Fixed — MiniMax Code: opaque "fetch failed" replaced with a diagnosable error
+
+- `minimax-code` / `minimax-code-global` surfaced transport failures as a bare
+  `fetch failed`, which the OAuth modal rendered as "Connection Failed" with no
+  hint of the endpoint that died. The China site (`account.minimax.cn`, Aliyun
+  Beijing) is unroutable from several regions while the international site
+  (`account.minimax.io`) resolves fine, so the two flows were indistinguishable
+  to the user.
+- `postForm` now wraps `fetch` and raises `MiniMax Code could not reach <host>
+  (fetch failed): <UND_ERR_CAUSE>. This is a network/egress problem, not a
+  credential problem — ...`, naming the host and the underlying undici cause.
+- Behaviour on a reachable host is unchanged; verified against
+  `account.minimax.cn` (CONNECT_TIMEOUT, now reported by name) and
+  `account.minimax.io` (HTTP 200, device code issued).
 - MiniMax Code device-code sign-in now receives the PKCE S256 challenge it
   requires; both `minimax-code` ids were removed from the no-PKCE device list.
 

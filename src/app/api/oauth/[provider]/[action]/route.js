@@ -519,7 +519,14 @@ export async function POST(request, { params }) {
       }
 
       // Providers that don't use PKCE for device code
-      const noPkceProviders = ["github", "kimi", "kimi-coding", "kilocode", "codebuddy-cn", "codebuddy-intl", "glm", "zcode", "minimax-code", "minimax-code-global"];
+      // NOTE: minimax-code / minimax-code-global are deliberately NOT here. Their
+      // /device-code leg sends a PKCE S256 challenge (see noPkceDeviceProviders
+      // above), so the granted device code is bound to that challenge. Dropping
+      // the verifier on /poll made the exchange fail with "this device code can
+      // no longer be exchanged" AFTER a successful browser login — the OAuth
+      // device code is single-use, so the failed attempt burned it. They now
+      // fall through to the PKCE branch below, which forwards codeVerifier.
+      const noPkceProviders = ["github", "kimi", "kimi-coding", "kilocode", "codebuddy-cn", "codebuddy-intl", "glm", "zcode"];
       let result;
       if (noPkceProviders.includes(provider)) {
         // kimi needs extraData._kimiDeviceId for stable X-Msh-Device-Id (CLIProxyAPI parity)
@@ -536,11 +543,13 @@ export async function POST(request, { params }) {
         }
         result = await pollForToken(provider, deviceCode, codeVerifier, extraData);
       } else {
-        // Qwen and other PKCE providers
+        // Qwen and other PKCE providers. extraData is forwarded because the
+        // MiniMax Code providers ride this branch yet still need
+        // extraData._minimaxPollByUser to pick user_code vs device_code.
         if (!codeVerifier) {
           return NextResponse.json({ error: "Missing code verifier" }, { status: 400 });
         }
-        result = await pollForToken(provider, deviceCode, codeVerifier);
+        result = await pollForToken(provider, deviceCode, codeVerifier, extraData);
       }
 
       if (result.success) {
