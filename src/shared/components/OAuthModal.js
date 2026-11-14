@@ -299,6 +299,8 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         "muse",
         "glm",
         "zcode",
+        "minimax-code",
+        "minimax-code-global",
       ];
       if (deviceCodeProviders.includes(provider)) {
         setIsDeviceCode(true);
@@ -341,6 +343,13 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
             }
           : (provider === "kimi" || provider === "kimi-coding")
           ? { _kimiDeviceId: data._kimiDeviceId }
+          : (provider === "minimax-code" || provider === "minimax-code-global")
+          ? {
+              // MiniMax's user-code variant polls the token endpoint with the
+              // user_code instead of a device_code; the server must see this
+              // flag or it sends device_code: undefined and every poll fails.
+              _minimaxPollByUser: data._minimaxPollByUser,
+            }
           : provider === "zcode"
           ? { _zcodePollToken: data._zcodePollToken, _zcodeFamily: data._zcodeFamily }
           : provider === "glm"
