@@ -1,5 +1,20 @@
 # v0.1.0 (2026-11-14)
 
+### Fixed — OpenCode daemon bridge: readiness parser matched no current build
+
+- **Every free-lane request logged `[BRIDGE] OPENCODE daemon unreachable — falling
+  back to TLS HTTP` and paid a readiness delay, even though the daemon binary was
+  installed and booted cleanly.** The startup parser required two log lines to agree:
+  a listening URL and a `server password <x>` line. Current daemon builds (1.19.x)
+  emit the URL with an `opencode` prefix (`opencode server listening on http://…`)
+  and no longer print the password line at all, so the match never settled and the
+  worker was discarded in favour of the TLS HTTP path.
+  The URL match now accepts both prefixes, and the password line is optional — when
+  absent, the value injected via `OPENCODE_SERVER_PASSWORD` is reused for the auth
+  header, which is the same secret the daemon booted with.
+- **Readiness wait trimmed from 4s to 2s.** A failed spawn no longer stalls the
+  request for the full window before falling back. Idle memory is unchanged.
+
 ### Fixed — Auth redirect: loopback port no longer stripped, IPv6 hosts parsed correctly
 
 - **Opening the dashboard over `http://localhost:20128` bounced to port 80 and failed

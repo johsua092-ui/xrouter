@@ -1192,13 +1192,19 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
           }
         }
         if (buffer.length > 20_000) buffer = buffer.slice(-20_000);
-        const matchUrl = buffer.match(/server listening on (http:\/\/[^\s]+)/);
+        // The daemon prints its listening URL with a version-dependent prefix:
+        // older builds emit `server listening on http://...`, current builds
+        // (1.19.x) emit `opencode server listening on http://...`. Match both.
+        // The password line only appears on builds that boot secured, so treat it
+        // as optional: when OPENCODE_SERVER_PASSWORD is set (we always set it) the
+        // listener is reachable and the value we injected is the one to reuse.
+        const matchUrl = buffer.match(/(?:opencode )?server listening on (https?:\/\/[^\s]+)/);
         const matchPass = buffer.match(/server password ([^\s]+)/);
-        if (matchUrl && matchPass && !settled) {
+        if (matchUrl && !settled) {
           settled = true;
           const info = {
             url: matchUrl[1],
-            password: matchPass[1],
+            password: matchPass ? matchPass[1] : (env.OPENCODE_SERVER_PASSWORD || ""),
             process: p,
           };
           scheduleDaemonReaper(poolKey, info);
@@ -1216,12 +1222,15 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
         }
       });
 
+      // Bounded readiness wait. The listener line arrives in well under a second
+      // on a healthy box; 2s keeps a failed spawn from stalling the request before
+      // it falls back to the TLS HTTP path.
       setTimeout(() => {
         if (!settled) {
           settled = true;
           resolve(getOpencodeServiceInfo());
         }
-      }, 4000);
+      }, 2000);
     } catch {
       resolve(getOpencodeServiceInfo());
     }
