@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -43,10 +44,14 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 	}))
 
 	// Provider adapter registry: the ported adapters from internal/providers.
-	// Every OpenAI-compatible provider is already covered; unported ones fall
-	// through to the generic adapter so routing never dead-ends.
+	// Wave 1 is every OpenAI-compatible provider, wave 2 the three high-traffic
+	// specials (grok-cli, qoder, antigravity), wave 3 the identity quirks.
+	// Unported providers fall through to the generic adapter so routing never
+	// dead-ends.
 	registry := providers.NewRegistry()
 	providers.RegisterDefaults(registry)
+	providers.RegisterWave2(registry)
+	providers.RegisterWave3(registry)
 
 	g := &Gateway{
 		cfg:      cfg,
@@ -102,13 +107,28 @@ func (g *Gateway) handleHealth(w http.ResponseWriter, r *http.Request) {
 	runtime.ReadMemStats(&mem)
 	allocMb := float64(mem.Alloc) / (1024 * 1024)
 
-	jsonResponse(w, http.StatusOK, map[string]interface{}{
+	out := map[string]interface{}{
 		"ok":        true,
 		"engine":    "golang",
 		"version":   g.cfg.Version,
 		"port":      g.cfg.Port,
 		"memory_mb": fmt.Sprintf("%.2f MB", allocMb),
-	})
+	}
+
+	// Credential readability. Without this the sealed/plaintext split is only
+	// discoverable by watching requests fail one provider at a time.
+	readable, sealed, cerr := g.db.CountReadableConnections()
+	if cerr != nil {
+		out["connections"] = map[string]interface{}{"error": cerr.Error()}
+	} else {
+		out["connections"] = map[string]interface{}{
+			"readable": readable,
+			"sealed":   sealed,
+			"total":    readable + sealed,
+		}
+	}
+
+	jsonResponse(w, http.StatusOK, out)
 }
 
 func (g *Gateway) handleTestProxy(w http.ResponseWriter, r *http.Request) {
@@ -186,14 +206,16 @@ func (g *Gateway) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Gateway) handleAdapterCoverage(w http.ResponseWriter, r *http.Request) {
-	names := g.registry.Names()
+	cov := providers.BuildCoverage(g.registry)
 	jsonResponse(w, http.StatusOK, map[string]interface{}{
 		"engine":              "golang",
-		"ported":              names,
-		"ported_count":        len(names),
-		"fallback":            "__fallback__ (generic OpenAI-compatible)",
+		"ported":              cov.Ported,
+		"ported_count":        len(cov.Ported),
+		"generic":             cov.Generic,
+		"generic_count":       len(cov.Generic),
+		"node_executor_total": cov.NodeExecutorTotal,
+		"fallback":            cov.Fallback,
 		"note":                "unported providers still route through the fallback adapter",
-		"node_executor_total": 37,
 	})
 }
 
@@ -217,24 +239,153 @@ func (g *Gateway) handleModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleChatCompletions is the real routing path.
+//
+// It parses "provider/model", resolves the credential for that provider from the
+// live database, asks the registry for the adapter, and streams the upstream
+// response back verbatim. Before this existed the handler returned a canned JSON
+// document, which is why the registry could be wired up and still do nothing.
+//
+// Failure modes are explicit on purpose: an unknown model, a provider with no
+// active connection, and an upstream error all produce a diagnostic body rather
+// than a fabricated success.
 func (g *Gateway) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
-	// Standard response placeholder for non-streaming or simple proxy
-	jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"id":      "chatcmpl-" + fmt.Sprintf("%d", time.Now().UnixNano()),
-		"object":  "chat.completion",
-		"created": time.Now().Unix(),
-		"model":   "xrouter-go",
-		"choices": []map[string]interface{}{
-			{
-				"index": 0,
-				"message": map[string]interface{}{
-					"role":    "assistant",
-					"content": "X Router Golang Engine ready.",
-				},
-				"finish_reason": "stop",
-			},
-		},
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBody))
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "could not read request body", err)
+		return
+	}
+
+	req, parseErr := parseChatRequest(body)
+	if parseErr != nil {
+		jsonError(w, http.StatusBadRequest, "invalid chat request", parseErr)
+		return
+	}
+
+	providerName, modelID, ok := splitProviderModel(req.Model)
+	if !ok {
+		jsonError(w, http.StatusBadRequest,
+			fmt.Sprintf("model %q is not in provider/model form", req.Model), nil)
+		return
+	}
+	req.Provider = providerName
+	req.Model = modelID
+
+	adapter, explicit := g.registry.Resolve(providerName)
+
+	// Which connection serves this provider? Read-only; the Go core does not
+	// write to the shared database.
+	conn, connErr := g.db.FindActiveConnection(providerName)
+	if connErr != nil || conn == nil {
+		jsonResponse(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"error":    "no active connection for provider",
+			"provider": providerName,
+			"adapter":  adapter.Name(),
+			"ported":   explicit,
+			"detail":   errString(connErr),
+		})
+		return
+	}
+
+	cred := providers.CredentialFromConnection(providers.CredentialFromDB{
+		ProviderID: conn.Provider,
+		APIKey:     conn.APIKey,
+		Token:      conn.Token,
+		BaseURL:    conn.BaseURL,
+		AccountID:  conn.AccountID,
+		UserID:     conn.UserID,
+		Email:      conn.Email,
+		AgentID:    conn.AgentID,
+		SessionID:  conn.ConnectionID,
+		Region:     conn.Region,
+		Extra:      conn.Extra,
+	}, r.Header)
+
+	proxied, err := g.upstream.Do(r.Context(), adapter, req, cred)
+	if err != nil {
+		jsonError(w, http.StatusBadGateway,
+			fmt.Sprintf("upstream call failed via %s adapter", adapter.Name()), err)
+		return
+	}
+	defer proxied.Body.Close()
+
+	// Stream the upstream response through untouched. The gateway is a conduit
+	// here; reshaping belongs to the translator layer, not this hop.
+	copyUpstreamHeaders(w.Header(), proxied.Header)
+	w.WriteHeader(proxied.StatusCode)
+	io.Copy(w, proxied.Body)
+}
+
+// maxRequestBody bounds how much of a chat request is read into memory.
+const maxRequestBody = 32 << 20 // 32 MB
+
+// parseChatRequest reads the fields the router needs without losing the body.
+func parseChatRequest(body []byte) (providers.Request, error) {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return providers.Request{}, err
+	}
+	stream, _ := raw["stream"].(bool)
+	model, _ := raw["model"].(string)
+	return providers.Request{
+		Model:  model,
+		Stream: stream,
+		Body:   body,
+	}, nil
+}
+
+// splitProviderModel splits "oc/gemini-3.8-flash" into its provider and model
+// halves. A model id may itself contain slashes, so only the first separator
+// counts.
+func splitProviderModel(full string) (provider, model string, ok bool) {
+	idx := strings.Index(full, "/")
+	if idx <= 0 || idx == len(full)-1 {
+		return "", "", false
+	}
+	return full[:idx], full[idx+1:], true
+}
+
+// copyUpstreamHeaders forwards the response headers, dropping hop-by-hop entries
+// that must not be relayed.
+func copyUpstreamHeaders(dst, src http.Header) {
+	for k, vs := range src {
+		if hopByHopHeader[k] {
+			continue
+		}
+		for _, v := range vs {
+			dst.Add(k, v)
+		}
+	}
+}
+
+// hopByHopHeader lists the connection-scoped headers RFC 7230 says a proxy must
+// not forward.
+var hopByHopHeader = map[string]bool{
+	"Connection":          true,
+	"Proxy-Connection":    true,
+	"Keep-Alive":          true,
+	"Proxy-Authenticate":  true,
+	"Proxy-Authorization": true,
+	"Te":                  true,
+	"Trailer":             true,
+	"Transfer-Encoding":   true,
+	"Upgrade":             true,
+}
+
+// jsonError writes a diagnostic document. err may be nil when the cause is a
+// malformed client value rather than a failure.
+func jsonError(w http.ResponseWriter, status int, msg string, err error) {
+	jsonResponse(w, status, map[string]interface{}{
+		"error":  msg,
+		"detail": errString(err),
 	})
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func (g *Gateway) handleGetConnection(w http.ResponseWriter, r *http.Request) {
