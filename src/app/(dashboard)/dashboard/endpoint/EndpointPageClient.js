@@ -316,8 +316,11 @@ const scopedModelPatterns =
   // the badge recovers on its own when the process dies or comes back).
   // Visibility re-check: refresh once when tab becomes visible.
   useEffect(() => {
-    const anyEnabled = tunnelEnabled || tsEnabled;
-    if (!anyEnabled) return;
+    // Always poll: this used to be gated on `tunnelEnabled || tsEnabled`, but the
+    // very state this poll repairs is the one where a stale/optimistic flag says
+    // "off" while the process is up (or the reverse). Gating the poll on the flag
+    // it is supposed to correct meant a single wrong read stayed wrong until a
+    // manual reload — the reported "button never updates / flips back to off" bug.
     const tunnelHealthy = !tunnelEnabled || tunnelReachable;
     const tsHealthy = !tsEnabled || tsReachable;
     const allHealthy = tunnelHealthy && tsHealthy;
@@ -390,12 +393,23 @@ const scopedModelPatterns =
       const statusRes = await fetch("/api/tunnel/status", { cache: "no-store" });
       if (!statusRes.ok) return;
       const data = await statusRes.json();
-      const tEnabled = data.tunnel?.settingsEnabled ?? data.tunnel?.enabled ?? false;
+      // The toggle is driven by the live process probe, not the stored preference.
+      // Reading `settingsEnabled` here is what made a reload snap the button back
+      // to OFFLINE: the settings row still said tunnelEnabled=true from a previous
+      // run while the probe had lost sight of the process (stale PID file), so the
+      // two disagreed and the flag won. `running` is the ground truth; keep the
+      // optimistic local state while a spawn we just kicked off is still settling.
+      const tRunning = data.tunnel?.running === true;
+      const tEnabled = tRunning || data.tunnel?.enabled === true;
       const tUrl = data.tunnel?.tunnelUrl || "";
-      setTunnelUrl(tUrl);
-      setTunnelPublicUrl(data.tunnel?.publicUrl || "");
-      setTunnelEnabled(tEnabled);
-      updateReachable(data.tunnel?.running === true, tunnelClientReachableRef, tunnelMissRef, setTunnelReachable, tunnelEverReachableRef, setTunnelEverReachable);
+      if (tEnabled && !tunnelLoading) {
+        setTunnelUrl(tUrl);
+        setTunnelPublicUrl(data.tunnel?.publicUrl || "");
+        setTunnelEnabled(true);
+      } else if (!tunnelLoading && !tRunning && data.tunnel?.settingsEnabled !== true) {
+        setTunnelEnabled(false);
+      }
+      updateReachable(tRunning, tunnelClientReachableRef, tunnelMissRef, setTunnelReachable, tunnelEverReachableRef, setTunnelEverReachable);
 
       const tsEn = data.tailscale?.settingsEnabled ?? data.tailscale?.running ?? data.tailscale?.enabled ?? false;
       const tsUrlVal = data.tailscale?.tunnelUrl || "";
@@ -422,12 +436,14 @@ const scopedModelPatterns =
       }
       if (statusRes.status === "fulfilled" && statusRes.value.ok) {
         const data = await statusRes.value.json();
-        const tEnabled = data.tunnel?.settingsEnabled ?? data.tunnel?.enabled ?? false;
+        // Same rule as the poll: the process probe outranks the stored preference.
+        const tRunning = data.tunnel?.running === true;
+        const tEnabled = tRunning || data.tunnel?.enabled === true;
         const tUrl = data.tunnel?.tunnelUrl || "";
         setTunnelUrl(tUrl);
         setTunnelPublicUrl(data.tunnel?.publicUrl || "");
         setTunnelEnabled(tEnabled);
-        updateReachable(data.tunnel?.running === true, tunnelClientReachableRef, tunnelMissRef, setTunnelReachable, tunnelEverReachableRef, setTunnelEverReachable);
+        updateReachable(tRunning, tunnelClientReachableRef, tunnelMissRef, setTunnelReachable, tunnelEverReachableRef, setTunnelEverReachable);
 
         const tsEn = data.tailscale?.settingsEnabled ?? data.tailscale?.running ?? data.tailscale?.enabled ?? false;
         const tsUrlVal = data.tailscale?.tunnelUrl || "";

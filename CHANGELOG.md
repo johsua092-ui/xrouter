@@ -1,5 +1,32 @@
 # v0.1.0 (2026-11-14)
 
+### Fixed — Tunnel toggle: state now reflects the live process, not a build-time snapshot
+
+- **The enable/disable buttons were no-ops.** Only the `status` probe had opted out of
+  static optimisation; the six other tunnel routes (`enable`, `disable`,
+  `tailscale-enable`, `tailscale-disable`, `tailscale-check`, `tailscale-install`) were
+  still being evaluated at build time, so their POST answers were frozen into a `.body`
+  payload. Clicking the toggle hit that snapshot and `enableTunnel()` never ran. All
+  seven routes are now force-dynamic.
+- **The toggle flipped back to OFFLINE on reload.** `isCloudflaredRunning()` treated a
+  missing or stale PID file as "process is dead" and returned without ever checking the
+  process table. After a server restart or when the data dir was swapped, a live
+  cloudflared was reported dead, so `getTunnelStatus().enabled` was `false` while the
+  tunnel was up. The PID file is now a fast path only: the probe falls back to scanning
+  for a cloudflared quick-tunnel process and reclaims the file.
+- **Enable took ~24 s to answer.** The route waited for a 15 s post-spawn health probe
+  plus an 8 s DNS warmup before responding — long past the point the browser gave up, so
+  the button appeared to do nothing. The probe is capped at 6 s, the warmup wait is gone,
+  and monitoring starts in the background.
+- **Duplicate cloudflared processes.** Because the process probe answered `false` with a
+  stale PID file, the connectivity watchdog believed the tunnel was down every ~15 s and
+  restarted it, stacking a second quick tunnel that raced the first for `state.json`.
+  With the probe fixed the watchdog sees the live process and stands down; the manager
+  also refuses to double-spawn when a process is up but state was lost.
+- **The status poll was gated on the flag it exists to correct.** The dashboard polled
+  only while it already believed the tunnel was enabled, so a single wrong read stayed
+  wrong until a manual reload. It now polls unconditionally.
+
 ### Fixed — Antigravity: account fingerprint was one IDE generation behind
 
 - Spoofed client version was `2.24.0` (macOS arm64) while the Antigravity desktop

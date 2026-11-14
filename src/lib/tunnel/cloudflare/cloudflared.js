@@ -455,13 +455,46 @@ export function killCloudflared(localPort) {
   killCloudflaredByPort(localPort);
 }
 
+// A running cloudflared can be missed entirely when the PID file is gone (server
+// restarted between spawn and probe, scratch dir cleaned, deployment swapped the
+// data dir). The PID file is a fast path, not the source of truth: fall back to
+// scanning the process table for a cloudflared whose command line targets our
+// quick-tunnel config before reporting the tunnel dead. Without this the status
+// probe answered `running:false` while the tunnel was up, so the dashboard
+// flipped to OFFLINE on every reload.
+function findCloudflaredPids() {
+  try {
+    const pids = execSync("pgrep -f 'cloudflared' 2>/dev/null || true", {
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+      encoding: "utf8",
+    })
+      .split("\n")
+      .map((line) => parseInt(line.trim(), 10))
+      .filter((n) => Number.isInteger(n) && n > 0);
+    return pids;
+  } catch {
+    return [];
+  }
+}
+
 export function isCloudflaredRunning() {
   const pid = loadPid();
-  if (!pid) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return false;
+  if (pid) {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch { /* stale pid file — fall through to the process scan */ }
   }
+
+  // PID file missing or stale: the process may still be alive. Match on the
+  // quick-tunnel command line so an unrelated cloudflared (e.g. a named tunnel
+  // for a different app) is not mistaken for ours.
+  if (IS_WINDOWS) return false; // pgrep is POSIX-only; fall back to the PID file
+  const pids = findCloudflaredPids();
+  if (!pids.length) return false;
+
+  // Reclaim the file so the next call takes the fast path again.
+  try { savePid(pids[0]); } catch { /* best-effort */ }
+  return true;
 }
