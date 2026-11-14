@@ -1,4 +1,20 @@
 # v0.2.5 (2026-11-14)
+
+### Fixed — Tunnel toggle frozen by a build-time snapshot of `/api/tunnel/status`
+
+- Root cause: `GET /api/tunnel/status` took no request argument and read no dynamic
+  API, so Next.js statically optimised it during `next build` and emitted a
+  `status.body` payload containing the tunnel state captured at build time. The
+  server kept answering from that frozen body, which is why the dashboard button
+  never changed when the tunnel state changed and why a page refresh snapped the
+  switch back to "off".
+- The route now opts out of static optimisation (`dynamic = "force-dynamic"`,
+  `revalidate = 0`, `fetchCache = "force-no-store"`), so every request probes the
+  live process and `state.json` instead of replaying the build snapshot.
+- Verified end to end against the running server: enable → status reports the new
+  URL, disable → `running:false` and cloudflared reaped, re-enable → reports the
+  new URL again.
+
 ### Fixed — MiniMax Code: "this device code can no longer be exchanged" after a successful login
 - Root cause: the `/device-code` leg sends a PKCE S256 challenge for MiniMax Code,
   but the `/poll` leg still listed both MiniMax providers in `noPkceProviders` and
