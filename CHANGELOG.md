@@ -1,4 +1,4 @@
-# v0.1.2 (2026-11-14)
+# v0.1.0 (2026-11-13)
 
 ## A stale database no longer blocks table writes
 
@@ -32,9 +32,6 @@ keep their values.
 Verified against a database carrying `proxyPools.url NOT NULL` and a legacy
 row: the column is dropped, the row survives, and Cloudflare relay creation
 succeeds. A healthy database is untouched — same columns, same row count.
-
-# v0.1.1 (2026-11-13)
-# v0.1.1 (2026-11-13)
 
 ## A shadowed reserved prefix falls through to its built-in
 

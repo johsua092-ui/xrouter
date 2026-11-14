@@ -1,4 +1,4 @@
-# v0.1.2 (2026-11-14)
+# v0.1.0 (2026-11-13)
 
 ## Proxy pool / Cloudflare relay writes fail on an upgraded database
 
@@ -21,7 +21,6 @@ harmless nullable/defaulted leftovers are left in place.
 
 An upgraded database now migrates itself on boot. A fresh database is
 unaffected.
-# v0.1.1 (2026-11-13)
 
 ## A shadowed reserved prefix falls through to its built-in
 
