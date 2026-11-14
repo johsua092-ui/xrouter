@@ -451,11 +451,12 @@ func RegisterWave5(r *Registry) {
 // the direct uses above.
 var _ = translate.FormatGemini
 
-// RegisterWave7 adds the web-cookie providers: Kimi and DeepSeek, both driven by
-// a pasted session cookie rather than an API key. They share the web-tool bridge,
-// which parses tool calls out of free text because neither endpoint speaks the
-// OpenAI function-calling contract.
+// RegisterWave7 adds the web-cookie providers: Kimi, DeepSeek and Gemini, all
+// driven by a pasted session cookie rather than an API key. They share the
+// web-tool bridge, which parses tool calls out of free text because none of the
+// endpoints speaks the OpenAI function-calling contract.
 func RegisterWave7(r *Registry) {
 	r.Register(NewKimiWeb())
 	r.Register(NewDeepSeekWeb())
+	r.Register(NewGeminiWeb())
 }

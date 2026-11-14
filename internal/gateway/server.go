@@ -569,9 +569,10 @@ func parseChatRequest(body []byte) (providers.Request, error) {
 	stream, _ := raw["stream"].(bool)
 	model, _ := raw["model"].(string)
 	return providers.Request{
-		Model:  model,
-		Stream: stream,
-		Body:   body,
+		Model:     model,
+		Stream:    stream,
+		RequestID: providers.NewRequestID(),
+		Body:      body,
 	}, nil
 }
 

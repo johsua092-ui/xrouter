@@ -42,6 +42,10 @@ func newUUIDv4() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
+// NewRequestID mints a per-request identifier. Exported because the gateway
+// populates Request.RequestID and adapters may need the same shape in tests.
+func NewRequestID() string { return newUUIDv4() }
+
 // isUUIDShape reports whether s matches the uuid layout the grok-cli native item
 // id pattern depends on.
 func isUUIDShape(s string) bool {

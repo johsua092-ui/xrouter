@@ -46,6 +46,10 @@ type Request struct {
 	Provider string
 	Model    string
 	Stream   bool
+	// RequestID is a per-request uuid. Adapters that put an id in the URL or body
+	// (gemini-web's `f.sid`/`_reqid`, for instance) read it from here so the value
+	// is stable for the whole request instead of being minted per retry.
+	RequestID string
 	// Body is the client payload, already translated into the provider's wire
 	// format by the caller. Adapters only place it on the wire, they never
 	// reshape it — same division of labour as Node's executor vs translator.
