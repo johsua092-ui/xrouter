@@ -9,7 +9,15 @@ BINARY      ?= $(GOBIN)/xrouter
 GOFLAGS     ?= -trimpath
 LDFLAGS     ?= -s -w
 GO_PORT     ?= 28080
-GO_DIRS     := cmd internal
+
+# ./internal/... catches the Go *toolchain's own* internal packages (the SDK ships
+# its source tree under GOROOT and the pattern fans out into it). Scope the test
+# target to this module's packages only, or `go test` walks the toolchain and
+# spends half a minute on internal/trace.
+#
+# ./... also sweeps up Dockerfile.go (it sits at the repo root), which is a shell
+# heredoc, not Go source. Hence the explicit package list.
+GO_PKGS     := ./cmd/... ./internal/...
 
 .PHONY: help go-build go-size go-vet go-test go-verify go-run go-cross go-clean
 
@@ -31,10 +39,10 @@ go-size: go-build
 	@ls -l $(BINARY) | awk '{ printf "  binary: %s  size: %.2f MB (%d bytes)\n", $$9, $$5/1048576, $$5 }'
 
 go-vet:
-	$(GO) vet ./$(GO_DIRS:%=%/...)
+	$(GO) vet $(GO_PKGS)
 
 go-test:
-	$(GO) test ./$(GO_DIRS:%=%/...) 2>&1 | tail -25
+	$(GO) test $(GO_PKGS) 2>&1 | tail -25
 
 go-verify: go-build go-vet go-test go-size
 	@echo "  go-verify complete"

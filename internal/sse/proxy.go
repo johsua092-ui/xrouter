@@ -21,7 +21,7 @@ var defaultTransport = &http.Transport{
 	MaxIdleConns:        100,
 	MaxIdleConnsPerHost: 20,
 	IdleConnTimeout:     90 * time.Second,
-	DisableCompression: false,
+	DisableCompression:  false,
 }
 
 var streamingClient = &http.Client{

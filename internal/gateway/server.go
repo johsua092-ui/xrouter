@@ -15,12 +15,15 @@ import (
 	"github.com/johsua092-ui/xrouter/internal/config"
 	"github.com/johsua092-ui/xrouter/internal/connection"
 	"github.com/johsua092-ui/xrouter/internal/database"
+	"github.com/johsua092-ui/xrouter/internal/providers"
 )
 
 type Gateway struct {
-	cfg *config.Config
-	db  *database.DB
-	mux *chi.Mux
+	cfg      *config.Config
+	db       *database.DB
+	mux      *chi.Mux
+	registry *providers.Registry
+	upstream *providers.Transport
 }
 
 func New(cfg *config.Config, db *database.DB) *Gateway {
@@ -39,10 +42,18 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 		MaxAge:           300,
 	}))
 
+	// Provider adapter registry: the ported adapters from internal/providers.
+	// Every OpenAI-compatible provider is already covered; unported ones fall
+	// through to the generic adapter so routing never dead-ends.
+	registry := providers.NewRegistry()
+	providers.RegisterDefaults(registry)
+
 	g := &Gateway{
-		cfg: cfg,
-		db:  db,
-		mux: mux,
+		cfg:      cfg,
+		db:       db,
+		mux:      mux,
+		registry: registry,
+		upstream: providers.NewTransport(nil),
 	}
 
 	g.registerRoutes()
@@ -53,6 +64,10 @@ func (g *Gateway) registerRoutes() {
 	// Health & System
 	g.mux.Get("/api/health", g.handleHealth)
 	g.mux.Get("/api/auth/status", g.handleAuthStatus)
+
+	// Adapter coverage: how many providers have a real Go port vs the fallback.
+	// Makes Phase 2 progress observable instead of assumed.
+	g.mux.Get("/api/system/adapters", g.handleAdapterCoverage)
 
 	// AI Gateway V1 Endpoints
 	g.mux.Route("/v1", func(r chi.Router) {
@@ -167,6 +182,18 @@ func (g *Gateway) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		"requireLogin":  false,
 		"displayName":   "Admin (Go Core)",
 		"homePath":      "/dashboard",
+	})
+}
+
+func (g *Gateway) handleAdapterCoverage(w http.ResponseWriter, r *http.Request) {
+	names := g.registry.Names()
+	jsonResponse(w, http.StatusOK, map[string]interface{}{
+		"engine":              "golang",
+		"ported":              names,
+		"ported_count":        len(names),
+		"fallback":            "__fallback__ (generic OpenAI-compatible)",
+		"note":                "unported providers still route through the fallback adapter",
+		"node_executor_total": 37,
 	})
 }
 

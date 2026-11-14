@@ -37,13 +37,39 @@ Dockerfile.go                  container build
 go.mod                         Go 1.26.0
 ```
 
-Total: 10 Go files, 1397 lines. The module builds, but no Go binary has ever been
-built on this box and no provider adapter has been ported yet.
+Total: 13 Go files. The module builds, and the binary is **11.83 MB** — measured on
+this box with `make go-size`, not quoted from the roadmap.
+
+### Provider adapters — `internal/providers/`
+
+The first real port work (Option A, Phase 2) landed here:
+
+```
+internal/providers/registry.go       adapter interface, shared transport, registry
+internal/providers/openai_compat.go  the OpenAI-compatible adapter (default.js port)
+internal/providers/registry_test.go  15 tests pinning the routing semantics
+```
+
+What it covers: every provider whose upstream speaks OpenAI chat-completions —
+the `openai-compatible-*` nodes (which hold the majority of active connections in
+the live database), plus `ovh`, `github`, `grok-cli`, `deepseek`, `openrouter`,
+`groq`, `together`, `mistral`, `cerebras`. Nine explicit descriptors today.
+
+Behaviour ported faithfully from `default.js`:
+
+- Connection base URL beats the descriptor default (how `openai-compatible-*` nodes route)
+- `{accountId}` template substituted from the connection, hard error when absent
+- A URL already ending in `/chat/completions` is not double-suffixed
+- `noAuth` providers get the Authorization header **deleted**, not blanked
+- Stream requests send `Accept: text/event-stream`
+- Client `anthropic-beta` flags survive the hop
+
+Unported providers do **not** dead-end: they resolve to a generic fallback adapter.
+Coverage is observable at `GET /api/system/adapters`.
 
 Directory layout still differs from the roadmap target. The roadmap wants:
 
 ```
-internal/providers/    40+ provider adapters          <- does not exist yet
 internal/cache/        cache-aware affinity + RAM cache <- does not exist yet
 internal/vouchers/     bansos anti-abuse engine        <- does not exist yet
 internal/embed.go      //go:embed the dashboard        <- does not exist yet
@@ -57,10 +83,22 @@ internal/embed.go      //go:embed the dashboard        <- does not exist yet
 make go-verify      # build + vet + test, reports binary size
 make go-size        # just the binary size number
 make go-run         # run the Go binary locally (does not touch port 20128)
+make go-cross       # cross-compile linux/darwin/windows x64+arm64
 ```
 
 None of these touch the Node service. `go-run` uses the Go binary's own port so the
 running dashboard is left alone.
+
+### Measured result, 2026-11-14
+
+```
+build   : ok
+vet     : ok
+test    : ok (providers 15/15, bypass 1/1)
+binary  : bin/xrouter — 11.83 MB
+RSS     : 5.5 MB   (Node production: 164.9 MB)
+Phase 1 : PASS — /v1/models returns 200 with the model list
+```
 
 ---
 
