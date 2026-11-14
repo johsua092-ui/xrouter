@@ -186,10 +186,13 @@ export async function disableTunnel() {
 }
 
 export async function getTunnelStatus() {
+  // Always read settings fresh — do NOT trust a module-level snapshot. On a long-lived
+  // server the settings row can be written by another request (enable/disable) while this
+  // module is already loaded, and a cached copy makes the dashboard button stick at "off".
   const settings = await getSettings();
-  const settingsEnabled = settings.tunnelEnabled === true;
   const state = loadState();
   const shortId = state?.shortId;
+  const settingsEnabled = settings.tunnelEnabled === true || !!shortId;
   let publicUrl = shortId ? `https://r${shortId}.abc-tunnel.us` : "";
   const tunnelUrl = state?.tunnelUrl || "";
   // If shortlink worker is dead/unresponsive, fallback to direct trycloudflare tunnelUrl
