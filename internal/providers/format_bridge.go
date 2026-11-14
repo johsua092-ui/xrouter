@@ -30,6 +30,21 @@ type Dialect interface {
 	WireFormat() string
 }
 
+// BodyTransformer is implemented by adapters whose upstream needs the body
+// repaired in a way the dialect translator cannot express, because the repair is
+// provider policy rather than a format difference. Codex is the first: its
+// backend 400s on fields every other OpenAI-compatible upstream ignores, and it
+// requires store=false, which in turn forbids replaying server-generated item
+// ids. That is not a translation between dialects, it is a contract the provider
+// enforces on its own dialect.
+//
+// It is a separate interface so adapters that place the body on the wire
+// verbatim do not need a stub. The gateway applies it after translation and
+// before dispatch, so the adapter sees exactly what will be sent.
+type BodyTransformer interface {
+	TransformBody(model string, body []byte) ([]byte, error)
+}
+
 // RegistryFormat reports the dialect an adapter speaks.
 //
 // Adapters that do not implement Dialect are OpenAI-compatible by construction —

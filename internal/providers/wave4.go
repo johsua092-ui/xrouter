@@ -459,4 +459,5 @@ func RegisterWave7(r *Registry) {
 	r.Register(NewKimiWeb())
 	r.Register(NewDeepSeekWeb())
 	r.Register(NewGeminiWeb())
+	r.Register(NewCodex())
 }

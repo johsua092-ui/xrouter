@@ -369,6 +369,19 @@ func (g *Gateway) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	}
 	req.Body = upstreamBody
 
+	// Some upstreams reject a shape the translator cannot fix because the repair
+	// is provider policy, not dialect: Codex deletes fields its backend 400s on
+	// and forces store=false. Adapters opt in by implementing BodyTransformer.
+	if bt, ok := adapter.(providers.BodyTransformer); ok {
+		shaped, bErr := bt.TransformBody(req.Model, req.Body)
+		if bErr != nil {
+			jsonError(w, http.StatusBadRequest,
+				fmt.Sprintf("could not shape request for %s", adapter.Name()), bErr)
+			return
+		}
+		req.Body = shaped
+	}
+
 	proxied, err := g.upstream.Do(r.Context(), adapter, req, cred)
 	if err != nil {
 		jsonError(w, http.StatusBadGateway,
