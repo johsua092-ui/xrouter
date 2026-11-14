@@ -1,5 +1,24 @@
 # v0.2.5 (2026-11-14)
 
+### Fixed — Tunnel status stuck at "off" while cloudflared was running
+
+- Root cause: `GET /api/tunnel/status` served tunnel/tailscale probes from a
+  process-lifetime cache (`global.__tunnelStatusCache`). On a long-lived server the
+  cached probe was written *before* the tunnel was enabled, so the dashboard never
+  saw the state change: `settingsEnabled:false`, `running:false`, empty `tunnelUrl`
+  — even though `cloudflared` was up, `settings.tunnelEnabled` was `true`, and
+  `state.json` held a valid `shortId`/`tunnelUrl`.
+- The route now probes `getTunnelStatus()` / `getTailscaleStatus()` on every request
+  and the short-lived cache was removed. Download progress was already live.
+- `getTunnelStatus()` no longer trusts a lone `settings.tunnelEnabled` read: a
+  present `state.json` `shortId` is treated as evidence the tunnel is up too, so a
+  settings read that lands mid-write (or on a stale adapter handle) cannot flip the
+  toggle back off.
+- Verified on the running server: enable → `enabled:true, running:true` with a live
+  public URL; the toggle now tracks enable/disable immediately. Version unchanged (stable `0.2.5`).
+
+# v0.1.0 (2026-11-13)
+
 ### Fixed — MiniMax Code: "this device code can no longer be exchanged" after a successful login
 
 - Root cause: the `/device-code` leg sends a PKCE S256 challenge for MiniMax Code,
