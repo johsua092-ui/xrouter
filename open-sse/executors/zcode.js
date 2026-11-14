@@ -1,4 +1,4 @@
-import { randomUUID, randomBytes, createHash } from "node:crypto";
+import { randomUUID, randomBytes, createHash, createHmac } from "node:crypto";
 import { release } from "node:os";
 import { DefaultExecutor } from "./default.js";
 import { refreshZcodeJwt, resolveZcodeAuth } from "../services/zcodePlan.js";
@@ -7,7 +7,18 @@ import { zcodeTlsFetch } from "../services/zcodeTlsClient.js";
 import { hasNativeZcodeBinary, forwardToZcodeDaemon } from "../services/zcodeServiceBridge.js";
 import { FORMATS } from "../translator/formats.js";
 
-const ZCODE_APP_VERSION = "3.16.3";
+// Single source of truth for the ZCode client fingerprint — see
+// ../config/zcodeIdentity.js. Re-exported here so existing importers keep
+// working.
+import {
+  ZCODE_APP_VERSION,
+  ZCODE_CODING_APP_VERSION,
+  ZCODE_ANTHROPIC_VERSION,
+  ZCODE_ANTHROPIC_BETA,
+  ZCODE_SDK_USER_AGENT,
+} from "../config/zcodeIdentity.js";
+export { ZCODE_APP_VERSION, ZCODE_CODING_APP_VERSION };
+
 const ZCODE_THIRD_SYSTEM_BLOCK = "Follow the user's instructions and use the available tools when helpful.";
 
 function platformTag() {
@@ -16,7 +27,14 @@ function platformTag() {
 }
 
 function stableDeviceMid(credentials) {
-  const seed = String(credentials?.providerSpecificData?.userId || credentials?.connectionId || credentials?.id || "zcode");
+  // Prefer the identity minted at login (deviceId). The hash fallback only
+  // serves hand-written/re-linked connections that predate the stored bundle —
+  // it is stable per account, never per request, which is what the gateway
+  // fingerprints.
+  const psd = credentials?.providerSpecificData || {};
+  const stored = psd.deviceId || psd.deviceMid;
+  if (typeof stored === "string" && stored.trim()) return stored.trim();
+  const seed = String(psd.userId || credentials?.connectionId || credentials?.id || "zcode");
   const bytes = createHash("sha256").update(seed).digest().subarray(0, 16);
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
@@ -24,8 +42,16 @@ function stableDeviceMid(credentials) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function sessionTag(connectionId, salt = "") {
-  const hash = createHash("sha256").update(`${connectionId || "zcode"}:${salt}`).digest("hex");
+// Session id mirrors the desktop client: HMAC(sessionSeed, conversationKey) so
+// the same seed yields the same session id for a given connection, while the
+// absent-seed fallback stays account-scoped instead of global. A session id
+// shared by every account is one of the fingerprints behind 3012.
+function sessionTag(connectionId, salt = "", seed = "") {
+  const key = String(seed || "zcode");
+  const mac = createHmac("sha256", key);
+  mac.update("\0");
+  mac.update(String(connectionId || "zcode"));
+  const hash = mac.digest("hex");
   return `session_${hash.slice(0, 32)}`;
 }
 
@@ -583,7 +609,7 @@ export class ZCodeExecutor extends DefaultExecutor {
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
     if (resolved?.lane === "start") {
       const mid = stableDeviceMid(credentials);
-      const sid = sessionTag(credentials?.connectionId, credentials?.providerSpecificData?.__zcodeSessionSalt);
+      const sid = sessionTag(credentials?.connectionId, credentials?.providerSpecificData?.__zcodeSessionSalt, credentials?.providerSpecificData?.sessionSeed);
       return withStartPlanOptions(aligned, credentials?.providerSpecificData?.userId, mid, sid);
     }
     return aligned;
@@ -591,8 +617,11 @@ export class ZCodeExecutor extends DefaultExecutor {
 
   buildHeaders(credentials, stream = true, url, model, body = null) {
     const headers = super.buildHeaders(credentials, stream, url, model, body);
-    delete headers["anthropic-beta"];
-    delete headers["Anthropic-Beta"];
+    // The plan gateway fingerprints the caller from its identity bundle, and
+    // anthropic-version + anthropic-beta are part of that bundle — the desktop
+    // client always declares both. Deleting them (as a generic Anthropic client
+    // would) mismatches the fingerprint and the gateway answers HTTP 405 code
+    // 3012 "unusual activity", so they are set explicitly below instead.
     const resolved = credentials?.providerSpecificData?.__zcodeAuth;
     const apiKey = resolved?.apiKey || credentials?.apiKey || credentials?.accessToken;
     if (apiKey) {
@@ -611,7 +640,7 @@ export class ZCodeExecutor extends DefaultExecutor {
 
     const version = resolved?.clientVersion || ZCODE_APP_VERSION;
     const { platform, category } = platformTag();
-    const sessionId = sessionTag(credentials?.connectionId, credentials?.providerSpecificData?.__zcodeSessionSalt);
+    const sessionId = sessionTag(credentials?.connectionId, credentials?.providerSpecificData?.__zcodeSessionSalt, credentials?.providerSpecificData?.sessionSeed);
 
     if (credentials?.providerSpecificData?.__daemonTargetBaseUrl) {
       headers["x-target-base-url"] = credentials.providerSpecificData.__daemonTargetBaseUrl;
@@ -620,18 +649,22 @@ export class ZCodeExecutor extends DefaultExecutor {
     }
 
     if (resolved?.lane === "start") {
-      // Start Plan gateway requires the lightweight 4-header client profile with 3.16.3 UA
+      // Start Plan gateway requires the lightweight 4-header client profile with
+      // the 3.16.3 UA, but the identity bundle (anthropic-version/beta) still
+      // has to be present for the fingerprint to match.
       Object.assign(headers, {
-        "User-Agent": `ZCode/${version} ai-sdk/anthropic/3.0.81`,
+        "User-Agent": ZCODE_SDK_USER_AGENT(version),
+        "anthropic-version": ZCODE_ANTHROPIC_VERSION,
+        "anthropic-beta": ZCODE_ANTHROPIC_BETA,
       });
-      delete headers["anthropic-beta"];
-      delete headers["Anthropic-Beta"];
     } else {
       Object.assign(headers, {
         "Origin": "https://zcode.z.ai",
         "Referer": "https://zcode.z.ai/",
-        "User-Agent": `ZCode/${version}`,
+        "User-Agent": ZCODE_SDK_USER_AGENT(version),
         "x-zcode-app-version": version,
+        "anthropic-version": ZCODE_ANTHROPIC_VERSION,
+        "anthropic-beta": ZCODE_ANTHROPIC_BETA,
         "x-title": "Z Code@electron",
         "x-release-channel": "production",
         "x-client-language": "en-US",

@@ -169,7 +169,14 @@ export async function POST(request, { params }) {
       const results = [];
       for (const conn of connections) {
         const token = resolveToken(conn, request);
-        const deviceMid = conn.providerSpecificData?.userId || "9ac46470-9bda-419a-baf9-924143aa6a04";
+        // The claim handshake fingerprints the caller, so it must use the same
+        // stored device identity as the chat turns. The hardcoded uuid fallback
+        // only serves hand-written rows that never went through OAuth.
+        const deviceMid =
+          conn.providerSpecificData?.deviceId ||
+          conn.providerSpecificData?.deviceMid ||
+          conn.providerSpecificData?.userId ||
+          "9ac46470-9bda-419a-baf9-924143aa6a04";
         const proxyOptions = {
           ...(await resolveConnectionProxyConfig(conn.providerSpecificData)),
           strictProxy: false,

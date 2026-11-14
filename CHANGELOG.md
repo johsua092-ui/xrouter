@@ -1,5 +1,30 @@
 # v0.2.5 (2026-11-14)
 
+### Fixed — ZCode plan gateway: stable device identity, complete fingerprint
+
+- **The plan gateway rejected turns with 405 code 3012 "unusual activity" because the
+  caller's identity drifted.** The device mid was re-derived from a hash on every
+  request instead of living on the connection, so the gateway saw a new device each
+  turn. Login now mints a device id and a session seed once, stores them on the
+  connection, and every later turn and usage read reuses them. Re-linking an account
+  looks the existing row up by email/UUID and carries the same identity forward rather
+  than registering a second device.
+- **Session ids were scoped to the connection id only, so the absent-seed fallback was
+  identical across accounts.** Sessions are now keyed through `HMAC(sessionSeed,
+  connection)` — stable for one account, distinct between accounts.
+- **`anthropic-version` and `anthropic-beta` were deleted from every request.** Both are
+  part of the client identity bundle the gateway fingerprints, so dropping them
+  mismatched the profile and produced the 405/3012 answer. Both are now declared
+  explicitly on every lane, with the desktop client's SDK user agent rather than a bare
+  `ZCode/<ver>` string.
+- **App version was declared inconsistently across surfaces** — the chat executor and
+  the start-plan usage read said `3.16.3` while the claim handshake said `3.17.1` and
+  the plan resolver said `3.17.2`, so the gateway saw three different clients. All
+  fingerprint constants now live in one module (`open-sse/config/zcodeIdentity.js`):
+  start-plan lane `3.16.3`, coding-plan/usage lane `3.17.2`.
+- **The claim sweep fell back to a hardcoded device mid** for every connection. It now
+  uses the identity stored on the connection, so the handshake matches the chat turns.
+
 ### Fixed — Tunnel toggle: state now reflects the live process, not a build-time snapshot
 
 - **The enable/disable buttons were no-ops.** Only the `status` probe had opted out of

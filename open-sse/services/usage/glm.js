@@ -4,6 +4,7 @@
 
 import { proxyAwareFetch } from "../../utils/proxyFetch.js";
 import { U } from "./shared.js";
+import { ZCODE_CODING_APP_VERSION } from "../../config/zcodeIdentity.js";
 
 // GLM quota endpoints (region-aware) — url from registry transport.usage
 const GLM_QUOTA_URLS = {
@@ -135,7 +136,9 @@ const ZCODE_RESET_USE_URL = "https://zcode.z.ai/api/v1/coding-plan/reset/use";
 const ZCODE_INCENTIVE_SUMMARY_URL = "https://zcode.z.ai/api/v1/incentive/referral/summary";
 const ZCODE_INCENTIVE_BIND_CODE_URL = "https://zcode.z.ai/api/v1/incentive/referral/bind-code";
 const ZCODE_MARKETING_TOUCH_URL = "https://zcode.z.ai/api/v1/marketing/touch";
-const ZCODE_APP_VERSION = "3.17.1";
+// Same fingerprint constant as the executor — a claim handshake that declares a
+// different app version than the chat turns reads as a second client.
+const ZCODE_APP_VERSION = ZCODE_CODING_APP_VERSION;
 const ZCODE_PLATFORM = "linux-x64";
 export const ZCODE_START_PLAN_ID = "zcode-v3-start-plan-0817";
 
@@ -191,14 +194,14 @@ export async function checkAndClaimZcodeStartPlan(token, deviceMid = "9ac46470-9
 
 /**
  * Fetch active ZCode plan token balances & gift grants (e.g. 500M Weekend Build).
- * Hits GET https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=3.17.1
+ * Hits GET https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=<ver>
  */
 export async function getGlmBalance(token, proxyOptions = null, options = {}) {
   if (typeof token !== "string" || !token.trim()) return null;
   const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
   const url = new URL(ZCODE_PLAN_BALANCE_URL);
   url.searchParams.set("app_version", ZCODE_APP_VERSION);
-  const deviceMid = options?.deviceMid || options?.userId || "9ac46470-9bda-419a-baf9-924143aa6a04";
+  const deviceMid = options?.deviceId || options?.deviceMid || options?.userId || "9ac46470-9bda-419a-baf9-924143aa6a04";
 
   try {
     const response = await proxyAwareFetch(
@@ -483,7 +486,7 @@ export async function getGlmClaimablePlans(token, proxyOptions = null, options =
     throw glmResetError("GLM authentication token not available.", 401);
   }
   const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
-  const deviceMid = options?.deviceMid || options?.userId || "9ac46470-9bda-419a-baf9-924143aa6a04";
+  const deviceMid = options?.deviceId || options?.deviceMid || options?.userId || "9ac46470-9bda-419a-baf9-924143aa6a04";
   const url = new URL(ZCODE_PLAN_PREVIEW_URL);
   url.searchParams.set("app_version", ZCODE_APP_VERSION);
   url.searchParams.set("platform", ZCODE_PLATFORM);
