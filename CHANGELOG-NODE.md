@@ -1,5 +1,14 @@
 # v0.1.0 (2026-11-13)
 
+## MiniMax Code sign-in: modal device-code wiring, poll-by-user flag, non-PKCE poll group
+
+- OAuthModal: `deviceCodeProviders` now includes `minimax-code` and `minimax-code-global` — without an entry here the modal falls through to `/authorize`, gets `authUrl: null` from a device-code provider, and aborts with the "not wired in the OAuth modal device-code list" guard before any user code is shown.
+- OAuthModal: device-code branch now builds `extraData._minimaxPollByUser` from the device-code response so the server can switch the poll body to `user_code`.
+- OAuthModal: `extraData` is only read back from `data` on non-PKCE providers; MiniMax's device-code request sends no `code_challenge`, so its flag now survives to `startPolling`.
+- route.js `/device-code`: `noPkceDeviceProviders` now includes both MiniMax ids, so the request goes out without a PKCE challenge.
+- route.js `/poll`: `noPkceProviders` now includes both MiniMax ids, so the poll forwards `extraData` and does not demand a `codeVerifier`. Without the forward, `pollToken` always sent `device_code` — which is `undefined` on the user-code variant — and every poll failed at the token endpoint.
+- Version held at 0.1.0.
+
 ## Relay deploy buttons: default button type, and a spinner on Deploy Worker
 
 `Button` rendered a bare `<button>` with no `type`. Inside a form that defaults
