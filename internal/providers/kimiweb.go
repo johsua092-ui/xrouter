@@ -511,3 +511,49 @@ func BuildKimiRequestBody(folded KimiFoldedMessages, cfg kimiModelConfig, reason
 	}
 	return json.Marshal(payload)
 }
+
+// KimiWeb is the adapter.
+type KimiWeb struct{}
+
+// NewKimiWeb builds the adapter.
+func NewKimiWeb() *KimiWeb { return &KimiWeb{} }
+
+func (a *KimiWeb) Name() string       { return "kimi-web" }
+func (a *KimiWeb) WireFormat() string { return FormatOpenAI }
+
+// Endpoint is the Connect RPC method path.
+//
+// The service and method are part of the path, not headers: a Connect call is an
+// ordinary POST to `/<package>.<Service>/<Method>`, which is why this adapter
+// cannot be expressed as a base-URL override.
+func (a *KimiWeb) Endpoint(req Request, cred Credential) (string, error) {
+	return kimiBaseURL + kimiChatPath, nil
+}
+
+// Headers sets the Connect framing headers plus the pasted session bearer.
+func (a *KimiWeb) Headers(req Request, cred Credential) (map[string]string, error) {
+	// The dashboard stores the pasted value in the cookie slot; the API-key slot
+	// holds it too when a user pastes a bearer. Either way the value is a token,
+	// so the same extractor handles both.
+	token := ExtractKimiAccessToken(cred.AccessToken)
+	if token == "" {
+		token = ExtractKimiAccessToken(cred.Cookie)
+	}
+	if token == "" {
+		token = ExtractKimiAccessToken(cred.APIKey)
+	}
+	if token == "" {
+		return nil, errors.New("kimi-web: no usable access token in the credential")
+	}
+	return map[string]string{
+		"Authorization":            "Bearer " + token,
+		"Content-Type":             "application/connect+json",
+		"Connect-Protocol-Version": "1",
+		"Accept":                   "*/*",
+		"Origin":                   "https://www.kimi.ai",
+		"Referer":                  "https://www.kimi.ai/",
+		"User-Agent":               kimiUserAgent,
+		"x-language":               "en-US",
+		"x-msh-platform":           "web",
+	}, nil
+}

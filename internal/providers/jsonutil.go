@@ -70,3 +70,13 @@ func containsStr(hay []string, needle string) bool {
 	}
 	return false
 }
+
+// firstNonEmpty returns the first non-empty string.
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}

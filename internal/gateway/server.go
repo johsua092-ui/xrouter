@@ -67,6 +67,9 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 	// declarations and the env marker are all part of the request body, so it
 	// cannot be a URL/header adapter either.
 	providers.RegisterWave6(registry)
+	// Wave 7 is the web-cookie set: Kimi and DeepSeek, driven by a pasted session
+	// cookie instead of an API key.
+	providers.RegisterWave7(registry)
 
 	// Translator registry. Every request and response converter self-registers
 	// from its own file's init(), so this only needs to hand out the shared set.
