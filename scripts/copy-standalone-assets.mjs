@@ -2,27 +2,7 @@ import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-/* distDir resolution order: explicit arg → NEXT_DIST_DIR env → NEXT_DIST_DIR
-   parsed from the project's .env (npm scripts do not load .env, so the
-   postbuild hook would otherwise miss a dist dir pinned there) → ".next". */
-function resolveDistDir({ projectRoot, distDir } = {}) {
-  if (distDir) return distDir;
-  if (process.env.NEXT_DIST_DIR) return process.env.NEXT_DIST_DIR;
-  try {
-    for (const line of readFileSync(resolve(projectRoot, ".env"), "utf8").split(/\r?\n/)) {
-      const match = line.match(/^\s*NEXT_DIST_DIR\s*=\s*(.+?)\s*$/);
-      if (match) {
-        const value = match[1].replace(/^["']|["']$/g, "");
-        if (value) return value;
-      }
-    }
-  } catch {}
-  return ".next";
-}
-
-export function copyStandaloneAssets(options = {}) {
-  const projectRoot = options.projectRoot || process.cwd();
-  const distDir = resolveDistDir({ projectRoot, distDir: options.distDir });
+export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = process.env.NEXT_DIST_DIR || ".next" } = {}) {
   if (process.env.NEXT_TRACING_ROOT_MODE === "workspace") {
     console.log("[standalone-assets] Skipping workspace-traced CLI build; CLI packaging handles assets");
     return;

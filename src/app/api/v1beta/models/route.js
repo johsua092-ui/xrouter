@@ -35,7 +35,7 @@ export async function GET(request) {
       }
     }
     // The Gemini-shaped list used to enumerate every provider in the catalogue
-    // regardless of the caller, so a team locked to one model could read the
+    // regardless of who asked, so a team locked to one model could read the
     // whole thing — every glm variant included — through this endpoint.
     const allowedPatterns = await callerAllowedModels(request);
     const models = [];

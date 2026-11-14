@@ -286,6 +286,8 @@ export async function GET(request, { params }) {
         "muse",
         "glm",
         "zcode",
+        "minimax-code",
+        "minimax-code-global",
       ];
       let deviceData;
       if (noPkceDeviceProviders.includes(provider)) {

@@ -1,5 +1,19 @@
 # v0.1.0 (2026-11-14)
 
+### Changed — Runtime upgraded to Next.js 16.4.2 / React 19.2.4
+
+- **The dashboard now builds and runs on Next.js 16 with React 19.** Twenty-four
+  files were carried over from the pre-release line: the framework bump in
+  `package.json`, the Turbopack build pipeline (`next build --webpack`, the
+  `build:fresh` clean-build helper, `scripts/cleanBuild.mjs`), the standalone-asset
+  copier, `next.config.mjs`, `custom-server.js`, provider model config, the
+  dashboard guard, and the affected route handlers and SSE services.
+- Verified on this host: `Compiled successfully in 2.7s`, 160/160 static pages
+  generated, exit 0. Turbopack reports 22 non-fatal warnings.
+- No merge was performed. The two branches share no common ancestor, so the upgrade
+  was applied as a file-level carry-over, leaving this branch's commit history
+  intact.
+
 ### Fixed — OpenCode daemon bridge: readiness parser matched no current build
 
 - **Every free-lane request logged `[BRIDGE] OPENCODE daemon unreachable — falling
@@ -23,11 +37,11 @@
   listens — so the `Location` header came back as `http://localhost/login`. The port is
   now preserved when the request host is loopback (`localhost`, `127.0.0.0/8`, `[::1]`,
   `0.0.0.0`, `*.localhost`); on a public hostname the strip still runs, so no internal
-  port leaks to a real domain.
+  port leaks to a real domain. Verified: `localhost:20128` → `localhost:20128/login`,
+  while `x.example.com` → `x.example.com/login`.
 - **IPv6 loopback hosts were mis-split.** `host.split(":")` broke `[::1]:20128` into
   `[` + `:1]:20128`, yielding a malformed redirect target. Host/port parsing is now
-  bracket-aware. Verified: `[::1]:20128` → `[::1]:20128/login`, `x.example.com:8080`
-  → `x.example.com/login`.
+  bracket-aware.
 
 ### Fixed — ZCode plan gateway: stable device identity, complete fingerprint
 
@@ -172,13 +186,11 @@
   settings read that lands mid-write (or on a stale adapter handle) cannot flip the
   toggle back off.
 - Verified on the running server: enable → `enabled:true, running:true` with a live
-  public URL; the toggle now tracks enable/disable immediately. Versions unchanged
-  (main `0.1.0`).
+  public URL; the toggle now tracks enable/disable immediately. Version unchanged (stable `0.2.5`).
 
 # v0.1.0 (2026-11-13)
 
 ### Fixed — MiniMax Code: "this device code can no longer be exchanged" after a successful login
-
 - Root cause: the `/device-code` leg sends a PKCE S256 challenge for MiniMax Code,
   but the `/poll` leg still listed both MiniMax providers in `noPkceProviders` and
   passed `null` as the verifier. MiniMax binds the granted device code to the
@@ -194,10 +206,7 @@
   verifier and returns `authorization_pending` (accepted, awaiting user) instead of
   a burned code. Other `noPkceProviders` members are device-code flows without
   PKCE and are unaffected.
-
-
 ### Fixed — MiniMax Code: opaque "fetch failed" replaced with a diagnosable error
-
 - `minimax-code` / `minimax-code-global` surfaced transport failures as a bare
   `fetch failed`, which the OAuth modal rendered as "Connection Failed" with no
   hint of the endpoint that died. The China site (`account.minimax.cn`, Aliyun
@@ -210,14 +219,11 @@
 - Behaviour on a reachable host is unchanged; verified against
   `account.minimax.cn` (CONNECT_TIMEOUT, now reported by name) and
   `account.minimax.io` (HTTP 200, device code issued).
-
-
 ## MiniMax Code sign-in failed with "requires a PKCE code challenge":
 - **Fixed**: the device-code route exempted MiniMax from PKCE and passed
   `codeChallenge: undefined`, but the shared provider's device-code request
   carries PKCE S256 and hard-throws without a challenge. Both ids were moved
   off the no-PKCE device list so they receive `authData.codeChallenge` again.
-
 ## MiniMax Code could not be signed into at all: the sign-in modal never reached its device-code branch
 
 The MiniMax Code providers (both the China site and the international one) shipped with a full OAuth implementation — a PKCE S256 device flow against `account.minimax.cn` / `account.minimax.io`, registered in the provider table and covered by unit tests — but the dashboard's sign-in modal did not know they existed. Three separate lists in the sign-in path each had to name a provider before any of that code could run, and none of them named MiniMax.
@@ -226,6 +232,7 @@ The sign-in modal keeps its own list of providers that use the device-code flow,
 
 Two matching gaps sat behind it on the server, both of which would have surfaced only after the modal could get that far. The poll endpoint forwards per-provider state to the provider's token call, which MiniMax needs for its user-code variant: MiniMax's China site sometimes answers the initial device-code request without a `device_code` at all, and its variant polls the token endpoint with the `user_code` in that slot instead. The provider implementation switches on a flag returned from the device-code response, and the modal has to carry that flag back into the poll body for the switch to see it — neither the flag nor the poll branch existed. The poll endpoint also classified MiniMax in its PKCE group, which sends no per-provider state and demands a code verifier; MiniMax's user-code variant has no verifier to send, so it belongs in the non-PKCE group with the other device-code providers.
 
+Fixed: added both MiniMax providers to the modal's device-code list, to the device-code request list and to the poll's non-PKCE list, and taught the modal to carry the poll-by-user flag into the poll body. Both the China and international sites are covered. Version held at 0.2.5.
 Fixed: added both MiniMax providers to the modal's device-code list, to the device-code request list and to the poll's non-PKCE list, and taught the modal to carry the poll-by-user flag into the poll body. Both the China and international sites are covered. Version held at 0.1.0.
 
 ## Deploy Relay menu: the Cloudflare item lost its click, and Deploy Worker gave no feedback
@@ -237,7 +244,8 @@ with no `type`, so inside a `<form>` it defaulted to `type="submit"` — the
 browser's implicit submit behaviour, not a click handler. The relay menu sits
 where an enclosing form is present, and the Cloudflare entry is the first item
 in it, so its click was being consumed by an accidental submit instead of
-`openCloudflareModal()`.
+`openCloudflareModal()`. The rest of the entries sat further down the menu and
+are reached differently, which is why only this one looked dead.
 
 `Button` now pins `type="button"` unless the caller passes one. All sixteen
 `<Button type="submit">` call sites keep submitting, because an explicit type
@@ -254,56 +262,48 @@ disable path every other long-running action in the app already uses.
 Reported against the proxy-pools relay menu; neither defect is specific to
 Cloudflare — any relay deploy from that menu runs through the same `Button`.
 
-## A stale database no longer blocks table writes
+## Proxy pool / Cloudflare relay writes fail on an upgraded database
 
-`CREATE TABLE IF NOT EXISTS` never rebuilds a table that already exists, and
-the schema sync was additive-only: it added columns the new layout declares but
-never touched columns the new layout dropped. A database created by an older
-build therefore kept its old columns forever.
-
-That is fatal when the orphan column is `NOT NULL` without a default. Every
-INSERT that omits it fails with `NOT NULL constraint failed: <table>.<col>`.
-The visible symptom was Cloudflare relay deployment and proxy-pool creation:
+Symptom reported on a running install:
 
     Error deploying Cloudflare relay: SqliteError: NOT NULL constraint failed:
     proxyPools.url
 
-`proxyPools` moved to a JSON `data` blob long ago, so current code writes
-`(id, isActive, testStatus, data, createdAt, updatedAt)`. Any install that
-still carried the legacy `url NOT NULL` column rejected every one of those
-writes. A fresh database never shows it, which is why it only surfaced on
-upgrades.
+The route is not at fault. `proxyPools` stores its payload in a JSON `data`
+column and the insert never mentions `url`. The database on disk still carried
+the legacy `url NOT NULL` column, and `CREATE TABLE IF NOT EXISTS` never
+rebuilds a table that already exists — so the old column stayed and rejected
+every insert.
 
-The schema sync is now bidirectional. After adding missing columns it also
-scans for orphan columns that would block a write — undeclared, `NOT NULL`,
-and without a default — and removes them. `ALTER TABLE ... DROP COLUMN` is the
-cheap path; when two orphans share a table, or an index/trigger still points at
-the column, the table is rebuilt from the declared columns and the rows are
-copied across. Nullable or defaulted orphans are left alone: they are harmless
-and dropping them would discard data for no reason. Declared columns always
-keep their values.
+Fix: the schema sync no longer only adds columns. It also detects columns that
+the current schema no longer declares and that would block a write — `NOT NULL`
+without a default — and removes them, falling back to a full table rebuild when
+SQLite refuses a direct drop. Existing rows and declared columns are preserved;
+harmless nullable/defaulted leftovers are left in place.
 
-Verified against a database carrying `proxyPools.url NOT NULL` and a legacy
-row: the column is dropped, the row survives, and Cloudflare relay creation
-succeeds. A healthy database is untouched — same columns, same row count.
+An upgraded database now migrates itself on boot. A fresh database is
+unaffected.
+
+# v0.2.4 (2026-11-13)
+# v0.2.4 (2026-11-13)
 
 ## A shadowed reserved prefix falls through to its built-in
 
 A provider node whose prefix collides with a built-in provider id or alias
-(`oc`, `openai`, `anthropic`, `google`, `cf`, …) used to break the built-in
-route. The resolver skipped the node-lookup block entirely for reserved
-prefixes, so no node on `oc` could ever be reached; a node registered under a
-reserved prefix by an older layout still won the lookup and turned
-`oc/<model>` into a hard `404 No credentials are serving …`. Either way the
-built-in provider never saw the request.
+(`oc`, `openai`, `anthropic`, `google`, `cf`, …) previously disabled the
+built-in route outright. The resolver skipped the node-lookup block whenever
+the prefix was reserved, so a node registered on `oc` could not be reached at
+all, while a node registered under a reserved prefix from an older layout still
+won the lookup and turned `oc/<model>` into a hard `404 No credentials are
+serving …`. Either way the built-in provider never saw the request.
 
-The node lookup now always runs, and a node that shadows a reserved prefix only
-wins when it holds an active connection. A node with no credentialed
-connection is skipped so the reserved built-in keeps the route. A node whose
-connections cannot be read preserves the previous behaviour, so a database
-hiccup cannot silently reroute traffic.
+The node lookup now always runs, and a node that shadows a reserved prefix is
+only allowed to win when it actually holds an active connection. A node with
+no credentialed connection is skipped and the reserved built-in keeps the
+route. A node whose connections cannot be read preserves the previous
+behaviour, so a database hiccup cannot silently reroute traffic.
 
-This restores the three-way behaviour for reserved prefixes:
+This restores the intended three-way behaviour for reserved prefixes:
 
 - node with credentials → node wins, as before;
 - node without credentials → built-in takes over, no 404;
@@ -311,91 +311,202 @@ This restores the three-way behaviour for reserved prefixes:
   `oc/<model>` unchanged, because the bridge is a dispatch concern and is not
   registered as a node.
 
+The name that is currently shadowed is logged once per resolution with the
+node id and the reason it was skipped, so a misconfigured node is visible
+instead of silently dropped.
+
 `getProviderConnections` is now imported by the resolver to make that decision.
 
-# v0.1.0 (2026-11-13)
+# v0.2.3 (2026-11-13)
 
-- **Panel Endpoint No Longer Freezes or Resets the Tunnel Badge**:
-  - The endpoint page polled tunnel status only while the badge was still unhealthy — the interval returned early the moment both cloudflare and tailscale looked reachable. A tunnel that came up on its own therefore never re-probed, and the badge sat on `CONNECTING`/`OFFLINE` until a manual hard-refresh, at which point a single failed browser ping flipped it straight back to "dead" while `cloudflared` was demonstrably running.
-  - Both pollers (`syncTunnelStatus` and the reachability watchdog) now keep a slow heartbeat when healthy (`STATUS_POLL_SLOW_MS` 30s, `CLIENT_PING_SLOW_MS` 60s) instead of stopping, so the badge both recovers and demotes without a reload.
-  - The reachability check now treats the backend PID probe as the authority: `updateReachable` takes the server's `running` flag and *adds* it to whatever the browser ping observed. Client reachability can only raise confidence — a failing ping from this network (CORS, CSP, DNS hiccup, dead shortlink worker) can no longer demote a live process.
-  - The enable flow reads `status.tunnel.running === false` rather than the absence of `enabled`, so an existing live tunnel is not reported as a failure, and after the enable request the frontend falls back to `/api/tunnel/status` when the new URL cannot be verified from the browser.
+## Close the anonymous model-catalogue and usage surfaces
 
-- **The Auth Guard No Longer Answers 503 for Every Route**:
-  - `src/lib/db/repos/connectionsRepo.js` imported the credential vault as `../../vault/credentialVault.js` — that escaped the `src/lib` tree and re-entered it, so the loader's `@/` alias never saw it and Node failed the whole guard import chain with `ERR_MODULE_NOT_FOUND: Cannot find package '@/lib'`. Because `custom-server.js` deliberately fails closed, the result was `{"error":"Auth guard unavailable"}` (503) on every path — dashboard, `/api/auth/session`, `/api/tunnel/status` — which is also why the page appeared frozen.
-  - The escaping specifier is gone: `connectionsRepo.js`, `promptInjectionRepo.js` and `src/sse/services/backgroundTokenRefresh.js` now use the `@/lib/...` alias the hooks understand. The guard loads, unauthenticated callers get a real `401`/`307`, and the 503 is gone.
-  - Verified by registering the guard hooks in a bare Node process and importing `src/dashboardGuard.js`: `isAuthenticated`, `isLocalRequest`, `proxy` all resolve; after restart `/api/tunnel/status` returns `401`, `/dashboard/endpoint` returns `307`, and no `[AuthGuard] load failed` line appears in the journal.
+Two families of dashboard read routes sat behind a path-prefix rule that was
+wider than the routes themselves. The guard compared a request path against a
+list of literals with `pathname === p || pathname.startsWith(p + "/")`, and two
+of those literals named a *parent*, not a leaf:
 
-- **Every Model Listing Now Respects the Caller's Allowlist**:
-  - `src/app/api/v1beta/models` — the Gemini-shaped list — validated the API key but never consulted *what that key may call*, and enumerated `PROVIDER_MODELS` for every caller. A team locked to a single model could therefore read the whole catalogue through this endpoint: a live key allowed four models received `1422` of `1423` entries, 97 of them `glm*`. That is where a restricted team key was seeing every `glm` variant.
-  - The endpoint now resolves the caller's allowed-model patterns — the per-key list, or the team-wide list when the key is a team key — and drops every entry the key would be refused at request time. This is the same rule `/v1/models` already applied, so the two lists finally agree.
-  - `src/app/api/v1/models/info` returned metadata for any known id, including ids the caller may not call, so it stood beside the filtered `/v1/models/{id}` as an existence oracle. It now answers `404 Model not found` for those, identically to the other route.
-  - The caller's key and patterns are read in one place now, `src/sse/services/callerAllowlist.js`, so the four listing surfaces (`/v1/models`, `/v1/models/{kind}`, `/v1/models/info`, `/v1beta/models`) cannot drift apart again.
-  - Verified by running the routes against a copy of the production database: a team key allowed `glm-5.3` went from `1422` leaked of `1423` to `0` leaked of `10`, an unrestricted key still receives all `1423`, `/v1/models` output is unchanged, and `/v1/models/info?id=alicode/glm-5` now returns `404` for that key.
+- `/api/models` published every child under it.
+- `/api/usage` published every child under it.
 
+So `GET /api/models/catalog`, `/api/models/custom`, `/api/models/disabled`,
+`/api/models/alias`, `/api/models/availability` and `/api/models/catalog-sync`
+answered 200 to a caller carrying no credential at all. The catalogue route
+returns the installed-model inventory, every custom model declared per provider
+and the active node list, and it resolves each custom provider entry by calling
+that provider's own `/models` with the configured key. `/api/usage/api-keys`
+answered 200 too, returning one row per generated key with masked key values,
+quotas, token usage and creator names.
 
-- **A Shadowed Reserved Prefix Can No Longer Dead-End the Route (Fixes `404` on `oc/*`)**:
-  - A provider node registered by the operator under a prefix that collides with a reserved built-in provider id or alias (`oc` is the alias of the built-in `opencode` provider) used to win model resolution unconditionally, because resolution deliberately lets an explicitly registered node outrank the built-in it shadows. When that node carried no credentialed connection it still won the lookup and then had nothing to serve the request with, so the router answered `404 No credentials are serving oc/<model> right now` and the model became unreachable — while the built-in `opencode` provider, free and `noAuth`, sat right behind it fully able to serve the call.
-  - The resolver in `src/sse/services/model.js` now verifies, before honouring a node that shadows a *reserved* prefix, that the node actually holds an active connection. A node with connections wins exactly as before; a shadowing node with none is skipped and resolution falls through to the reserved built-in provider that can serve the request.
-  - Nodes registered under a non-reserved prefix are untouched — they still win outright, credentials or not, so operator-defined routing keeps its meaning.
-  - This is the durable half of the fix. Renaming the offending node prefix in the database cleared the symptom on one box, but the failure comes straight back the moment the database is reset or restored, a colliding node is created again, or a second deployment ships with the same prefix. The guard removes that entire class of dead routes at the source.
-  - Verified against the live router: `oc/*` free models resolve and serve, an unknown model on a shadowed reserved prefix reaches upstream instead of dead-ending at `404`, and a genuinely unknown provider prefix still returns `404` as a control.
-  - `npm run build` (Next 14.2.35) completes with exit 0 and every route compiled.
+The distinction that made this worse than a scoped allowlist leak: it was not
+tied to any one team or key. Anything that could reach the host read the whole
+inventory, and the usage children resolved an anonymous caller to the
+unrestricted session because `getSessionContext()` returns `FULL_PERMISSIONS`
+and a null key filter when there is no session — the routes below it were
+written assuming the guard had already rejected the request.
 
-- **Provider Rows Stop Opening Credentials Just to Be Listed**:
-  - `src/lib/db/repos/connectionsRepo.js` exposed its `apiKey`, `accessToken` and `refreshToken` accessors as *enumerable*, so the `{ ...connection }` spread used by the providers listing invoked every accessor and opened every stored credential the moment the dashboard loaded — one expensive operation per row, plus a console line for any value the current host cannot open. Reviewing or editing one key was enough to trigger the whole batch.
-  - The accessors are now non-enumerable and resolved on first actual read. A spread carries no credential at all, and a failed read is memoised — one throttled warning per session instead of a stack trace per row per poll.
-  - A connection object now also carries the stored value in a hidden field, so a credential this host cannot open survives a later write instead of being overwritten with `null`.
-  - Verified on a copy of the 829-connection production database: spreading a connection carries none of the three credential fields, all 829 rows still load, and a status-only update leaves every credential byte-identical.
-- **Connection Updates Can No Longer Drop a Credential**:
-  - Because the accessors were excluded from enumeration, the spread-and-merge in `updateProviderConnection`, `createProviderConnection` and `bulkCreateProviderConnections` was rewritten to collect the three credential fields explicitly: a value the caller supplied is sealed as before, a value that cannot be opened here is preserved verbatim, and only an explicit `null`/empty from the caller clears it.
-  - `cleanupProviderConnections` and any other routine that deletes unset fields can no longer erase an unreadable credential either.
-  - A GLM / Z.ai connection whose sealed access token cannot be opened now falls back to the plaintext business token the OAuth exchange already stored (`zaiBusinessToken` / `zcodeJwtToken`), so those accounts recover without a re-authorization round trip.
-- **Usage API Answers Instead of Throwing for Inactive Connections**:
-  - `src/app/api/usage/[connectionId]/route.js` attempted an OAuth refresh for every connection the dashboard polled. An inactive connection with no usable token threw `Failed to refresh credentials. Please re-authorize the connection.` and the handler dumped the whole stack trace to stdout once per poll.
-  - Inactive connections now return `{ plan: "None", quotas: {}, message: "Connection is inactive" }` before any network work, a connection with neither refresh nor access token returns a clean `401`, and a genuine refresh failure logs one concise `warn` line — and still falls through to the usage lookup when an access token is available.
-- **Local Dashboard Keeps Its Port on Redirect**:
-  - `src/dashboardGuard.js` strips the internal node ports (`8080`, `20128`) from redirect targets so they never leak onto a public domain — but it stripped them for loopback too, sending a browser on `http://localhost:20128` to port 80 and producing `ERR_CONNECTION_REFUSED` with nothing listening there.
-  - The port is now preserved when the *final* hostname is loopback (`localhost`, `127.0.0.0/8`, `[::1]`, `0.0.0.0`, `*.localhost`), including IPv6 host headers. A `PUBLIC_BASE_URL` / `BASE_URL` override still resolves to the public hostname, so no internal port reaches a public redirect.
-- **Stored Credentials Are Read With the Persisted Machine Identity**:
-  - `src/lib/vault/credentialVault.js` derived its key from `node-machine-id` directly, while the rest of the app persists and reads that identity at `DATA_DIR/machine-id`. The two agree only while the file was created by the same call on the same host — a database restored from another host, or a runtime where the file and the call disagree, leaves every stored value unreadable.
-  - The vault now reads `DATA_DIR/machine-id` first and falls back to `node-machine-id`, and accepts an explicit pinned key through `VAULT_MASTER_KEY` / `CREDENTIAL_VAULT_KEY` for a deployment whose data directory moved hosts.
-  - A value that cannot be authenticated now returns `null` instead of the raw ciphertext, which used to travel into upstream `Authorization: Bearer` headers and render as a plausible credential in the UI.
-  - `src/sse/services/backgroundTokenRefresh.js` skips a refresh token that is still unreadable, instead of burning an upstream call and logging a failure every five minutes.
-- **Verification for this group**: run against a throwaway copy of the production database (829 connections) with the app's own repository and vault modules loaded — credentials survive a status-only update, values stay sealed at rest, an unreadable value resolves to `null` and is preserved byte-for-byte through a write, and the 236 sealed fields in the copy still open. `npm run build` on this host is still pending; deploy not run yet.
+- `PUBLIC_MODELS_DISCOVERY_PATHS` and `PUBLIC_USAGE_DISCOVERY_PATHS` are new
+  exact-match sets. The roots stay public (the claim/market portals and external
+  clients read `GET /api/models` and `GET /api/usage` with no session); every
+  child now falls through to the deny-by-default `/api/*` rule and requires
+  dashboard auth.
+- `isPublicApi` treats `/api/models` and `/api/usage` as exact-only; every other
+  entry in the flat public list keeps its old prefix behaviour, so nothing else
+  moved.
+- `isModelsDiscoveryPath` reads the same literal set instead of a hardcoded list
+  with `/api/models/` and `/api/model/` prefix branches, which is what let a
+  discovery classification bleed onto the catalogue children.
+- `/api/auth/oidc/*` and `/api/auth/saml/*` are unchanged: they stay reachable
+  unauthenticated by design (callback and ACS legs are the identity provider
+  calling in) and each handler runs its own check.
 
+Verified against the guard module directly: 20 routes that were reachable
+anonymously are closed, and 15 public routes including `/api/models`,
+`/api/models/test`, `/api/usage`, `/api/v1/models`, `/api/v1beta/models`,
+`/api/vouchers/claim` and the auth/health roots still return public, with zero
+regressions.
+
+Also carries the model-listing allowlist work: `/v1beta/models` and
+`/v1/models/info` now share one allowlist source, so the two endpoints agree on
+which ids a team-scoped key may see instead of one being the more permissive
+oracle for the other.
+
+# v0.2.2 (2026-11-13)
+
+## Give the Windows build worker an off switch, and read build toggles from .env
+
+The production build still died with `Ineffective mark-compacts near heap limit`
+on Windows after v0.2.1. The tracing fix was real and stayed in — the config
+validator warning is gone — but a second, independent cause was hiding behind it.
+
+`experimental.webpackBuildWorker` was hard-coded to `true`. Nothing could turn it
+off: `NEXT_DISABLE_WEBPACK_BUILD_WORKER=1` was named in the comment above it, but
+the flag was never wired to anything, so the value never changed and the run
+still climbed to the heap ceiling — 4 GB, 6 GB and 8 GB builds all died at the
+limit after 11-16 minutes, each one stopping within a few MB of whatever ceiling
+it was given.
+
+The same shell did not reach the other toggle either. `NEXT_DISABLE_MEMORY_OPTIMIZATIONS=1`
+was read straight from `process.env`, and on Windows the config is loaded in a
+child process that does not reliably inherit `set VAR=1` from the launching
+shell, so the documented escape hatch silently did nothing there.
+
+- `webpackBuildWorker` now follows a real toggle, and defaults to **off on
+  Windows** — where the forked child neither receives the shell's `NODE_OPTIONS`
+  nor frees its heap between invalidation passes — while staying on for
+  Linux and macOS. `NEXT_DISABLE_WEBPACK_BUILD_WORKER=1` forces it off
+  everywhere, `=0` forces it on.
+- Build toggles are read from the environment first and then from `.env`, so a
+  switch set in the project file works on every platform instead of only where
+  the variable happens to be inherited.
+- Linux behaviour is unchanged: worker on, `webpackMemoryOptimizations` on,
+  `Compiled successfully`, peak 2223 MB in 1:49.
+
+Verified on the server: default resolves `webpackMemoryOptimizations: true`,
+`webpackBuildWorker: true`; `NEXT_DISABLE_WEBPACK_BUILD_WORKER=1` resolves
+`false`; `NEXT_DISABLE_MEMORY_OPTIMIZATIONS=1` drops the key entirely.
+
+## Stop the production build walking the Windows profile into a heap death spiral
+
+The `next16` line still declared `experimental.serverComponentsExternalPackages`.
+Next 15 renamed that key to the top-level `serverExternalPackages`, and Next 16
+rejects the old spelling outright. The failure was not cosmetic: the unresolved
+key makes the config validator drop the tracing block from the resolved config,
+so `outputFileTracingRoot` and its excludes never applied. On a Windows checkout
+the file tracer then followed the legacy "Application Data" junction — which
+points at the profile it already lives in — until the scandir loop pushed the
+build heap past its ceiling.
+
+Symptoms it produced, all from the same root cause:
+
+- `Unrecognized key(s) in object: 'serverComponentsExternalPackages' at "experimental"`
+- `FATAL ERROR: Ineffective mark-compacts near heap limit` after ~11 minutes
+- `build worker exited with code: 134` (SIGABRT)
+
+### Fixes
+
+- `next.config.mjs` detects the installed Next major and only declares the
+  legacy `experimental.serverComponentsExternalPackages` key on Next <= 14. On
+  Next 15/16 the key is absent, which is what the validator requires — an
+  explicit `undefined` is not enough, the key itself must not be present.
+- The Windows profile junction set (`Application Data`, `Local Settings`,
+  `Recent`, `SendTo`, `Start Menu`, `Templates`, `NetHood`, `PrintHood`, and the
+  rest of the self-referencing legacy names) is excluded from file tracing, along
+  with `npm-cache` and `node_modules/.cache`.
+- `productionBrowserSourceMaps: false`. Source maps are the second-largest
+  consumer in a production webpack pass and the standalone output never ships
+  them.
+
+### Measured
+
+Same machine, same Next 16.4.6, build heap left at the Node default:
+
+- Peak resident set: 4062 MB (failing) to 1802 MB, a 56% drop
+- Wall clock: ~694 s to 50.8 s
+- Config validator warnings: 1 to 0
+
+# v0.2.0 (2026-11-13)
+
+## Update to Next 16, with a build that survives a small machine
+
+The dashboard and gateway move from Next 14 to Next 16 (React 19), matching the
+`next16` line. The more important half is why the previous attempt at that
+upgrade could not be built: the production build ran the JavaScript heap out of
+memory on a consumer Windows machine, and it did so twice — at the default
+ceiling and again with `--max-old-space-size=8192`. A larger ceiling cannot fix
+a run that already fails at the ceiling, so the peak itself had to come down.
+
+- `next.config.mjs` now sets `webpackMemoryOptimizations` and
+  `webpackBuildWorker`. The first drops the caches webpack retains between
+  invalidation passes, which is where the heap accumulates; the second runs the
+  compilation in its own worker so the framework's overhead no longer stacks on
+  the same heap the bundler is saturating. Both lower the peak rather than raise
+  the limit.
+- Both are reversible for diagnosis: `NEXT_DISABLE_MEMORY_OPTIMIZATIONS=1`
+  restores the previous behaviour without a code change.
+- `scripts/cleanBuild.mjs` and its `build:fresh` script remove the previous
+  `NEXT_DIST_DIR` before compiling. Reading a stale route graph back on top of
+  the new build is the largest avoidable per-run spike, so consecutive builds
+  stay flat.
+- `NEXT_DIST_DIR` is respected, so a parallel side-by-side build is not deleted.
+
+## Breaking
+
+Next 16 and React 19. Nothing else changes — the routing, translation and
+persistence paths are untouched.
+
+# v0.2.0 ({date})
+
+## Update to Next 16 with a build that survives a small machine
+
+The dashboard and gateway move from Next 14 to Next 16 (React 19), matching the
+ line. The more important half is why the previous attempt at that
+upgrade could not be built: the production build ran the JavaScript heap out of
+memory on a consumer Windows machine, and it did so twice — at the default
+ceiling and again with . A larger ceiling cannot fix
+a run that fails at the ceiling; the peak itself had to come down.
+
+-  now sets  and
+  . The first drops the caches webpack retains between
+  invalidation passes, which is where the heap accumulates; the second runs the
+  compilation in its own worker so the framework's overhead no longer stacks on
+  the same heap the bundler is saturating. Both lower the peak rather than raise
+  the limit.
+- Both are reversible for diagnosis: 
+  restores the previous behaviour without a code change.
+-  and its  script remove the previous
+   before compiling. Reading a stale route graph back on top of
+  the new build is the largest avoidable per-run spike; builds are now flat
+  between consecutive runs.
+-  is respected, so a parallel side-by-side build is not deleted.
+
+## Breaking
+
+Next 16 and React 19. The tree is unchanged otherwise; nothing else in the
+routing, translation or persistence paths is touched.
 
 # v0.1.0 (2026-11-09)
 
-- **OpenCode Daemon Service Mode Reaches the Local Daemon Again**:
-  - Two defects in `open-sse/services/opencodeServiceBridge.js` kept the `opencode serve` daemon path dead, so every request fell through to the TLS HTTP transport even when a daemon was running and reachable.
-  - **Readiness never settled.** `buildOpenCodeServiceEnv()` never set `OPENCODE_SERVER_PASSWORD`, and the startup parser waits on both the listening URL *and* the `server password <x>` line before it marks the worker ready. An unset password means the daemon boots unsecured, the password line never appears, and the readiness match never resolves. The env builder now generates a `base64url` password when none is supplied and reuses the same value for the auth header.
-  - **Prompt payload used the wrong key.** Both prompt call sites (`OpenCodeServiceSession.prompt` and the streaming `executeServiceStreamOnce`) sent `{ text, files, delivery }`. The daemon's `POST /api/session/{id}/prompt` requires a literal `prompt` string; the old shape was rejected with `400 InvalidRequestError: Missing key at ["prompt"]`. Both call sites now send `prompt`.
-  - The daemon path is also addressable without depending on the startup log parser: point `OPENCODE_SERVICE_FILE` at a small JSON state file holding `{ url, password }` and the bridge adopts that endpoint directly.
-  - Regression-checked: `oc/*` still resolves to the registered local node and reaches the bridge; other prefixes (`enb/*`, `tb/*`, `cf/*`, `hf/*`) are unaffected. No behaviour change for deployments that never configured a service daemon.
-- **Locally Registered Provider Nodes Now Win Over Reserved Prefixes**:
-  - `src/sse/services/model.js` skipped its provider-node lookup entirely when the requested prefix was in `RESERVED_PROVIDER_PREFIXES`, so a node the operator registered under a reserved name could never be reached — the request was forced onto the built-in provider instead. For `oc`, that meant the built-in OpenCode executor (a Node.js process) had to satisfy a transport gate that only accepts a Bun TLS ClientHello, so every `oc/*` call failed with `429 Free usage limit reached` while the same request through the local Bun bridge returned `200`.
-  - The lookup now runs unconditionally. A node that exists wins — the operator asked for that route by name — and when no node matches, resolution falls through to the built-in provider id/alias unchanged. Reserved ids with no registered node behave exactly as before.
-  - Verified against the live router: all **12** `oc/*` free models return `200` through `:20128` (`glm-5.3-flash-free`, `mimo-v2.6-flash-free`, `deepseek-v4.1-flash-free`, `big-pickle`, `nemotron-3.5-lightning-free`, `nemotron-3.5-super-vl-free`, `minimax-m3.1-flash-free`, `longcat-2.5-free`, `iceman-free`, `inkling-2-small-free`, `beam-free`, `flint-40b-free`). Regression-checked `enb/*` (custom node, `200`), `tb/*` (`200`), and `cf/*` / `hf/*` (still routed to their built-in providers — upstream answered `410`/`404`, which is the upstream's own response, not a routing failure).
-- **Providers Addressed by ID Resolve Their Default Model (Fixes Every Codex Model Failing)**:
-  - The model tables in `open-sse/config/providerModels.js` are keyed by a provider's short alias, because `open-sse/providers/index.js` builds them as `entry.alias || entry.id`. Any provider that declares an alias therefore has no entry under its own canonical id: `codex` lives at `cx`, `claude` at `cc`, `github` at `gh`, and so on.
-  - `getProviderModels()` / `getDefaultModel()` looked the key up verbatim, so a caller passing the canonical id got an empty list and a `null` default model. The callers do pass the canonical id — the dashboard test/validate path takes it straight off the route param (`/dashboard/providers/[id]` → `ConnectionsCard` providerId → POST `body.provider`), and `normalizeProviderId()` returns it unchanged because it is already a valid provider entry.
-  - The probe therefore went upstream with `model: null`, the upstream answered `400`, and the connection was persisted as `unavailable`. It read as a dead account, not a dead lookup. **Every aliased provider was affected; OpenAI Codex surfaced it most visibly — all of its models failed.**
-  - Both spellings now resolve through the `PROVIDER_ID_TO_ALIAS` map that already shipped in the same module, so `codex` and `cx` return the same list. Nothing changes for a provider with no alias, and a provider with no model table at all still returns an empty list, exactly as before.
-  - Verified against the live registry before and after: **114 of 114** providers that own a model table now resolve a default model (was 84, with 30 returning `null`). Re-checked every aliased id individually — `codex`, `claude`, `github`, `kiro`, `qoder`, `antigravity`, `gemini-cli`, `windsurf` — plus the short-alias callers (`cx`, `cc`, `gh`), which are byte-for-byte unchanged. `cline` (`cl`) and `qoder` (`qd`) recovered by the same fix rather than by separate work.
-  - Also stopped hardcoding the Codex credential probe's model. The test path sent `gpt-5.3-codex` with `acceptStatuses: [400]`, betting that the upstream would reject the *body* while accepting the credential — but that model id is not in the Codex list, so the upstream rejected it for the model, and a healthy account looked like a dead one. The probe now takes the registry default model, so it stays valid as the model list moves.
-  - Note: the upstream `checkFallbackError` path already declines to lock an account on a bare `400` (client mistake, not credential fault) and the Codex-specific rule matches on the model-not-supported *text*, so no account was permanently disabled by this — they were marked unavailable and are re-tested from the dashboard once the service picks up the change.
-
-- **Config Now Speaks the Installed Framework's Dialect (Fixes the Windows Build Failure)**:
-  - `next.config.mjs` declared Next 15/16 keys at the top level while the server runs Next 14. Next 14 flagged six of them as `Invalid next.config.mjs options detected` and — the part that actually hurt — silently ignored `outputFileTracingRoot` and `outputFileTracingExcludes`. With no explicit tracing root, Next 14 infers one, and on Windows it walked into the user profile where the legacy `Application Data` junction points back at itself: `EPERM: operation not permitted, scandir 'C:\Users\...\Application Data'` → unhandled rejection → the build died before writing anything. The excludes written to avoid exactly that walk (`**/AppData/Local/**/*`) never applied, because on this version they do not belong at the top level.
-  - Keys are now emitted for the framework that is actually installed: Next 14 gets `experimental.outputFileTracingRoot` / `outputFileTracingExcludes` / `serverComponentsExternalPackages`; Next 15+ gets the top-level `outputFileTracingRoot` / `outputFileTracingExcludes` / `serverExternalPackages` / `turbopack`; and the old `experimental.` spellings are dropped where the framework has moved past them.
-  - Verified against both installed versions: Next 14.2.35 builds `168/168` pages and Next 16.4.6 builds `166/166`, both exit 0 with **zero** `Invalid next.config` warnings (previously six keys flagged on 14, one on 16). The Linux verification built into a separate dist directory, so the running service's `.next` was never touched.
-  - Noted and not fixed here: `experimental.proxyClientMaxBodySize` does not exist on Next 14, so the 128 MB body limit for `/v1` rewrites has never taken effect on this line. It applies once the Next 16 migration lands.
-- **Build Directory Is Now Configurable End to End (`NEXT_DIST_DIR`)**:
-  - `custom-server.js` hardcoded `.next` when looking for the standalone server, so a build produced into any other directory could never be launched.
-  - `scripts/copy-standalone-assets.mjs` read `NEXT_DIST_DIR` from the process environment only. `npm run build` does not load `.env`, so a dist dir pinned there was silently ignored by the postbuild hook and assets were copied to the wrong place. Resolution is now explicit argument → environment → `.env` → `.next`.
-  - Verified: all three resolution cases (from `.env`, from the environment, explicit argument winning) plus a real launch — `NEXT_DIST_DIR=probe-dist node custom-server.js` loaded `<repo>/probe-dist/standalone/server.js`. With no variable set the behaviour is unchanged (`.next`).
-  - This is the enabler for upgrading safely: a second build can now sit beside the one the running service uses, and be verified before anything is switched over.
 - **Rotate an API Key From the API (Secret Swap Without Losing Access)**:
   - New `POST /api/keys/[id]/rotate` mints a fresh secret for an existing key and keeps its id, name, `isActive` and access config — a leaked or shared key can be swapped without rebuilding its restrictions by hand. `rotateApiKey()` sits with the other key repositories and uses the server's own machine id, so a legacy `sk-{random}` key also upgrades to the current `sk-{machineId}-{keyId}-{crc8}` shape as it rotates.
   - The response uses the same flat shape as `POST /api/keys` (the object carries the new secret in `key`), so a client that created a key does not have to special-case this endpoint.

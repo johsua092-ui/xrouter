@@ -50,18 +50,16 @@ export async function getModelInfo(modelStr, studioHops = 0) {
   const parsed = parseModel(modelStr);
 
   if (!parsed.isAlias) {
-    // Provider-node prefixes are user-defined. A node explicitly registered by
-    // the operator wins over reserved built-ins: the operator asked for that
-    // route by name, so an existing node prefix takes precedence over the
-    // built-in provider id/alias. When no node matches, fall through to the
-    // built-in resolution below, so reserved ids keep working untouched.
+    // Provider-node prefixes are user-defined. They must not override built-in
+    // provider ids/aliases such as `cf`, `cloudflare-ai`, `openai`, or `hf`.
     //
-    // [ENI] Dead-route guard: a node that shadows a *reserved* provider prefix
-    // but holds no credentialed connection can never serve a request, and
-    // because it wins the lookup outright it turns `oc/<model>` into a hard
+    // Dead-route guard: a node that shadows a *reserved* provider prefix but
+    // holds no credentialed connection can never serve a request, and because
+    // it wins the lookup outright it turns `oc/<model>` into a hard
     // `404 No credentials are serving ...` instead of reaching the built-in
     // provider. Skip such a node so the reserved built-in keeps the route.
-    // Nodes that carry credentials keep winning exactly as before.
+    // Nodes that carry credentials keep winning exactly as before, and a node
+    // whose connections cannot be read preserves the previous behaviour.
     const hasCredentialedConnections = async (nodeId) => {
       try {
         const conns = await getProviderConnections({ provider: nodeId });

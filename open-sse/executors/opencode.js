@@ -712,16 +712,11 @@ export class OpenCodeExecutor extends BaseExecutor {
 
   // Free tier moved from /zen/v1 to /inference/v1 (OpenCode v2); /zen/v1 now
   // answers every free request with 403 FreeTierError.
-  // The `/inference/openai/v1` alias is a *metadata* path (models/descriptor) —
-  // posting chat completions there is answered by the free-tier gate with 429
-  // FreeUsageLimitError even on a clean, unflagged egress in the same minute a
-  // direct `/inference/v1` request returns 200. Keep chat + responses on the
-  // canonical v2 lane.
   buildUrl(model) {
     const base = this.config.baseUrl;
-    if (isResponsesModel(model)) return `${base}/inference/v1/responses`;
-    if (isMessagesModel(model)) return `${base}/inference/v1/messages`;
-    return `${base}/inference/v1/chat/completions`;
+    if (isResponsesModel(model)) return `${base}/inference/openai/v1/responses`;
+    if (isMessagesModel(model)) return `${base}/inference/openai/v1/messages`;
+    return `${base}/inference/openai/v1/chat/completions`;
   }
 
   buildHeaders(credentials, stream = true, url = "") {

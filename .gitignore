@@ -116,9 +116,12 @@ graphify-out/*
 .start-dev.ps1
 start-dev-silent.cjs
 debug.log
+<<<<<<< HEAD
+=======
 
 # Build outputs of any name (probe/side-by-side builds must never be committed)
 .next*/
 
 # Local-only Codex OAuth helper (contains live tokens, never commit)
 scripts/codexAuthLocal.mjs
+>>>>>>> 6c77d6a (fix(antigravity,router): align IDE fingerprint with hub 2.32.1, persist project/tier on exchange, harden bulk-add baseUrl)

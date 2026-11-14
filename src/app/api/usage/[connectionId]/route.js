@@ -145,12 +145,6 @@ export async function GET(request, { params }) {
       return Response.json({ message: "Usage not available for this connection" });
     }
 
-    // A disabled connection has no usable credentials: answer cleanly instead of
-    // firing an OAuth refresh that throws and dumps a stack trace on every poll.
-    if (connection.isActive === false) {
-      return Response.json({ plan: "None", quotas: {}, message: "Connection is inactive" });
-    }
-
     // Resolve connection proxy config; force strictProxy=false so quota/refresh fall back to direct on failure
     const proxyConfig = await resolveConnectionProxyConfig(connection.providerSpecificData);
     const proxyOptions = {
@@ -163,22 +157,14 @@ export async function GET(request, { params }) {
 
     // Refresh credentials only for OAuth connections (apikey has no token refresh)
     if (isOAuth) {
-      if (!connection.refreshToken && !connection.accessToken) {
-        return Response.json({
-          error: "Connection credentials expired or missing. Please re-authorize."
-        }, { status: 401 });
-      }
       try {
         const result = await refreshAndUpdateCredentials(connection, false, proxyOptions);
         connection = result.connection;
       } catch (refreshError) {
-        // Concise one-liner: this used to print a multi-line stack trace per poll.
-        console.warn(`[Usage API] ${connection.provider} (${connection.name || connection.id}): ${refreshError.message}`);
-        if (!connection.accessToken) {
-          return Response.json({
-            error: `Credential refresh failed: ${refreshError.message}`
-          }, { status: 401 });
-        }
+        console.error("[Usage API] Credential refresh failed:", refreshError);
+        return Response.json({
+          error: `Credential refresh failed: ${refreshError.message}`
+        }, { status: 401 });
       }
     }
 

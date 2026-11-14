@@ -37,11 +37,44 @@ const PUBLIC_API_PATHS = [
   "/api/vouchers/claim",
   "/api/connection/telegram/webhook",
   "/api/connection/telegram/command",
+  // Exact match only. The entry below is compared with a trailing-slash prefix
+  // rule, so listing "/api/models" here would publish every /api/models/* child
+  // (catalog, custom, disabled, alias, availability, catalog-sync) to anonymous
+  // callers. Those child routes answer with the full installed-model catalogue,
+  // per-provider custom models and disabled lists, so a bare prefix here hands
+  // the whole inventory to anyone who can reach the host.
   "/api/models",
   "/api/models/test",
   "/api/model",
   "/api/usage",
 ];
+
+// Discovery paths that answer "what can I call" with no credential at all. They
+// stay public because the voucher claim / market portals and external clients
+// read them without a session. Scoped to exactly these literals so a sibling
+// under the same parent (e.g. /api/models/catalog, which dumps installed
+// providers plus their configured keys) does not inherit the public flag.
+const PUBLIC_MODELS_DISCOVERY_PATHS = new Set([
+  "/api/models",
+  "/api/model",
+  "/api/v1/models",
+  "/api/v1/model",
+  "/api/v1beta/models",
+]);
+
+// Same exact-match rule for the usage surface. Every /api/usage/* child is a
+// dashboard read backed by getSessionContext(), and that helper hands an
+// unauthenticated caller the unrestricted view — so listing "/api/usage" as a
+// public path let any anonymous request fetch /api/usage/api-keys (masked key
+// values, per-key quotas, creators) and the rest of the usage tree. The
+// public /share/<token> monitor renders from the database inside its own page
+// and calls none of these routes, so nothing user-facing depends on the prefix
+// staying open.
+const PUBLIC_USAGE_DISCOVERY_PATHS = new Set([
+  // Public usage-share monitor and its supporting reads. Everything else under
+  // /api/usage stays behind dashboard auth.
+  "/api/usage",
+]);
 
 // Public top-level prefixes (LLM API endpoints with their own API key auth).
 // Keep root-level rewrites here too: middleware runs before Next.js rewrites.
@@ -86,6 +119,8 @@ function redirectWithProto(targetPath, request) {
   url.protocol = isHttps ? "https:" : "http:";
 
   if (host) {
+    // Bracket-aware host/port split: `host.split(":")` mis-parses an IPv6
+    // literal like `[::1]:20128` (it splits on the colons inside the braces).
     const bracketEnd = host.startsWith("[") ? host.indexOf("]") : -1;
     const h = bracketEnd > 0 ? host.slice(0, bracketEnd + 1) : host.split(":")[0];
     const p = bracketEnd > 0 ? host.slice(bracketEnd + 1).replace(/^:/, "") : host.slice(h.length + 1);
@@ -96,8 +131,6 @@ function redirectWithProto(targetPath, request) {
     // on http://localhost:20128. The test runs on the final hostname, so the
     // PUBLIC_BASE_URL override above still takes the public branch below and no
     // internal node port leaks onto a public domain.
-    // Parsing is bracket-aware: `host.split(":")` mis-splits an IPv6 literal like
-    // `[::1]:20128` on the colons inside the braces.
     const hostIsLoopback =
       !h ||
       h === "localhost" ||
@@ -212,23 +245,12 @@ export function isLocalRequest(request) {
 
 function isModelsDiscoveryPath(pathname) {
   return (
-    pathname === "/models" ||
-    pathname === "/model" ||
-    pathname === "/v1/models" ||
-    pathname === "/v1/model" ||
-    pathname === "/v1beta/models" ||
-    pathname === "/api/models" ||
-    pathname === "/api/model" ||
-    pathname === "/api/v1/models" ||
-    pathname === "/api/v1/model" ||
-    pathname === "/api/v1beta/models" ||
+    PUBLIC_MODELS_DISCOVERY_PATHS.has(pathname) ||
     pathname.startsWith("/models/") ||
     pathname.startsWith("/model/") ||
     pathname.startsWith("/v1/models/") ||
     pathname.startsWith("/v1/model/") ||
     pathname.startsWith("/v1beta/models/") ||
-    pathname.startsWith("/api/models/") ||
-    pathname.startsWith("/api/model/") ||
     pathname.startsWith("/api/v1/models/") ||
     pathname.startsWith("/api/v1/model/") ||
     pathname.startsWith("/api/v1beta/models/")
@@ -316,8 +338,16 @@ async function isAuthenticated(request) {
 }
 
 function isPublicApi(pathname) {
+  // isPublicLlmApi already scopes /v1*, /v1beta* and the bare discovery roots
+  // exactly, so /api/models/catalog never reaches the flat list below.
   if (isPublicLlmApi(pathname)) return true;
-  return PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  if (PUBLIC_MODELS_DISCOVERY_PATHS.has(pathname)) return true;
+  if (PUBLIC_USAGE_DISCOVERY_PATHS.has(pathname)) return true;
+  return PUBLIC_API_PATHS.some(
+    (p) =>
+      pathname === p ||
+      ((p !== "/api/models" && p !== "/api/usage") && pathname.startsWith(`${p}/`)),
+  );
 }
 
 // Shared with src/proxy.js — the mimo login branch must respect dashboard auth.
@@ -325,7 +355,9 @@ export { isAuthenticated };
 
 export const __test__ = {
   isLocalRequest,
+  isPublicApi,
   isPublicLlmApi,
+  isModelsDiscoveryPath,
   extractApiKey,
   canAccessPublicLlmApi,
   canAccessLocalOnlyRoute,

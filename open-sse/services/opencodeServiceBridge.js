@@ -243,14 +243,6 @@ export function buildOpenCodeServiceEnv({ baseEnv = process.env, proxyUrl = "", 
   }
   if (apiKey !== undefined) env.OPENCODE_API_KEY = apiKey;
   if (env.NODE_ENV !== "production") env.OPENCODE_LOG_LEVEL = "DEBUG";
-  // The daemon only prints its `server password <x>` line when this is set, and
-  // the startup parser blocks on both that line and the listening URL before it
-  // treats the worker as ready. Without it the daemon boots unsecured, the
-  // readiness match never settles, and every request falls through to the TLS
-  // HTTP path instead of the daemon. Same value is reused for the auth header.
-  if (!env.OPENCODE_SERVER_PASSWORD) {
-    env.OPENCODE_SERVER_PASSWORD = crypto.randomBytes(24).toString("base64url");
-  }
   return env;
 }
 
@@ -1074,7 +1066,7 @@ class OpenCodeServiceSession {
     const response = await fetch(`${this.service.url}/api/session/${this.sessionId}/prompt`, {
       method: "POST",
       headers: { Authorization: this.auth, "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: text, files: [], delivery: "steer" }),
+      body: JSON.stringify({ text, files: [], delivery: "steer" }),
       signal,
     });
     if (!response.ok) {
@@ -1737,7 +1729,7 @@ async function executeServiceStreamOnce({ model, messages, tools = [], toolChoic
     method: "POST",
     headers,
     body: JSON.stringify({
-      prompt: promptText,
+      text: promptText,
       files: [],
       delivery: "steer",
     }),

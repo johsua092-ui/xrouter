@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
-import { sealCredential, unsealCredential } from "@/lib/vault/credentialVault.js";
+import { sealCredential, unsealCredential } from "../../vault/credentialVault.js";
 
 const OPTIONAL_FIELDS = [
   "displayName", "email", "globalPriority", "defaultModel",
@@ -12,69 +12,6 @@ const OPTIONAL_FIELDS = [
 ];
 
 const MODEL_LOCK_PREFIX = "modelLock_";
-
-// Credential fields are sealed at rest (see src/lib/vault/credentialVault.js).
-const CREDENTIAL_FIELDS = ["apiKey", "accessToken", "refreshToken"];
-// Hidden per-connection copy of the ciphertext exactly as stored, so a credential
-// this host cannot open is never dropped by a later write.
-const SEALED_RAW_KEY = "__sealedCredentials";
-// GLM/Z.ai OAuth keeps a plaintext business token beside the sealed access token;
-// it is the recovery path when the sealed copy cannot be opened (a database moved
-// between hosts, or a rotated storage key).
-const GLM_PLAINTEXT_TOKEN_FIELDS = ["zaiBusinessToken", "zcodeJwtToken"];
-
-function readSealedRaw(conn) {
-  const sealed = conn?.[SEALED_RAW_KEY];
-  return sealed && typeof sealed === "object" ? sealed : null;
-}
-
-function carrySealedRaw(target, source) {
-  const sealed = readSealedRaw(source);
-  if (sealed) {
-    Object.defineProperty(target, SEALED_RAW_KEY, {
-      value: sealed,
-      enumerable: false,
-      configurable: true,
-      writable: true,
-    });
-  }
-  return target;
-}
-
-function plaintextGlmToken(extra, field) {
-  if (field !== "accessToken") return null;
-  const psd = extra?.providerSpecificData;
-  if (!psd || typeof psd !== "object") return null;
-  for (const key of GLM_PLAINTEXT_TOKEN_FIELDS) {
-    const value = psd[key];
-    if (typeof value === "string" && value.trim() && !value.startsWith("enc:v1:")) return value.trim();
-  }
-  return null;
-}
-
-// Non-enumerable: `{ ...conn }` in a listing route must never decrypt a
-// credential. Resolution is memoised — including a null result — so a failure is
-// neither retried nor re-logged on every read, and the raw ciphertext stays
-// available for a later write.
-function defineLazyCredential(conn, extra, sealedRaw, field) {
-  if (typeof extra[field] !== "string" || !extra[field].startsWith("enc:v1:")) return;
-  sealedRaw[field] = extra[field];
-  let resolved = false;
-  let value = null;
-  Object.defineProperty(conn, field, {
-    get() {
-      if (!resolved) {
-        resolved = true;
-        value = unsealCredential(extra[field]);
-        if (value == null) value = plaintextGlmToken(extra, field);
-      }
-      return value;
-    },
-    set(v) { resolved = true; value = v; extra[field] = v; },
-    enumerable: false,
-    configurable: true,
-  });
-}
 
 function resetHealthStateOnActivation(existing, patch) {
   if (patch?.testStatus !== "active") return patch;
@@ -100,6 +37,10 @@ function rowToConn(row) {
   if (!row) return null;
   const extra = parseJson(row.data, {});
 
+  let unsealedApiKey;
+  let unsealedAccessToken;
+  let unsealedRefreshToken;
+
   const conn = {
     ...extra,
     id: row.id,
@@ -114,14 +55,37 @@ function rowToConn(row) {
   };
 
   // Lazy unseal credentials on demand to prevent CPU stalls when loading thousands of rows
-  const sealedRaw = {};
-  for (const field of CREDENTIAL_FIELDS) defineLazyCredential(conn, extra, sealedRaw, field);
-  if (Object.keys(sealedRaw).length > 0) {
-    Object.defineProperty(conn, SEALED_RAW_KEY, {
-      value: sealedRaw,
-      enumerable: false,
+  if (extra.apiKey && typeof extra.apiKey === "string" && extra.apiKey.startsWith("enc:v1:")) {
+    Object.defineProperty(conn, "apiKey", {
+      get() {
+        if (unsealedApiKey === undefined) unsealedApiKey = unsealCredential(extra.apiKey);
+        return unsealedApiKey;
+      },
+      set(v) { unsealedApiKey = v; extra.apiKey = v; },
+      enumerable: true,
       configurable: true,
-      writable: true,
+    });
+  }
+  if (extra.accessToken && typeof extra.accessToken === "string" && extra.accessToken.startsWith("enc:v1:")) {
+    Object.defineProperty(conn, "accessToken", {
+      get() {
+        if (unsealedAccessToken === undefined) unsealedAccessToken = unsealCredential(extra.accessToken);
+        return unsealedAccessToken;
+      },
+      set(v) { unsealedAccessToken = v; extra.accessToken = v; },
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  if (extra.refreshToken && typeof extra.refreshToken === "string" && extra.refreshToken.startsWith("enc:v1:")) {
+    Object.defineProperty(conn, "refreshToken", {
+      get() {
+        if (unsealedRefreshToken === undefined) unsealedRefreshToken = unsealCredential(extra.refreshToken);
+        return unsealedRefreshToken;
+      },
+      set(v) { unsealedRefreshToken = v; extra.refreshToken = v; },
+      enumerable: true,
+      configurable: true,
     });
   }
 
@@ -131,31 +95,11 @@ function rowToConn(row) {
 function connToRow(c) {
   const { id, provider, authType, name, email, priority, isActive, createdAt, updatedAt, ...rest } = c;
 
-  // Seal sensitive credential fields before writing to SQLite database.
-  // The credential getters are non-enumerable, so neither a spread nor the merge
-  // in updateProviderConnection / createProviderConnection carries them — collect
-  // them explicitly here, and keep a value this host cannot open verbatim instead
-  // of overwriting it with null.
-  const sealedRaw = readSealedRaw(c);
+  // Seal sensitive credential fields before writing to SQLite database
   const toStore = { ...rest };
-  for (const field of CREDENTIAL_FIELDS) {
-    const descriptor = Object.getOwnPropertyDescriptor(c, field);
-    if (!descriptor) {
-      if (sealedRaw?.[field]) toStore[field] = sealedRaw[field];
-      continue;
-    }
-    const value = c[field];
-    if (typeof value === "string" && value) {
-      toStore[field] = sealCredential(value);
-    } else if (descriptor.get) {
-      // Getter present but unreadable (null): keep the stored ciphertext.
-      if (sealedRaw?.[field]) toStore[field] = sealedRaw[field];
-      else delete toStore[field];
-    } else {
-      // Plain property written by the caller — an explicit clear.
-      delete toStore[field];
-    }
-  }
+  if (toStore.apiKey) toStore.apiKey = sealCredential(toStore.apiKey);
+  if (toStore.accessToken) toStore.accessToken = sealCredential(toStore.accessToken);
+  if (toStore.refreshToken) toStore.refreshToken = sealCredential(toStore.refreshToken);
 
   return {
     id,
@@ -370,7 +314,7 @@ export async function createProviderConnection(data) {
         throw err;
       }
       const normalized = resetHealthStateOnActivation(existing, data);
-      const merged = carrySealedRaw({ ...existing, ...normalized, updatedAt: now }, existing);
+      const merged = { ...existing, ...normalized, updatedAt: now };
       upsert(db, merged);
       result = merged;
       return;
@@ -480,7 +424,7 @@ export async function bulkCreateProviderConnections(provider, keys = []) {
             apiKey,
             providerSpecificData: withBaseUrl(entry.providerSpecificData || existing.providerSpecificData),
           });
-          const merged = carrySealedRaw({ ...existing, ...normalized, updatedAt: now }, existing);
+          const merged = { ...existing, ...normalized, updatedAt: now };
           upsert(db, merged);
           existingByName.set(name, merged);
           created.push(merged.id);
@@ -523,7 +467,7 @@ export async function updateProviderConnection(id, data) {
     if (!row) { result = null; return; }
     const existing = rowToConn(row);
     const normalized = resetHealthStateOnActivation(existing, data);
-    const merged = carrySealedRaw({ ...existing, ...normalized, updatedAt: new Date().toISOString() }, existing);
+    const merged = { ...existing, ...normalized, updatedAt: new Date().toISOString() };
     upsert(db, merged);
     if (data.priority !== undefined) reorderInTx(db, existing.provider);
     result = merged;
