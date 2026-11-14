@@ -441,6 +441,12 @@ func RegisterWave4(r *Registry) {
 	r.Register(&AnthropicCompatible{})
 }
 
+// RegisterWave5 adds adapters that carry a protocol behaviour beyond URL and
+// headers — currently AdCode's Firebase token lifecycle.
+func RegisterWave5(r *Registry) {
+	r.Register(&AdCode{})
+}
+
 // ensure the dialect constants stay referenced even if a future refactor drops
 // the direct uses above.
 var _ = translate.FormatGemini

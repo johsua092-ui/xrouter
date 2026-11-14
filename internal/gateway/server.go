@@ -59,6 +59,10 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 	// the earlier waves so a provider present in both keeps its richer adapter:
 	// Register overwrites by key, so order here decides the winner.
 	providers.RegisterWave4(registry)
+	// Wave 5 carries protocol behaviour a URL/header override cannot express —
+	// currently AdCode's Firebase token lifecycle, which needs the auth header at
+	// build time and a replay after a token expiry.
+	providers.RegisterWave5(registry)
 
 	// Translator registry. Every request and response converter self-registers
 	// from its own file's init(), so this only needs to hand out the shared set.
