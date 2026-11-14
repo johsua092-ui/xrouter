@@ -2,9 +2,18 @@
 
 // Rewrite Antigravity IDE markers on generation requests so upstream AG 2.x
 // backend accepts them. Catalog and other passthrough requests retain the
-// client's current identity. Hardcoded MVP - toggle/version configurable later.
+// client's current identity.
+//
+// Version pins the shipped desktop hub (antigravity 2.32.1 over language server
+// 44.9.1, from the official linux-x64 tarball's resources/version). The hub
+// always launches the LS with `--override_ide_version <hub version>` and
+// `--override_user_agent_name antigravity`, so both the metadata ideVersion and
+// the `antigravity/<...>` UA token must carry the hub version — not whatever the
+// calling client (Cockpit / third-party tooling) happens to send.
 
-const ANTIGRAVITY_IDE_VERSION = "2.22.0";
+const ANTIGRAVITY_IDE_VERSION = "2.32.1";
+// Language server build shipped inside that hub; useful as a secondary marker.
+const ANTIGRAVITY_LANGUAGE_SERVER_VERSION = "44.9.1";
 const ANTIGRAVITY_IDE_VERSION_OVERRIDE_ENABLED = true;
 
 function shouldRewriteMetadata(metadata) {
@@ -47,6 +56,7 @@ function applyAntigravityIdeVersionOverride(bodyBuffer, headers, requestUrl) {
 
 module.exports = {
   ANTIGRAVITY_IDE_VERSION,
+  ANTIGRAVITY_LANGUAGE_SERVER_VERSION,
   applyAntigravityIdeVersionOverride,
   rewriteAntigravityUserAgent,
 };

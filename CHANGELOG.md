@@ -1,5 +1,66 @@
 # v0.1.0 (2026-11-14)
 
+### Fixed — Antigravity: account fingerprint was one IDE generation behind
+
+- Spoofed client version was `2.24.0` (macOS arm64) while the Antigravity desktop
+  product has shipped `2.32.1` with a much newer language server. The IDE-version
+  string and the `antigravity/hub/<ver> <os>/<arch>` user-agent are now sourced
+  from a single constant (`open-sse/providers/shared.js`) and bumped to `2.32.1`.
+- The OAuth config (`src/lib/oauth/constants/oauth.js`) now imports the version and
+  user-agent instead of duplicating literals, so the token-exchange request and
+  the runtime request headers can no longer drift apart.
+- `ANTIGRAVITY_CHROME_VERSION` added so the `X-Goog-Api-Client` header matches the
+  Electron/Chromium engine that the real hub reports.
+
+### Added — Antigravity: persist `cloudaicompanionProject` + `tierId` from the OAuth exchange
+
+- `mapTokens` in `src/lib/oauth/providers/antigravity.js` now resolves and stores
+  `projectId` and `tierId` into `providerSpecificData` on the freshly created
+  connection, so a brand-new account does not need to launch the Antigravity
+  desktop app once just to obtain its provisioned project.
+- `src/sse/handlers/chat.js` backfills `projectId`/`tierId` from
+  `providerSpecificData` when a refreshed credential arrives without them, and
+  promotes them onto the connection's top level fields the executors read.
+
+### Fixed — Bulk add: connections could silently target `api.openai.com`
+
+- Reported symptom: adding a batch of keys produced connections that all failed
+  with `401` against OpenAI instead of the intended upstream.
+- Root cause: `bulkCreateProviderConnections()` persisted
+  `providerSpecificData: entry.providerSpecificData || {}` verbatim, and the
+  executor resolved the URL as
+  `credentials?.providerSpecificData?.baseUrl || OPENAI_COMPAT_BASE`, with
+  `OPENAI_COMPAT_BASE` pointing at `https://api.openai.com/v1`. Any bulk entry
+  that arrived without a per-entry `baseUrl` therefore sent its non-OpenAI key
+  straight to OpenAI.
+- Two-layer fix. First, `bulkCreateProviderConnections()` now inherits `baseUrl`
+  from the owning provider node (new helper `resolveNodeBaseUrl(db, provider)` in
+  `src/lib/db/repos/connectionsRepo.js`; the node id is the connection's
+  `provider` value, verified against the live DB). Second, `BaseExecutor` gained
+  `compatFallbackBaseUrl(credentials)`, wired into the `openai-compatible-*` and
+  `anthropic-compatible-*` branches of `buildUrl` in both
+  `open-sse/executors/base.js` and `open-sse/executors/default.js`, so
+  pre-existing connections with an empty `providerSpecificData` fall back to a
+  configured base URL instead of the OpenAI default.
+
+### Fixed — MITM: stale Antigravity model mapping
+
+- Ported the functional part of the upstream `/dashboard/mitm` update: the
+  Antigravity `MODEL_SYNONYMS` / `MODEL_PATTERNS` in `src/mitm/config.js` now
+  resolve `gemini-default` to `gemini-3.8-flash-medium` and recognise the
+  Gemini 3.6 and Claude 5.5 model families. The remaining upstream differences
+  were cosmetic (brand rename, hardcoded colors) and were not ported.
+
+### Fixed — Build could not complete: obfuscated `dynamic` export in share route
+
+- `bun --bun next build` aborted with a Turbopack "can't recognize the exported"
+  error from `src/app/api/keys/[id]/share/route.js`, which had been replaced by a
+  large obfuscated body that expressed `dynamic` as a call expression.
+- Restored the literal `export const dynamic = "force-dynamic";` line. No logic
+  changes were made to that file. The build now completes.
+
+# v0.1.0 (2026-11-14)
+
 ### Fixed — Tunnel toggle frozen by a build-time snapshot of `/api/tunnel/status`
 
 - Root cause: `GET /api/tunnel/status` took no request argument and read no dynamic

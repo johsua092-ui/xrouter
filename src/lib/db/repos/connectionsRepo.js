@@ -419,11 +419,40 @@ export async function createProviderConnection(data) {
   return result;
 }
 
+// Dynamic compatible providers keep the endpoint on their providerNodes row
+// (baseUrl/suffix/apiType) while each key lives in providerConnections. Node id
+// and connection provider id are the same string, so a node-lookup by id is the
+// membership test. Returns undefined for static providers (no node row).
+export function resolveNodeBaseUrl(db, provider) {
+  try {
+    const row = db.get(`SELECT data FROM providerNodes WHERE id = ?`, [provider]);
+    if (!row?.data) return undefined;
+    const data = parseJson(row.data, {});
+    const baseUrl = typeof data.baseUrl === "string" ? data.baseUrl.trim() : "";
+    return baseUrl || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function bulkCreateProviderConnections(provider, keys = []) {
   const db = await getAdapter();
   const now = new Date().toISOString();
   const created = [];
   const failed = [];
+
+  // Dynamic openai-compatible/anthropic-compatible nodes keep their endpoint on
+  // the parent providerNodes row, not on each connection. Bulk add used to store
+  // whatever the caller sent — an empty providerSpecificData left the connection
+  // with no baseUrl, and the executor then fell back to OPENAI_COMPAT_BASE
+  // (api.openai.com) for every request, producing a wall of 401s against the
+  // wrong host. Inherit the node's baseUrl when the caller omits it.
+  const nodeBaseUrl = resolveNodeBaseUrl(db, provider);
+  const withBaseUrl = (psd) => {
+    const merged = { ...(psd || {}) };
+    if (!merged.baseUrl && nodeBaseUrl) merged.baseUrl = nodeBaseUrl;
+    return merged;
+  };
 
   db.transaction(() => {
     const existingRows = db.all(
@@ -449,7 +478,7 @@ export async function bulkCreateProviderConnections(provider, keys = []) {
         if (existing) {
           const normalized = resetHealthStateOnActivation(existing, {
             apiKey,
-            providerSpecificData: entry.providerSpecificData || {},
+            providerSpecificData: withBaseUrl(entry.providerSpecificData || existing.providerSpecificData),
           });
           const merged = carrySealedRaw({ ...existing, ...normalized, updatedAt: now }, existing);
           upsert(db, merged);
@@ -465,7 +494,7 @@ export async function bulkCreateProviderConnections(provider, keys = []) {
             priority: nextPriority++,
             isActive: true,
             testStatus: "unknown",
-            providerSpecificData: entry.providerSpecificData || {},
+            providerSpecificData: withBaseUrl(entry.providerSpecificData),
             createdAt: now,
             updatedAt: now,
           };

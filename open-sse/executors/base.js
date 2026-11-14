@@ -27,15 +27,30 @@ export class BaseExecutor {
     return this.getBaseUrls().length || 1;
   }
 
+  /**
+   * Last-resort endpoint for a compatible provider whose stored credential has no
+   * baseUrl (rows written before bulk add learned to inherit the node's baseUrl).
+   * Falls back to the provider config's own baseUrls, which for a dynamic
+   * compatible provider is derived from the node — anything is better than
+   * silently sending a non-OpenAI key to api.openai.com and burning the pool.
+   */
+  compatFallbackBaseUrl(credentials) {
+    const configured = credentials?.providerSpecificData?.nodeBaseUrl
+      || credentials?.nodeBaseUrl
+      || this.config?.baseUrls?.[0]
+      || this.config?.baseUrl;
+    return typeof configured === "string" && configured.trim() ? configured.trim() : "";
+  }
+
   buildUrl(model, stream, urlIndex = 0, credentials = null) {
     if (this.provider?.startsWith?.("openai-compatible-")) {
-      const baseUrl = credentials?.providerSpecificData?.baseUrl || OPENAI_COMPAT_BASE;
+      const baseUrl = credentials?.providerSpecificData?.baseUrl || this.compatFallbackBaseUrl(credentials);
       const normalized = baseUrl.replace(/\/$/, "");
       const path = resolveOpenAICompatibleApiType(this.provider, credentials) === "responses" ? "/responses" : "/chat/completions";
       return `${normalized}${path}`;
     }
     if (this.provider?.startsWith?.("anthropic-compatible-")) {
-      const baseUrl = credentials?.providerSpecificData?.baseUrl || ANTHROPIC_COMPAT_BASE;
+      const baseUrl = credentials?.providerSpecificData?.baseUrl || this.compatFallbackBaseUrl(credentials) || ANTHROPIC_COMPAT_BASE;
       const normalized = baseUrl.replace(/\/$/, "");
       return `${normalized}/messages`;
     }

@@ -2,7 +2,7 @@
  * OAuth Configuration Constants - static data lives in registry, re-exported here for consumers.
  */
 import { platform, arch } from "os";
-import { ANTIGRAVITY_OAUTH_CLIENT, GOOGLE_OAUTH_CLIENT } from "open-sse/providers/shared.js";
+import { ANTIGRAVITY_OAUTH_CLIENT, GOOGLE_OAUTH_CLIENT, ANTIGRAVITY_IDE_VERSION, ANTIGRAVITY_IDE_USER_AGENT } from "open-sse/providers/shared.js";
 import { PROVIDER_OAUTH, PROVIDERS as REGISTRY_PROVIDERS } from "open-sse/providers/index.js";
 
 /**
@@ -47,6 +47,10 @@ export const IFLOW_CONFIG = { ...PROVIDER_OAUTH["iflow"] };
 export const ANTIGRAVITY_CONFIG = {
   ...ANTIGRAVITY_OAUTH_CLIENT,
   ...PROVIDER_OAUTH["antigravity"],
+  // Hub release the provider fingerprints (see providers/shared.js). Onboarding
+  // and chat both have to quote the same version the official client does.
+  ideVersion: ANTIGRAVITY_IDE_VERSION,
+  loadCodeAssistUserAgent: ANTIGRAVITY_IDE_USER_AGENT,
   loadCodeAssistClientMetadata: JSON.stringify({ ideType: 9, platform: getOAuthPlatformEnum(), pluginType: 2 }),
 };
 
