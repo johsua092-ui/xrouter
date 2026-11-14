@@ -1,3 +1,39 @@
+# v0.1.2 (2026-11-14)
+
+## A stale database no longer blocks table writes
+
+`CREATE TABLE IF NOT EXISTS` never rebuilds a table that already exists, and
+the schema sync was additive-only: it added columns the new layout declares but
+never touched columns the new layout dropped. A database created by an older
+build therefore kept its old columns forever.
+
+That is fatal when the orphan column is `NOT NULL` without a default. Every
+INSERT that omits it fails with `NOT NULL constraint failed: <table>.<col>`.
+The visible symptom was Cloudflare relay deployment and proxy-pool creation:
+
+    Error deploying Cloudflare relay: SqliteError: NOT NULL constraint failed:
+    proxyPools.url
+
+`proxyPools` moved to a JSON `data` blob long ago, so current code writes
+`(id, isActive, testStatus, data, createdAt, updatedAt)`. Any install that
+still carried the legacy `url NOT NULL` column rejected every one of those
+writes. A fresh database never shows it, which is why it only surfaced on
+upgrades.
+
+The schema sync is now bidirectional. After adding missing columns it also
+scans for orphan columns that would block a write — undeclared, `NOT NULL`,
+and without a default — and removes them. `ALTER TABLE ... DROP COLUMN` is the
+cheap path; when two orphans share a table, or an index/trigger still points at
+the column, the table is rebuilt from the declared columns and the rows are
+copied across. Nullable or defaulted orphans are left alone: they are harmless
+and dropping them would discard data for no reason. Declared columns always
+keep their values.
+
+Verified against a database carrying `proxyPools.url NOT NULL` and a legacy
+row: the column is dropped, the row survives, and Cloudflare relay creation
+succeeds. A healthy database is untouched — same columns, same row count.
+
+# v0.1.1 (2026-11-13)
 # v0.1.1 (2026-11-13)
 
 ## A shadowed reserved prefix falls through to its built-in

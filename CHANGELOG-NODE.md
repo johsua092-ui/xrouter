@@ -1,3 +1,26 @@
+# v0.1.2 (2026-11-14)
+
+## Proxy pool / Cloudflare relay writes fail on an upgraded database
+
+Symptom reported on a running install:
+
+    Error deploying Cloudflare relay: SqliteError: NOT NULL constraint failed:
+    proxyPools.url
+
+The route is not at fault. `proxyPools` stores its payload in a JSON `data`
+column and the insert never mentions `url`. The database on disk still carried
+the legacy `url NOT NULL` column, and `CREATE TABLE IF NOT EXISTS` never
+rebuilds a table that already exists — so the old column stayed and rejected
+every insert.
+
+Fix: the schema sync no longer only adds columns. It also detects columns that
+the current schema no longer declares and that would block a write — `NOT NULL`
+without a default — and removes them, falling back to a full table rebuild when
+SQLite refuses a direct drop. Existing rows and declared columns are preserved;
+harmless nullable/defaulted leftovers are left in place.
+
+An upgraded database now migrates itself on boot. A fresh database is
+unaffected.
 # v0.1.1 (2026-11-13)
 
 ## A shadowed reserved prefix falls through to its built-in
