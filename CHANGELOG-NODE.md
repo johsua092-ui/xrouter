@@ -1,5 +1,19 @@
 # v0.2.5 (2026-11-14)
 
+### Fixed — Auth redirect: loopback port no longer stripped
+
+- **Opening the dashboard over `http://localhost:20128` bounced to port 80 and failed
+  with ERR_CONNECTION_REFUSED.** The redirect builder scrubbed the internal node ports
+  (`8080`, `20128`) off every host, including loopback — where the process actually
+  listens — so the `Location` header came back as `http://localhost/login`. The port is
+  now preserved when the request host is loopback (`localhost`, `127.0.0.0/8`, `[::1]`,
+  `0.0.0.0`, `*.localhost`); on a public hostname the strip still runs, so no internal
+  port leaks to a real domain. Verified: `localhost:20128` → `localhost:20128/login`,
+  while `x.example.com` → `x.example.com/login`.
+- **IPv6 loopback hosts were mis-split.** `host.split(":")` broke `[::1]:20128` into
+  `[` + `:1]:20128`, yielding a malformed redirect target. Host/port parsing is now
+  bracket-aware.
+
 ### Fixed — ZCode plan gateway: stable device identity, complete fingerprint
 
 - **The plan gateway rejected turns with 405 code 3012 "unusual activity" because the
