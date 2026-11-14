@@ -53,7 +53,6 @@
   `codeChallenge: undefined`, but the shared provider's device-code request
   carries PKCE S256 and hard-throws without a challenge. Both ids were moved
   off the no-PKCE device list so they receive `authData.codeChallenge` again.
-
 ## MiniMax Code could not be signed into at all: the sign-in modal never reached its device-code branch
 
 The MiniMax Code providers (both the China site and the international one) shipped with a full OAuth implementation — a PKCE S256 device flow against `account.minimax.cn` / `account.minimax.io`, registered in the provider table and covered by unit tests — but the dashboard's sign-in modal did not know they existed. Three separate lists in the sign-in path each had to name a provider before any of that code could run, and none of them named MiniMax.
@@ -63,6 +62,7 @@ The sign-in modal keeps its own list of providers that use the device-code flow,
 Two matching gaps sat behind it on the server, both of which would have surfaced only after the modal could get that far. The poll endpoint forwards per-provider state to the provider's token call, which MiniMax needs for its user-code variant: MiniMax's China site sometimes answers the initial device-code request without a `device_code` at all, and its variant polls the token endpoint with the `user_code` in that slot instead. The provider implementation switches on a flag returned from the device-code response, and the modal has to carry that flag back into the poll body for the switch to see it — neither the flag nor the poll branch existed. The poll endpoint also classified MiniMax in its PKCE group, which sends no per-provider state and demands a code verifier; MiniMax's user-code variant has no verifier to send, so it belongs in the non-PKCE group with the other device-code providers.
 
 Fixed: added both MiniMax providers to the modal's device-code list, to the device-code request list and to the poll's non-PKCE list, and taught the modal to carry the poll-by-user flag into the poll body. Both the China and international sites are covered. Version held at 0.2.5.
+Fixed: added both MiniMax providers to the modal's device-code list, to the device-code request list and to the poll's non-PKCE list, and taught the modal to carry the poll-by-user flag into the poll body. Both the China and international sites are covered. Version held at 0.1.0.
 
 ## Deploy Relay menu: the Cloudflare item lost its click, and Deploy Worker gave no feedback
 
