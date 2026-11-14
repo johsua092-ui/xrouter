@@ -96,6 +96,8 @@ function redirectWithProto(targetPath, request) {
     // on http://localhost:20128. The test runs on the final hostname, so the
     // PUBLIC_BASE_URL override above still takes the public branch below and no
     // internal node port leaks onto a public domain.
+    // Parsing is bracket-aware: `host.split(":")` mis-splits an IPv6 literal like
+    // `[::1]:20128` on the colons inside the braces.
     const hostIsLoopback =
       !h ||
       h === "localhost" ||
