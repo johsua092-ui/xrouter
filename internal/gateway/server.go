@@ -63,6 +63,10 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 	// currently AdCode's Firebase token lifecycle, which needs the auth header at
 	// build time and a replay after a token expiry.
 	providers.RegisterWave5(registry)
+	// Wave 6 is the OpenCode free-lane fingerprint: session minting, tool
+	// declarations and the env marker are all part of the request body, so it
+	// cannot be a URL/header adapter either.
+	providers.RegisterWave6(registry)
 
 	// Translator registry. Every request and response converter self-registers
 	// from its own file's init(), so this only needs to hand out the shared set.
