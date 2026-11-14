@@ -1,5 +1,24 @@
 # v0.1.0 (2026-11-13)
 
+### Fixed — MiniMax Code: "this device code can no longer be exchanged" after a successful login
+
+- Root cause: the `/device-code` leg sends a PKCE S256 challenge for MiniMax Code,
+  but the `/poll` leg still listed both MiniMax providers in `noPkceProviders` and
+  passed `null` as the verifier. MiniMax binds the granted device code to the
+  challenge, so the first exchange failed on a PKCE mismatch — and because an OAuth
+  device code is single-use, the failed attempt burned it. The user saw
+  "Connection Failed / this device code can no longer be exchanged" *after*
+  finishing the browser login, which made it look like the login had failed.
+- `minimax-code` and `minimax-code-global` are removed from `noPkceProviders` so
+  they fall through to the PKCE branch and forward `codeVerifier`.
+- That branch now also forwards `extraData`; MiniMax still needs
+  `extraData._minimaxPollByUser` to select `user_code` over `device_code`.
+- Verified against account.minimax.io: device code is issued, then polled with the
+  verifier and returns `authorization_pending` (accepted, awaiting user) instead of
+  a burned code. Other `noPkceProviders` members are device-code flows without
+  PKCE and are unaffected.
+
+
 ### Fixed — MiniMax Code: opaque "fetch failed" replaced with a diagnosable error
 
 - `minimax-code` / `minimax-code-global` surfaced transport failures as a bare
