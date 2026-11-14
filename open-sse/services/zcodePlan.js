@@ -2,10 +2,13 @@
 // Mirrors the desktop client's own chain: subscription list -> project key ->
 // project access token, with the start-plan lane using the zcode JWT directly.
 
+import { ZCODE_APP_VERSION } from "../config/zcodeIdentity.js";
+
 const ZCODE_CLIENT_VERSION = "3.17.2";
-// The start-plan gateway (zcode.z.ai) currently only admits the 3.16.3 client
-// fingerprint; newer declared versions get HTTP 405 code 3012 "unusual activity".
-export const ZCODE_START_CLIENT_VERSION = "3.16.3";
+// The start-plan gateway (zcode.z.ai) admits only the 3.16.3 client
+// fingerprint; newer declared versions get HTTP 405 code 3012. Sourced from the
+// shared identity constant so the whole app declares one version.
+export const ZCODE_START_CLIENT_VERSION = ZCODE_APP_VERSION;
 const ZCODE_TIMEOUT_MS = 15000;
 const CACHE_TTL_MS = 4 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 500;

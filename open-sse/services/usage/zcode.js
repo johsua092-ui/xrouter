@@ -12,11 +12,14 @@
 
 import crypto from "node:crypto";
 import { proxyAwareFetch } from "../../utils/proxyFetch.js";
+import { ZCODE_APP_VERSION } from "../../config/zcodeIdentity.js";
 
 const ZCODE_BALANCE_URL = "https://zcode.z.ai/api/v1/zcode-plan/billing/balance";
-const ZCODE_APP_VERSION = "3.16.3";
 
 function stableDeviceMid(connection) {
+  // Prefer the identity minted at login; the hash keeps hand-written rows stable.
+  const stored = connection?.providerSpecificData?.deviceId || connection?.providerSpecificData?.deviceMid;
+  if (typeof stored === "string" && stored.trim()) return stored.trim();
   const seed = String(connection?.providerSpecificData?.userId || connection?.id || "zcode");
   const bytes = crypto.createHash("sha256").update(seed).digest().subarray(0, 16);
   bytes[6] = (bytes[6] & 0x0f) | 0x40;

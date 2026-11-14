@@ -198,6 +198,17 @@ export async function pollForToken(providerName, deviceCode, codeVerifier, extra
           return { success: false, error: "exchange_failed", errorDescription: err.message, fatal: true };
         }
       }
+      // Providers whose gateway fingerprints the caller (zcode) need their
+      // stored device identity carried into a re-link, or the new row registers
+      // as an unfamiliar device and the plan gateway answers 3012.
+      if (provider.resolveExistingIdentity) {
+        try {
+          const identity = await provider.resolveExistingIdentity(result.data);
+          if (identity) extra = { ...(extra || {}), existingIdentity: identity };
+        } catch (err) {
+          console.warn(`[oauth] ${providerName} resolveExistingIdentity failed:`, err?.message || err);
+        }
+      }
       const tokens = provider.mapTokens(result.data, extra);
       // Kiro IDC/Builder-ID tokens lack profileArn; resolve it to avoid 403
       if (providerName === "kiro" && !tokens.providerSpecificData?.profileArn) {
