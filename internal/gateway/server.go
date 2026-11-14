@@ -70,7 +70,12 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 		upstream:    providers.NewTransport(nil),
 	}
 
+	// API routes first, then the dashboard. Order matters: mountDashboard
+	// registers a `/*` catch-all, which would shadow every API route registered
+	// after it.
 	g.registerRoutes()
+	g.mountDashboard()
+
 	return g
 }
 
