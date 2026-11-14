@@ -55,6 +55,10 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 	providers.RegisterDefaults(registry)
 	providers.RegisterWave2(registry)
 	providers.RegisterWave3(registry)
+	// Wave 4 covers the executors that only vary URL or headers. Registered after
+	// the earlier waves so a provider present in both keeps its richer adapter:
+	// Register overwrites by key, so order here decides the winner.
+	providers.RegisterWave4(registry)
 
 	// Translator registry. Every request and response converter self-registers
 	// from its own file's init(), so this only needs to hand out the shared set.
