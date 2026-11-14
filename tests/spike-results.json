@@ -1,0 +1,42 @@
+[
+  {
+    "label": "go-front",
+    "target": "http://127.0.0.1:21099/v1/models",
+    "conc": 200,
+    "wall_s": 1.531,
+    "ok": 200,
+    "err": 0,
+    "lat_p50_ms": 989,
+    "lat_p95_ms": 1443,
+    "lat_max_ms": 1495,
+    "baseline_mb": {
+      "go_front": 5.4,
+      "node_upstream": 169.2
+    },
+    "peak_mb": {
+      "go_front": 5.4,
+      "node_upstream": 200.4
+    },
+    "total_peak_mb": 205.9
+  },
+  {
+    "label": "node-direct",
+    "target": "http://127.0.0.1:20128/v1/models",
+    "conc": 200,
+    "wall_s": 1.306,
+    "ok": 200,
+    "err": 0,
+    "lat_p50_ms": 656,
+    "lat_p95_ms": 1213,
+    "lat_max_ms": 1275,
+    "baseline_mb": {
+      "go_front": 5.4,
+      "node_upstream": 200.9
+    },
+    "peak_mb": {
+      "go_front": 5.4,
+      "node_upstream": 200.9
+    },
+    "total_peak_mb": 206.3
+  }
+]
