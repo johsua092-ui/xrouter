@@ -512,12 +512,38 @@ func TestCoverageReportsPorts(t *testing.T) {
 		r.Register(a)
 	}
 	RegisterWave3(r)
+	// The gateway wires the OpenAI-compatible tables through RegisterDefaults;
+	// without it the count is just the dedicated ports (19), not the real total.
+	RegisterDefaults(r)
+
 	cov := BuildCoverage(r)
+
 	if cov.NodeExecutorTotal != 37 {
 		t.Fatalf("total %d", cov.NodeExecutorTotal)
 	}
-	if len(cov.Ported) != 19 {
-		t.Fatalf("expected 19 registered providers, got %d: %v", len(cov.Ported), cov.Ported)
+	// 3 dedicated specials + wave 3 + wave 1 defaults + the additional table.
+	// Measured from the registry, not asserted from the roadmap: 33 providers have
+	// a dedicated port. Pinned so adding one without updating coverage fails loudly.
+	if len(cov.Ported) != 33 {
+		t.Fatalf("expected 33 registered providers, got %d: %v", len(cov.Ported), cov.Ported)
+	}
+	// Every provider the Node registry declares must resolve to something.
+	for _, name := range []string{
+		"grok-cli", "qoder", "antigravity", "codebuddy-intl", "codebuddy-cn",
+		"deepseek", "groq", "cerebras", "together", "github", "kilocode",
+		"nvidia", "fireworks", "ollama-local", "openrouter", "mistral",
+	} {
+		if !KnownProvider(name) {
+			t.Errorf("provider %q should be known", name)
+		}
+		if _, ok := r.Resolve(name); !ok {
+			t.Errorf("provider %q should be registered", name)
+		}
+	}
+	// A name that is not in the Node set must still route via the fallback, but
+	// must not be reported as known.
+	if KnownProvider("not-a-real-provider") {
+		t.Error("an unknown provider must not be reported as known")
 	}
 	if len(cov.Generic) < 20 {
 		t.Fatalf("expected the generic table, got %d", len(cov.Generic))

@@ -185,6 +185,12 @@ func RegisterDefaults(r *Registry) {
 	for _, a := range BuildFromDescriptors(DefaultDescriptors()...) {
 		r.Register(a)
 	}
+	// The remaining wire-compatible providers. Registering them explicitly (rather
+	// than letting them hit the fallback) means /api/system/adapters can report a
+	// real coverage number instead of "everything is generic".
+	for _, a := range BuildFromDescriptors(AdditionalDescriptors()...) {
+		r.Register(a)
+	}
 	// fallback: the node-style "openai-compatible-*" provider whose base URL is
 	// always supplied by the connection.
 	r.SetFallback(&OpenAICompat{Provider: "__fallback__"})

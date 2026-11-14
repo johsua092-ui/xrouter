@@ -203,5 +203,75 @@ func BuildCoverage(r *Registry) Coverage {
 	}
 }
 
+// AdditionalDescriptors extends DefaultDescriptors with the rest of the
+// OpenAI-compatible provider set. Kept as a separate table so the wave-1 list
+// stays legible; RegisterDefaults registers both.
+//
+// Providers whose base URL comes from the connection row (the
+// openai-compatible-* nodes) resolve through the same adapter because
+// cred.BaseURL wins over the descriptor.
+func AdditionalDescriptors() []Descriptor {
+	return []Descriptor{
+		{Provider: "nvidia", BaseURL: "https://integrate.api.nvidia.com/v1"},
+		{Provider: "fireworks", BaseURL: "https://api.fireworks.ai/inference/v1"},
+		{Provider: "deepinfra", BaseURL: "https://api.deepinfra.com/v1/openai"},
+		{Provider: "hyperbolic", BaseURL: "https://api.hyperbolic.xyz/v1"},
+		{Provider: "sambanova", BaseURL: "https://api.sambanova.ai/v1"},
+		{Provider: "ollama-local", BaseURL: "http://127.0.0.1:11434/v1", NoAuth: true},
+		{Provider: "zed", BaseURL: "https://api.zed.dev/v1"},
+		{Provider: "windsurf", BaseURL: "https://server.self-serve.windsurf.com/v1"},
+		{Provider: "trae", BaseURL: "https://trae-api-sg.mchost.guru/api/v1"},
+		{Provider: "kimchi", BaseURL: "https://api.kimchi.dev/v1"},
+		{Provider: "arena-ai", BaseURL: "https://api.arena.ai/v1"},
+		{Provider: "iflow", BaseURL: "https://iflow.cn/api/v1"},
+		{Provider: "xiaomi-mimo", BaseURL: "https://api.xiaomi.com/v1"},
+		{Provider: "minimax-code", BaseURL: "https://api.minimax.chat/v1"},
+		{Provider: "zcode", BaseURL: "https://api.zcode.ai/v1"},
+		{Provider: "qoder-cn", BaseURL: "https://api.qoder.cn/v1"},
+		{Provider: "azure", BaseURL: "https://models.inference.ai.azure.com"},
+		{Provider: "vertex", BaseURL: "https://us-central1-aiplatform.googleapis.com/v1"},
+	}
+}
+
+// knownWireCompatibleProviders makes the fallback honest: a request for a
+// provider the Node registry knows gets the OpenAI-compatible adapter, and only
+// a genuinely unknown name reaches the sentinel.
+var knownWireCompatibleProviders = map[string]bool{
+	"adcode": true, "codex": true, "commandcode": true,
+	"cursor": true, "devin-cli": true, "gemini-cli": true, "gemini-web": true,
+	"kilocode": true, "kimi-web": true, "kiro": true,
+	"opencode": true, "opencode-go": true, "opencode-zen": true,
+	"codebuddy-cn": true, "codebuddy-intl": true, "deepseek-web": true,
+}
+
+// KnownProvider reports whether a name appears anywhere in the Node executor or
+// registry set, ported or not. A known name gets the OpenAI-compatible adapter;
+// only a genuinely unknown one reaches the sentinel fallback.
+func KnownProvider(name string) bool {
+	if knownWireCompatibleProviders[name] {
+		return true
+	}
+	for _, q := range Wave3Quirks() {
+		if q.Provider == name {
+			return true
+		}
+	}
+	for _, d := range DefaultDescriptors() {
+		if d.Provider == name {
+			return true
+		}
+	}
+	for _, d := range AdditionalDescriptors() {
+		if d.Provider == name {
+			return true
+		}
+	}
+	switch name {
+	case "grok-cli", "qoder", "antigravity":
+		return true
+	}
+	return false
+}
+
 // Ensure the net/http import is used; the adapters declare status semantics.
 var _ = http.StatusOK
