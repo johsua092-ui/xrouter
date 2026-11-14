@@ -1,23 +1,61 @@
-BINARY=bin/xrouter
+# Makefile — Go migration branch
+#
+# Go targets only. The Node/Next.js build keeps its own npm scripts; nothing here
+# touches the running service or port 20128.
 
-.PHONY: all build run clean cross-build
+GO          ?= go
+GOBIN       ?= bin
+BINARY      ?= $(GOBIN)/xrouter
+GOFLAGS     ?= -trimpath
+LDFLAGS     ?= -s -w
+GO_PORT     ?= 28080
+GO_DIRS     := cmd internal
 
-all: build
+.PHONY: help go-build go-size go-vet go-test go-verify go-run go-cross go-clean
 
-build:
-	@mkdir -p bin
-	go build -ldflags="-s -w" -o $(BINARY) ./cmd/xrouter
+help:
+	@echo "go-build   build the Go binary"
+	@echo "go-size    build, then print the binary size in MB"
+	@echo "go-vet     run go vet over the Go packages"
+	@echo "go-test    run go test over the Go packages"
+	@echo "go-verify  build + vet + test + size (use this before any commit)"
+	@echo "go-run     run the Go binary on port $(GO_PORT) (leaves 20128 alone)"
+	@echo "go-cross   compile linux/darwin/windows x64+arm64 into $(GOBIN)/"
+	@echo "go-clean   remove $(GOBIN)/"
 
-run: build
-	./$(BINARY)
+go-build:
+	@mkdir -p $(GOBIN)
+	$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BINARY) ./cmd/xrouter
 
-cross-build:
-	@mkdir -p dist
-	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/xrouter-linux-amd64 ./cmd/xrouter
-	GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o dist/xrouter-linux-arm64 ./cmd/xrouter
-	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/xrouter-darwin-amd64 ./cmd/xrouter
-	GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/xrouter-darwin-arm64 ./cmd/xrouter
-	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/xrouter-windows-amd64.exe ./cmd/xrouter
+go-size: go-build
+	@ls -l $(BINARY) | awk '{ printf "  binary: %s  size: %.2f MB (%d bytes)\n", $$9, $$5/1048576, $$5 }'
 
-clean:
-	rm -rf bin dist
+go-vet:
+	$(GO) vet ./$(GO_DIRS:%=%/...)
+
+go-test:
+	$(GO) test ./$(GO_DIRS:%=%/...) 2>&1 | tail -25
+
+go-verify: go-build go-vet go-test go-size
+	@echo "  go-verify complete"
+
+go-run: go-build
+	@echo "  starting $(BINARY) on :$(GO_PORT) (Node dashboard on 20128 is untouched)"
+	PORT=$(GO_PORT) $(BINARY)
+
+go-cross:
+	@mkdir -p $(GOBIN)
+	@for os in linux darwin windows; do \
+		for arch in amd64 arm64; do \
+			ext=""; [ "$$os" = "windows" ] && ext=".exe"; \
+			out="$(GOBIN)/xrouter-$$os-$$arch$$ext"; \
+			echo "  building $$out"; \
+			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 \
+				$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $$out ./cmd/xrouter || exit 1; \
+		done; \
+	done
+	@ls -l $(GOBIN)/ | awk 'NR>1 { printf "  %-34s %.2f MB\n", $$9, $$5/1048576 }'
+
+go-clean:
+	@rm -rf $(GOBIN)
+	@echo "  cleaned $(GOBIN)/"
