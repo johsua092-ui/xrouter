@@ -1,10 +1,14 @@
-"use server";
-
 import os from "os";
 import { execSync } from "child_process";
 import { installTailscale, loadState, generateShortId } from "@/lib/tunnel";
 import { getCachedPassword, loadEncryptedPassword, initDbHooks } from "@/mitm/manager";
 import { getSettings, updateSettings } from "@/lib/localDb";
+
+// Streaming install handler — runs shell probes and spawns a process. It is an
+// App Route handler returning a ReadableStream, so it is dynamic by construction:
+// a request body and a live stream cannot be prerendered. No `export const` here
+// because "use server" files may only export async functions.
+export const runtime = "nodejs";
 
 initDbHooks(getSettings, updateSettings);
 

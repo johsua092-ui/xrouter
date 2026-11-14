@@ -81,6 +81,13 @@ async function _doEnableTunnel(localPort) {
           return { success: true, tunnelUrl: existing.tunnelUrl, shortId: existing.shortId, publicUrl, alreadyRunning: true };
         }
         console.log(`[Tunnel] stale (direct=${directOk} public=${publicOk}), respawn`);
+      } else {
+        // Process is alive but state was lost (scratch dir wiped). A second
+        // cloudflared must not be spawned on top of it — that produced two
+        // concurrent quick tunnels racing to write state.json, which is what made
+        // the dashboard toggle flip between states. Adopt nothing, but do not
+        // double-spawn: kill first, then take a clean run below.
+        console.warn("[Tunnel] cloudflared running with no stored state; restarting cleanly");
       }
     }
 
@@ -115,12 +122,16 @@ async function _doEnableTunnel(localPort) {
     await updateSettings({ tunnelEnabled: true, tunnelUrl });
     console.log(`[Tunnel] registered shortId=${shortId} publicUrl=${publicUrl}`);
 
-    // Verify tunnel health (check both direct trycloudflare and worker publicUrl)
-    // Non-blocking fallback: if process is alive, don't fail even if DNS propagation lags
+    // Verify tunnel health (check both direct trycloudflare and worker publicUrl).
+    // This only decides which URL the dashboard should advertise — the process is
+    // already up and the URL already registered, so a slow probe must not hold the
+    // caller. Capped at 6 s (was 15 s) because the enable route no longer waits on
+    // it: the extra seconds exist so a fast propagation still reports the public
+    // URL immediately instead of the direct fallback.
     let verified = false;
     let publicAlive = false;
     const probeStart = Date.now();
-    while (Date.now() - probeStart < 15000) {
+    while (Date.now() - probeStart < 6000) {
       if (token.cancelled) throw new Error("tunnel cancelled");
       const [directOk, publicOk] = await Promise.all([
         probeUrlAlive(tunnelUrl),
@@ -192,7 +203,12 @@ export async function getTunnelStatus() {
   const settings = await getSettings();
   const state = loadState();
   const shortId = state?.shortId;
-  const settingsEnabled = settings.tunnelEnabled === true || !!shortId;
+  // A stored preference is only intent — it goes stale the moment the process dies
+  // or the data dir is swapped. Probe the process first and let that decide: a
+  // lingering tunnelEnabled=true with no cloudflared must answer running:false,
+  // and a live process with a wiped state file must still answer running:true.
+  const running = isCloudflaredRunning();
+  const settingsEnabled = settings.tunnelEnabled === true || running;
   let publicUrl = shortId ? `https://r${shortId}.abc-tunnel.us` : "";
   const tunnelUrl = state?.tunnelUrl || "";
   // If shortlink worker is dead/unresponsive, fallback to direct trycloudflare tunnelUrl
@@ -200,11 +216,8 @@ export async function getTunnelStatus() {
     publicUrl = tunnelUrl;
   }
 
-  // Lazy: skip PID probe entirely when user disabled tunnel
-  const running = settingsEnabled ? isCloudflaredRunning() : false;
-
   return {
-    enabled: settingsEnabled && running,
+    enabled: running,
     settingsEnabled,
     tunnelUrl,
     shortId,
