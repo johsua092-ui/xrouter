@@ -44,7 +44,7 @@ const antigravity = {
       Authorization: `Bearer ${tokens.access_token}`,
       "Content-Type": "application/json",
       "Accept": "*/*",
-      "User-Agent": "antigravity/1.107.0 windows/amd64",
+      "User-Agent": ANTIGRAVITY_CONFIG.loadCodeAssistUserAgent,
       "Client-Metadata": JSON.stringify({
         ideType: "ANTIGRAVITY",
         platform: "PLATFORM_UNSPECIFIED",
@@ -65,7 +65,7 @@ const antigravity = {
 
     // Load Code Assist to get project ID and tier
     let projectId = "";
-    let tierId = "free-tier";
+    let tierId = "";
     try {
       const loadRes = await fetch(ANTIGRAVITY_CONFIG.loadCodeAssistEndpoint, {
         method: "POST",
@@ -88,16 +88,21 @@ const antigravity = {
       console.log("Failed to load code assist:", e);
     }
 
+    // The provisioned tier must survive the exchange: downstream chat requests
+    // and the Claude 5.5 entitlement probe read it from the stored connection,
+    // and a paid account onboarded here must not be re-onboarded as free-tier.
+    const resolvedTierId = tierId || "free-tier";
+
     // Auto-Onboard: if account is new or has no project, trigger onboardUser polling
     // to provision cloudaicompanionProject from Google automatically (Haizhu flow)
     if (!projectId) {
       try {
         const onboardPayload = {
-          tierId: tierId || "free-tier",
+          tierId: resolvedTierId,
           metadata: {
             ideType: "ANTIGRAVITY",
             ideName: "antigravity",
-            ideVersion: "1.107.0",
+            ideVersion: ANTIGRAVITY_CONFIG.ideVersion || "2.32.1",
             ...metadata,
           },
         };
@@ -135,14 +140,15 @@ const antigravity = {
         console.warn("Auto-onboarding new Antigravity account failed on Google server:", err?.message || err);
       }
     } else {
-      // Background ping if already has project ID to keep onboarding healthy
+      // Account already has a project: still post the onboard call once so Google
+      // records the same tier we resolved above (it also keeps onboarding healthy).
       const doOnboard = async () => {
         for (let i = 0; i < 3; i++) {
           try {
             const onboardRes = await fetch(ANTIGRAVITY_CONFIG.onboardUserEndpoint, {
               method: "POST",
               headers: loadHeaders,
-              body: JSON.stringify({ tierId, metadata }),
+              body: JSON.stringify({ tierId: resolvedTierId, metadata }),
             });
             if (onboardRes.ok) {
               const result = await onboardRes.json();
@@ -155,7 +161,7 @@ const antigravity = {
       doOnboard().catch(() => {});
     }
 
-    return { userInfo, projectId };
+    return { userInfo, projectId, tierId: resolvedTierId };
   },
   mapTokens: (tokens, extra) => ({
     accessToken: tokens.access_token,
@@ -164,6 +170,13 @@ const antigravity = {
     scope: tokens.scope,
     email: extra?.userInfo?.email,
     projectId: extra?.projectId,
+    // Both objects the desktop client keeps per account. Persisting the tier lets
+    // a fresh account work straight from the dashboard — no desktop sign-in, no
+    // re-onboarding as free-tier on the first chat request.
+    providerSpecificData: {
+      projectId: extra?.projectId || undefined,
+      tierId: extra?.tierId || "free-tier",
+    },
   }),
 };
 

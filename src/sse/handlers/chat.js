@@ -496,6 +496,23 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       }
     }
 
+    // Antigravity keeps two objects per account: the provisioned project and the
+    // tier it was onboarded on. Both are captured at sign-in; a connection that
+    // predates that capture has them only in providerSpecificData, so backfill
+    // here rather than re-onboarding the account as free-tier on first use.
+    if (provider === "antigravity") {
+      const psd = credentials.providerSpecificData || {};
+      if (!refreshedCredentials.projectId && psd.projectId) {
+        refreshedCredentials.projectId = psd.projectId;
+        // Promote the value captured at sign-in onto the top-level field so
+        // routing no longer depends on providerSpecificData being present.
+        updateProviderCredentials(credentials.connectionId, { projectId: psd.projectId }).catch(() => { });
+      }
+      if (!refreshedCredentials.tierId && psd.tierId) {
+        refreshedCredentials.tierId = psd.tierId;
+      }
+    }
+
     // Use shared chatCore
     const chatSettings = await getSettings();
     const providerThinking = (chatSettings.providerThinking || {})[provider] || null;
