@@ -75,7 +75,22 @@ function runVersionedMigrations(adapter) {
   return { applied: pending.length, from: current, to: lastApplied };
 }
 
-// ─── Auto-sync (additive only): add missing tables/columns/indexes ───────
+// ─── Auto-sync (bidi): add missing columns, drop blocking orphan columns ──
+//
+// The additive pass alone is not enough for a database created by an older
+// layout. `buildCreateTableSql` uses CREATE TABLE IF NOT EXISTS, so an existing
+// table is never rebuilt; a column that the new schema no longer declares
+// survives forever. If that orphan is `NOT NULL` without a default, every
+// INSERT that omits it fails with `NOT NULL constraint failed: <table>.<col>`
+// — e.g. a legacy `proxyPools.url NOT NULL` breaks proxy-pool and Cloudflare
+// relay creation long after the schema moved to the `data` JSON blob.
+//
+// So: add what is missing, then neutralise orphan columns that would block a
+// write. Nullable or defaulted orphans are left untouched (harmless, and
+// dropping them would discard user data for no reason). A NOT NULL orphan
+// without a default is dropped; when SQLite refuses (older build, or an index
+// or trigger still references it) the table is rebuilt column-by-column so the
+// insert path always works.
 function syncSchemaFromTables(adapter) {
   for (const [tableName, def] of Object.entries(TABLES)) {
     // Create table if absent
@@ -101,10 +116,67 @@ function syncSchemaFromTables(adapter) {
       }
     }
 
+    // Drop orphan columns that would block an insert. Only NOT NULL columns
+    // with no default are fatal, so only those are touched here.
+    const declared = new Set([...Object.keys(def.columns)]);
+    const blocking = existing.filter(
+      (c) =>
+        !declared.has(c.name) &&
+        Number(c.notnull) === 1 &&
+        c.dflt_value === null &&
+        c.dflt_value !== undefined
+    );
+    if (blocking.length) {
+      dropBlockingOrphanColumns(adapter, tableName, blocking.map((c) => c.name), declared);
+    }
+
     // Indexes (idempotent)
     for (const idx of def.indexes || []) {
       try { adapter.exec(idx); } catch {}
     }
+  }
+}
+
+// Remove blocking orphan columns. `ALTER TABLE ... DROP COLUMN` is the cheap
+// path (SQLite >= 3.35) and works for the common one-column case. When it is
+// refused — two orphans in one table, an index/trigger still pointing at a
+// column, or an older engine — the whole table is rebuilt from the declared
+// columns and the rows are copied across. Either way only the orphan columns
+// are lost; every declared column keeps its data. Runs inside the caller's
+// migration transaction so a failure rolls back instead of leaving a
+// half-migrated table.
+function dropBlockingOrphanColumns(adapter, tableName, orphanNames, declared) {
+  let allDropped = true;
+  for (const colName of orphanNames) {
+    try {
+      adapter.exec(`ALTER TABLE ${tableName} DROP COLUMN ${colName}`);
+      console.log(`[DB][sync] -column ${tableName}.${colName} (blocking NOT NULL orphan)`);
+    } catch (e) {
+      allDropped = false;
+      console.warn(
+        `[DB][sync] drop column ${tableName}.${colName} failed (${e.message}); will rebuild ${tableName}`
+      );
+      break;
+    }
+  }
+  if (allDropped) return;
+
+  const def = TABLES[tableName];
+  const keep = Object.keys(def.columns).filter((n) => declared.has(n));
+  const tmpName = `${tableName}__rebuild`;
+  try {
+    const colSql = Object.entries(def.columns).map(([k, v]) => `${k} ${v}`).join(", ");
+    adapter.exec(`CREATE TABLE ${tmpName} (${colSql})`);
+    const cols = keep.join(", ");
+    adapter.exec(`INSERT INTO ${tmpName} (${cols}) SELECT ${cols} FROM ${tableName}`);
+    adapter.exec(`DROP TABLE ${tableName}`);
+    adapter.exec(`ALTER TABLE ${tmpName} RENAME TO ${tableName}`);
+    console.log(`[DB][sync] rebuilt ${tableName} without ${orphanNames.join(", ")}`);
+  } catch (e) {
+    try { adapter.exec(`DROP TABLE IF EXISTS ${tmpName}`); } catch {}
+    throw new Error(
+      `[DB][sync] could not remove blocking orphan(s) ${tableName}.${orphanNames.join(", ")}: ${e.message}`
+    );
   }
 }
 
