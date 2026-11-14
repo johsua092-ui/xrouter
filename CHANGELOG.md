@@ -1,5 +1,11 @@
 # v0.1.0 (2026-11-13)
 
+## MiniMax Code sign-in failed with "requires a PKCE code challenge":
+- **Fixed**: the device-code route exempted MiniMax from PKCE and passed
+  `codeChallenge: undefined`, but the shared provider's device-code request
+  carries PKCE S256 and hard-throws without a challenge. Both ids were moved
+  off the no-PKCE device list so they receive `authData.codeChallenge` again.
+
 ## MiniMax Code could not be signed into at all: the sign-in modal never reached its device-code branch
 
 The MiniMax Code providers (both the China site and the international one) shipped with a full OAuth implementation — a PKCE S256 device flow against `account.minimax.cn` / `account.minimax.io`, registered in the provider table and covered by unit tests — but the dashboard's sign-in modal did not know they existed. Three separate lists in the sign-in path each had to name a provider before any of that code could run, and none of them named MiniMax.

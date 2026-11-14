@@ -1,4 +1,6 @@
 # v0.1.0 (2026-11-13)
+- MiniMax Code device-code sign-in now receives the PKCE S256 challenge it
+  requires; both `minimax-code` ids were removed from the no-PKCE device list.
 
 ## MiniMax Code sign-in: modal device-code wiring, poll-by-user flag, non-PKCE poll group
 
