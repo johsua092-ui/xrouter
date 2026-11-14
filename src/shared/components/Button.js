@@ -47,9 +47,15 @@ export default function Button({
   ...props
 }) {
   const iconSize = size === "sm" ? "text-[15px]" : "text-[17px]";
+  // A button with no explicit type defaults to submit inside a <form>. Every
+  // call site here is a UI affordance, not a form submit, so an unlabelled
+  // default silently fires submit handlers. Pin it to "button" unless the
+  // caller asks for something else.
+  const { type = "button", ...rest } = props;
 
   return (
     <button
+      type={type}
       className={cn(
         "inline-flex items-center justify-center font-semibold whitespace-nowrap",
         "transition-[background-color,box-shadow,border-color,transform] duration-150 ease-out",
@@ -60,7 +66,7 @@ export default function Button({
         className
       )}
       disabled={disabled || loading}
-      {...props}
+      {...rest}
     >
       {loading ? (
         <span className={cn("material-symbols-outlined animate-spin leading-none", iconSize)}>

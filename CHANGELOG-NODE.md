@@ -1,5 +1,18 @@
 # v0.2.5 (2026-11-14)
 
+## Relay deploy buttons: default button type, and a spinner on Deploy Worker
+
+`Button` rendered a bare `<button>` with no `type`. Inside a form that defaults
+to `type="submit"`, so the Cloudflare entry in the Deploy Relay menu was firing
+an implicit submit instead of opening its modal — it read as an unresponsive
+button. `Button` now pins `type="button"` unless the caller passes a type;
+explicit `<Button type="submit">` call sites are unchanged.
+
+`Deploy Worker` in the Cloudflare Relay modal also toggled its `deploying`
+state without rendering it. The button looked the same before, during and after
+the request, so even a successful deploy gave no feedback while the Worker was
+uploading. It now uses `loading={deploying}`.
+
 ## Proxy pool / Cloudflare relay writes fail on an upgraded database
 
 Symptom reported on a running install:
