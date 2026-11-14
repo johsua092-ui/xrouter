@@ -1,5 +1,31 @@
 # v0.1.0 (2026-11-13)
 
+## Deploy Relay menu: the Cloudflare item lost its click, and Deploy Worker gave no feedback
+
+Two defects in the relay deploy path on the proxy-pools dashboard.
+
+The first is the menu item itself. Every `<Button>` rendered a bare `<button>`
+with no `type`, so inside a `<form>` it defaulted to `type="submit"` — the
+browser's implicit submit behaviour, not a click handler. The relay menu sits
+where an enclosing form is present, and the Cloudflare entry is the first item
+in it, so its click was being consumed by an accidental submit instead of
+`openCloudflareModal()`.
+
+`Button` now pins `type="button"` unless the caller passes one. All sixteen
+`<Button type="submit">` call sites keep submitting, because an explicit type
+still wins. This is the correct default for a UI kit: a button is a UI
+affordance until it is told otherwise.
+
+The second defect is the modal's own action. `Deploy Worker` toggled
+`deploying` but never rendered that state, so the button looked identical
+before, during and after the request — the same dead-button impression even on
+a successful deploy, and no indication that a slow Worker upload was still in
+flight. It now takes `loading={deploying}`, which reuses the spinner and
+disable path every other long-running action in the app already uses.
+
+Reported against the proxy-pools relay menu; neither defect is specific to
+Cloudflare — any relay deploy from that menu runs through the same `Button`.
+
 ## A stale database no longer blocks table writes
 
 `CREATE TABLE IF NOT EXISTS` never rebuilds a table that already exists, and
