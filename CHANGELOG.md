@@ -1,5 +1,21 @@
 # v0.1.0 (2026-11-13)
 
+### Fixed — MiniMax Code: opaque "fetch failed" replaced with a diagnosable error
+
+- `minimax-code` / `minimax-code-global` surfaced transport failures as a bare
+  `fetch failed`, which the OAuth modal rendered as "Connection Failed" with no
+  hint of the endpoint that died. The China site (`account.minimax.cn`, Aliyun
+  Beijing) is unroutable from several regions while the international site
+  (`account.minimax.io`) resolves fine, so the two flows were indistinguishable
+  to the user.
+- `postForm` now wraps `fetch` and raises `MiniMax Code could not reach <host>
+  (fetch failed): <UND_ERR_CAUSE>. This is a network/egress problem, not a
+  credential problem — ...`, naming the host and the underlying undici cause.
+- Behaviour on a reachable host is unchanged; verified against
+  `account.minimax.cn` (CONNECT_TIMEOUT, now reported by name) and
+  `account.minimax.io` (HTTP 200, device code issued).
+
+
 ## MiniMax Code sign-in failed with "requires a PKCE code challenge":
 - **Fixed**: the device-code route exempted MiniMax from PKCE and passed
   `codeChallenge: undefined`, but the shared provider's device-code request
