@@ -28,13 +28,39 @@ const SIGN_IN_MS = 10 * 60 * 1000;
 const str = (o, k) => (typeof o?.[k] === "string" && o[k].trim() ? o[k].trim() : undefined);
 const pos = (o, k) => (typeof o?.[k] === "number" && Number.isFinite(o[k]) && o[k] > 0 ? o[k] : undefined);
 
+// undici collapses every transport failure (DNS, TCP refused, connect timeout,
+// TLS, blocked egress) into a bare TypeError("fetch failed") with the reason
+// buried on err.cause. That surfaces in the dashboard as "Connection Failed /
+// fetch failed" with no hint of WHICH endpoint died — which matters here
+// because the China site (account.minimax.cn, Aliyun Beijing) is unroutable
+// from some regions while the international site works fine. Name the host and
+// the cause code instead of passing the opaque message through.
+function describeTransportError(err, url) {
+  let host = url;
+  try { host = new URL(url).host; } catch {}
+  const cause = err?.cause;
+  const code = cause?.code || cause?.errno || "";
+  const detail = code ? `${code}${cause?.message ? ` — ${cause.message}` : ""}` : (cause?.message || "");
+  return new Error(
+    `MiniMax Code could not reach ${host} (${err?.message || "network error"})` +
+      (detail ? `: ${detail}` : "") +
+      `. This is a network/egress problem, not a credential problem — check that this machine can reach ${host} directly (curl -sv https://${host}).`,
+  );
+}
+
 async function postForm(url, fields) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(fields).toString(),
-    signal: AbortSignal.timeout(30000),
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(fields).toString(),
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch (err) {
+    // fetch() only rejects on transport failure; HTTP error statuses resolve.
+    throw describeTransportError(err, url);
+  }
   let body;
   try {
     body = JSON.parse(await res.text());

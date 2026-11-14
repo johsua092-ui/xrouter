@@ -18,6 +18,7 @@
   a burned code. Other `noPkceProviders` members are device-code flows without
   PKCE and are unaffected.
 
+# v0.2.5 (2026-11-14)
 
 ### Fixed — MiniMax Code: opaque "fetch failed" replaced with a diagnosable error
 
