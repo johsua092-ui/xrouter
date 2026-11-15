@@ -394,6 +394,16 @@ func (g *Gateway) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	// converted on the way out; when they match the stream is a straight conduit.
 	copyUpstreamHeaders(w.Header(), proxied.Header)
 
+	// A binary-dialect upstream (Kiro's AWS EventStream) cannot be handed to the
+	// SSE path: the framing bytes are not SSE and the scanner would emit them as
+	// model text. The adapter owns the decode and returns client-ready SSE.
+	if decoder, ok := adapter.(providers.StreamDecoder); ok && proxied.StatusCode < http.StatusBadRequest {
+		if err := streamDecoded(w, proxied.Body, decoder, req.Model); err != nil {
+			return
+		}
+		return
+	}
+
 	if sourceFormat == targetFormat || !req.Stream {
 		w.WriteHeader(proxied.StatusCode)
 		io.Copy(w, proxied.Body)
@@ -405,6 +415,47 @@ func (g *Gateway) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(proxied.StatusCode)
 	streamTranslated(w, proxied.Body, translateOpts)
+}
+
+// streamDecoded runs an adapter-owned stream decoder and relays its output.
+//
+// The decoder produces SSE in the client's dialect already, so this only sets SSE
+// headers and copies. An error from the decoder is reported after the header is
+// written, which is why the status is 200 for a decode failure: the client has
+// already been sent a stream, and the terminal error frame inside it is what
+// tells it the turn failed.
+func streamDecoded(w http.ResponseWriter, body io.Reader, decoder providers.StreamDecoder, model string) error {
+	decoded, err := decoder.DecodeStream(model, body)
+	if err != nil {
+		jsonError(w, http.StatusBadGateway,
+			fmt.Sprintf("could not decode %s upstream stream", decoder.UpstreamContentType()), err)
+		return err
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+
+	flusher, _ := w.(http.Flusher)
+	buf := make([]byte, 16*1024)
+	for {
+		n, readErr := decoded.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		if readErr == io.EOF {
+			return nil
+		}
+		if readErr != nil {
+			return readErr
+		}
+	}
 }
 
 // detectFormats picks the client and provider dialects for a request.

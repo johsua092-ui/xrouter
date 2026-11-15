@@ -1,6 +1,10 @@
 package providers
 
-import "github.com/johsua092-ui/xrouter/internal/translate"
+import (
+	"io"
+
+	"github.com/johsua092-ui/xrouter/internal/translate"
+)
 
 // Wire dialects an adapter can speak. Declared here rather than inferred from the
 // adapter's type because a provider's dialect is a property of its upstream API,
@@ -43,6 +47,25 @@ type Dialect interface {
 // before dispatch, so the adapter sees exactly what will be sent.
 type BodyTransformer interface {
 	TransformBody(model string, body []byte) ([]byte, error)
+}
+
+// StreamDecoder is implemented by adapters whose upstream response is not SSE.
+//
+// Kiro answers with AWS EventStream — length-prefixed binary frames with CRC32
+// preludes — so an SSE scanner sees garbage. Feeding that into the normal path
+// would emit the framing bytes as model text. An adapter that implements this
+// takes ownership of the upstream stream and returns client-ready SSE, which is
+// why it returns an io.Reader rather than a transformer per line: the decode has
+// to own the read loop, since a frame can span reads and several frames can share
+// one.
+type StreamDecoder interface {
+	// DecodeStream converts the raw upstream body into SSE for this request.
+	// model is the requested model id, not the upstream-folded one, so tool-name
+	// and reasoning decisions match what the client asked for.
+	DecodeStream(model string, body io.Reader) (io.Reader, error)
+	// UpstreamContentType is what the upstream sends, used to decide whether the
+	// decoder is needed and to label a raw relay of an error response.
+	UpstreamContentType() string
 }
 
 // RegistryFormat reports the dialect an adapter speaks.

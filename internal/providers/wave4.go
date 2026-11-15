@@ -456,8 +456,14 @@ var _ = translate.FormatGemini
 // web-tool bridge, which parses tool calls out of free text because none of the
 // endpoints speaks the OpenAI function-calling contract.
 func RegisterWave7(r *Registry) {
+	// Kiro's translator hooks and session store live in this package but are
+	// called from internal/translate, so the wiring happens with the registration
+	// that makes them reachable. Registering the adapter without it would build
+	// payloads with an unfolded model id and no effort fields.
+	WireKiro()
 	r.Register(NewKimiWeb())
 	r.Register(NewDeepSeekWeb())
 	r.Register(NewGeminiWeb())
 	r.Register(NewCodex())
+	r.Register(NewKiro())
 }
