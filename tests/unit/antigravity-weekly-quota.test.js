@@ -421,9 +421,19 @@ describe("weekly quota isolation from existing quota", () => {
     const { getAntigravityUsage } = await import("../../open-sse/services/usage/google.js");
     const result = await getAntigravityUsage("token", {});
 
-    // Per-model quotas should be absent (free-tier accounts skip model parsing)
-    expect(result.quotas["gemini-3.8-flash-high"]).toBeUndefined();
-    expect(result.quotas["claude-sonnet-4-6"]).toBeUndefined();
+    // Per-model entries are projected from the weekly family reading so the auth
+    // pre-filter can skip a dry family instead of burning an upstream 403/429.
+    // Free-tier per-model data (fetchAvailableModels) stays untrusted: gemini is
+    // 100% weekly despite claiming fraction 1, and claude is dry despite the
+    // missing remainingFraction.
+    expect(result.quotas["gemini-3.8-flash-high"]).toMatchObject({
+      remainingPercentage: 100,
+      resetAt: "2026-09-15T00:00:00.000Z",
+    });
+    expect(result.quotas["claude-sonnet-4-6"]).toMatchObject({
+      remainingPercentage: 0,
+      resetAt: "2026-09-13T12:00:00.000Z",
+    });
 
     // Only weekly quotas should appear
     expect(result.quotas.gemini_weekly).toMatchObject({

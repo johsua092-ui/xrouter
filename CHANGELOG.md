@@ -1,5 +1,35 @@
 # v0.1.0 (2026-11-14)
 
+### Fixed — Antigravity 403 storm: quota cache went blind on free-tier accounts
+
+- **Free-tier Antigravity connections returned `[403]: HTTP 403` on nearly every
+  request (938 of 1341 logged attempts).** Two independent defects stacked:
+  1. `getAntigravityUsage` skipped the entire per-model block for free-tier
+     accounts (`if (!isFreeTier && data.models)`), so the returned quota map was
+     `{}` for every free-tier read. `getAntigravityModelQuota()` then resolved
+     `null` at the auth pre-filter (`src/sse/services/auth.js`), which read as
+     "quota unknown" rather than "quota exhausted" — the account was never
+     skipped and each request burned a fresh upstream 403 that was then recorded
+     as an account error.
+  2. `refreshGoogleToken` swallowed every non-OK OAuth response into a bare
+     `return null`, so a revoked/`invalid_grant` refresh token was indistinguish-
+     able from a transient network blip. The connection kept a dead bearer and
+     retried forever instead of being flagged for reauth.
+
+  The per-model block now runs for all tiers; on free-tier it projects the weekly
+  family reading (`gemini_weekly` / `claude_gpt_weekly`) onto the per-model keys
+  instead of trusting `fetchAvailableModels`, which reports the weekly limit as if
+  it were a rolling window. `refreshAntigravityQuota` arms a short
+  `TOKEN_REJECTED — CACHE_BLOCK 300s` window whenever upstream rejects the bearer
+  (`authentication expired`, `invalid_grant`, `refresh_token*`), so the pre-filter
+  skips a known-dead token rather than hammering upstream. `refreshGoogleToken`
+  now classifies the OAuth failure (`permanent` + `code`) before returning.
+- **Verified:** `antigravity-freetier-quota-smoke` against the live account before
+  the fix resolved `null` for every model (`PRE_FILTER: BLIND`); after the fix the
+  same path returns 16 quota keys and the pre-filter resolves
+  `gemini-3.8-flash-high => 0% reset=…` (`PRE_FILTER: ARMED`). 18 Antigravity
+  suites pass (123 tests), and the full unit suite is unchanged elsewhere.
+
 ### Changed — Runtime upgraded to Next.js 16.4.2 / React 19.2.4
 
 - **The dashboard now builds and runs on Next.js 16 with React 19.** Twenty-four

@@ -164,31 +164,32 @@ export async function getAntigravityUsage(accessToken, providerSpecificData, pro
     const paidTierId = subscriptionInfo?.paidTier?.id;
     const isFreeTier = !paidTierId || paidTierId === "free-tier";
 
-    // Parse model quotas only for paid-tier accounts.
-    // Free-tier accounts skip this — their only meaningful quota is the weekly limit.
-    if (!isFreeTier && data.models) {
-      // Filter only recommended/important models (must match PROVIDER_MODELS ag ids)
-      const importantModels = [
-        'gemini-3.8-flash-high',
-        'gemini-3.8-flash-medium',
-        'gemini-3.8-flash-low',
-        'gemini-3.7-flash-high',
-        'gemini-3.7-flash-medium',
-        'gemini-3.7-flash-low',
-        'gemini-3.6-flash-high',
-        'gemini-3.6-flash-medium',
-        'gemini-3.6-flash-low',
-        'gemini-3.5-flash-low',
-        'gemini-3.5-flash-extra-low',
-        'gemini-pro-agent',
-        'gemini-3.1-pro-low',
-        'claude-sonnet-4-6',
-        'claude-opus-4-6-thinking',
-        'gpt-oss-120b-medium',
-        // Image generation models
-        'gemini-3.1-flash-image',
-      ];
+    const importantModels = [
+      'gemini-3.8-flash-high',
+      'gemini-3.8-flash-medium',
+      'gemini-3.8-flash-low',
+      'gemini-3.7-flash-high',
+      'gemini-3.7-flash-medium',
+      'gemini-3.7-flash-low',
+      'gemini-3.6-flash-high',
+      'gemini-3.6-flash-medium',
+      'gemini-3.6-flash-low',
+      'gemini-3.5-flash-low',
+      'gemini-3.5-flash-extra-low',
+      'gemini-pro-agent',
+      'gemini-3.1-pro-low',
+      'claude-sonnet-4-6',
+      'claude-opus-4-6-thinking',
+      'gpt-oss-120b-medium',
+      // Image generation models
+      'gemini-3.1-flash-image',
+    ];
 
+    // Parse per-model entries. Free-tier included: without a per-model reading the
+    // auth pre-filter has nothing to skip on, so every request burns an upstream
+    // 403/429 until the strike breaker trips. The raw reading is only a hint —
+    // the weekly overlay below is authoritative when it says the family is dry.
+    if (data.models) {
       for (const [modelKey, info] of Object.entries(data.models)) {
         // Skip models without quota info
         if (!info.quotaInfo) {
@@ -295,6 +296,35 @@ export async function getAntigravityUsage(accessToken, providerSpecificData, pro
       }
 
       Object.assign(quotas, weeklyQuotas);
+
+      // Free-tier has no usable per-model reading (fetchAvailableModels reports the
+      // weekly limit there, not a rolling window). Project each dry weekly family
+      // onto its member models so the auth pre-filter can skip them cleanly instead
+      // of firing a request that upstream answers with 403/429.
+      if (isFreeTier) {
+        const weeklyByFamily = {
+          gemini: weeklyQuotas.gemini_weekly,
+          gemini_argon: weeklyQuotas.gemini_argon_weekly,
+          claude_gpt: weeklyQuotas.claude_gpt_weekly,
+        };
+        for (const modelKey of importantModels) {
+          if (quotas[modelKey]) continue;
+          const family = modelKey.startsWith("claude-") || modelKey.startsWith("gpt-")
+            ? "claude_gpt"
+            : modelKey.includes("argon") ? "gemini_argon"
+            : modelKey.includes("image") ? null : "gemini";
+          const weekly = family ? weeklyByFamily[family] : null;
+          if (!weekly) continue;
+          quotas[modelKey] = {
+            used: weekly.used,
+            total: weekly.total,
+            resetAt: weekly.resetAt,
+            remainingPercentage: weekly.remainingPercentage,
+            unlimited: false,
+            displayName: modelKey,
+          };
+        }
+      }
     } catch {
       // Silently ignore — weekly is best-effort
     }

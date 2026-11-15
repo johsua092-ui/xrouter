@@ -219,7 +219,16 @@ export async function refreshGoogleToken(refreshToken, clientId, clientSecret, l
 
     if (!response.ok) {
       const errorText = await response.text();
-      log?.error?.("TOKEN_REFRESH", "Failed to refresh Google token", { status: response.status, error: errorText });
+      // Classify before swallowing: an invalid_grant / expired refresh token is
+      // permanent — the caller must mark the connection for reauth instead of
+      // retrying forever. Returning a bare null hid this behind generic 401/403s.
+      const classification = classifyOAuthRefreshError(errorText, response.status);
+      log?.error?.("TOKEN_REFRESH", "Failed to refresh Google token", {
+        status: response.status,
+        permanent: classification.permanent,
+        reason: classification.code || classification.description,
+        error: errorText,
+      });
       return null;
     }
 

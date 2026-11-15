@@ -14,8 +14,59 @@ const quotaCache = new Map();
 const lastRefreshAt = new Map();
 // In-flight refresh promises — dedup concurrent 409/429 bursts
 const inflightRefresh = new Map();
+// Last message returned by the upstream usage read, per connection — lets the
+// refresh wrapper distinguish "auth rejected" from "quota exhausted".
+const lastUsageMessage = new Map();
 
 const MIN_REFRESH_INTERVAL_MS = 30_000; // 30s between refreshes per connection
+const TOKEN_EXPIRED_BLOCK_MS = 5 * 60_000; // short block while the token needs reauth
+
+// Models the pre-filter may act on when upstream reads are unavailable.
+const ANTIGRAVITY_BLOCKABLE_MODELS = [
+  "gemini-3.8-flash-high",
+  "gemini-3.8-flash-medium",
+  "gemini-3.8-flash-low",
+  "gemini-3.7-flash-high",
+  "gemini-3.7-flash-medium",
+  "gemini-3.7-flash-low",
+  "gemini-3.6-flash-high",
+  "gemini-3.6-flash-medium",
+  "gemini-3.6-flash-low",
+  "gemini-3.5-flash-low",
+  "gemini-3.5-flash-extra-low",
+  "gemini-pro-agent",
+  "gemini-3.1-pro-low",
+  "claude-sonnet-4-6",
+  "claude-opus-4-6-thinking",
+  "gpt-oss-120b-medium",
+];
+
+/**
+ * True when the stored bearer is already past its expiry. Treating a known-dead
+ * token as "no quota reading" is what let the pre-filter stay blind and hammer
+ * upstream 403s; a dead token is a definite skip, not an unknown.
+ * The refresh endpoint can also reject a not-yet-expired bearer outright
+ * (revoked/session-invalidated) — callers pass the observed rejection reason.
+ */
+function isTokenExpired(providerSpecificData, upstreamMessage = "") {
+  if (/authentication expired|refresh_token|invalid_grant|reauth/i.test(String(upstreamMessage))) {
+    return true;
+  }
+  const raw = providerSpecificData?.expiresAt;
+  if (!raw) return false;
+  const ms = typeof raw === "number" ? raw : new Date(raw).getTime();
+  if (!Number.isFinite(ms)) return false;
+  return ms <= Date.now();
+}
+
+/**
+ * Auth-layer failures (401/403) mean the token itself is dead — nothing useful to
+ * cache. Quota-exhaustion messages ("quota", "rate", "exhaust") are informational
+ * and must NOT cause a non-empty quotas payload to be thrown away.
+ */
+function isAuthFailureMessage(message) {
+  return /authentication|forbidden|unauthorized|expired/i.test(String(message));
+}
 
 // Strike-based circuit breaker (#3681): Google's quota API can report remaining
 // quota while generation endpoints keep returning 429 (sprint/weekly dual-pool
@@ -189,9 +240,49 @@ export async function refreshAntigravityQuota(connectionId, accessToken, provide
     return quotaCache.get(connectionId) || null;
   }
 
+  // Token expired in the DB (or bearer rejected upstream): the quota API is
+  // unreachable, but the connection can still serve a shot session briefly.
+  // Block the pair for a short window so the pre-filter stops firing upstream
+  // 403s on a token we already know is dead, without waiting for a strike cycle.
+  if (isTokenExpired(providerSpecificData)) {
+    const until = now + TOKEN_EXPIRED_BLOCK_MS;
+    const cached = quotaCache.get(connectionId) || {};
+    for (const model of ANTIGRAVITY_BLOCKABLE_MODELS) {
+      cached[model] = { remainingPercentage: 0, resetAt: new Date(until).toISOString() };
+    }
+    quotaCache.set(connectionId, cached);
+    log.warn(
+      "AG_QUOTA",
+      `${connectionId.slice(0, 8)} | TOKEN_EXPIRED — CACHE_BLOCK ${Math.round(TOKEN_EXPIRED_BLOCK_MS / 1000)}s (reauth required)`
+    );
+    return cached;
+  }
+
   // Record every attempt so failed quota calls cannot amplify an upstream 429 burst.
   lastRefreshAt.set(connectionId, now);
-  const promise = _doRefresh(connectionId, accessToken, providerSpecificData, now);
+  const promise = (async () => {
+    const read = await _doRefresh(connectionId, accessToken, providerSpecificData, now);
+    // Upstream may reject a not-yet-expired bearer (revoked / invalid_grant).
+    // In that case the quota read is empty AND the message says auth expired —
+    // arm the short reauth block so the pre-filter stops firing upstream 403s.
+    if (!read) {
+      const msg = lastUsageMessage.get(connectionId) || "";
+      if (isTokenExpired(providerSpecificData, msg)) {
+        const until = now + TOKEN_EXPIRED_BLOCK_MS;
+        const cached = quotaCache.get(connectionId) || {};
+        for (const model of ANTIGRAVITY_BLOCKABLE_MODELS) {
+          cached[model] = { remainingPercentage: 0, resetAt: new Date(until).toISOString() };
+        }
+        quotaCache.set(connectionId, cached);
+        log.warn(
+          "AG_QUOTA",
+          `${connectionId.slice(0, 8)} | TOKEN_REJECTED — CACHE_BLOCK ${Math.round(TOKEN_EXPIRED_BLOCK_MS / 1000)}s (reauth required)`
+        );
+        return cached;
+      }
+    }
+    return read;
+  })();
   inflightRefresh.set(connectionId, promise);
   try {
     return await promise;
@@ -212,9 +303,16 @@ async function _doRefresh(connectionId, accessToken, providerSpecificData, now) 
     };
 
     const usage = await getAntigravityUsage(accessToken, providerSpecificData, proxyOptions);
+    if (usage?.message) lastUsageMessage.set(connectionId, usage.message);
+    else lastUsageMessage.delete(connectionId);
     // 401/403 usage responses can contain an empty quotas object plus message.
     // Preserve known cache instead of replacing it with an upstream error response.
-    if (!usage?.quotas || usage.message) return null;
+    // A *non-empty* quotas payload is still authoritative even when a message rode
+    // along with it (e.g. the quota API forbade per-model reads but the weekly
+    // overlay resolved) — discarding it left the cache permanently empty, which
+    // disarmed the auth pre-filter and let every request burn an upstream 403/429.
+    if (!usage?.quotas || Object.keys(usage.quotas).length === 0) return null;
+    if (usage.message && isAuthFailureMessage(usage.message)) return null;
 
     // Update in-memory cache. Caller logs CACHE_BLOCK only if requested model is exhausted.
     // Strike blocks are re-asserted after every refresh so an optimistic
