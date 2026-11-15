@@ -20,7 +20,9 @@ import (
 // Executors with a custom execute() (adcode's Firebase token minting, the web
 // cookie executors, kiro's EventStream, cursor's protobuf, codex, devin) are NOT
 // covered here: those carry protocol behaviour a URL/header override cannot
-// express, and a stub adapter would claim coverage it does not have.
+// express, and a stub adapter would claim coverage it does not have. Devin has
+// since been ported, but not here — it lives in devin_acp.go, since it needs a
+// subprocess transport rather than a pair of URL/header builders.
 
 // ── constants borrowed from the wave-1 table ─────────────────────────────────
 //
@@ -459,6 +461,11 @@ var _ = translate.FormatGemini
 // Cursor joins here as well: it authenticates with a bearer token and streams
 // hand-rolled protobuf over a duplex HTTP/2 connection, which no URL/header
 // override can express.
+//
+// Devin joins last and is the only adapter with no HTTP upstream at all: it
+// spawns the local devin binary and drives it over ACP. It is registered
+// unconditionally so the provider resolves to a real adapter, but RunACP refuses
+// to run unless DEVIN_CLI_ENABLED=true — resolving is not the same as enabling.
 func RegisterWave7(r *Registry) {
 	// Kiro's translator hooks and session store live in this package but are
 	// called from internal/translate, so the wiring happens with the registration
@@ -471,4 +478,5 @@ func RegisterWave7(r *Registry) {
 	r.Register(NewCodex())
 	r.Register(NewKiro())
 	r.Register(NewCursor())
+	r.Register(&Devin{})
 }

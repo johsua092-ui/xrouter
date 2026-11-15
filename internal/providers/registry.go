@@ -189,6 +189,34 @@ type aliasDeclarer interface {
 	Aliases() []string
 }
 
+// connectionlessDeclarer marks an adapter that authenticates outside the
+// gateway database, so the gateway must not require a connection row before
+// dispatching to it.
+//
+// Every HTTP provider reads a key from a stored connection. devin-cli does not:
+// the subprocess inherits the environment and uses the credentials
+// `devin auth login` already wrote to disk, so a provider row would be a
+// credential that cannot exist. Without this marker the request is rejected with
+// "no active connection" before RunACP is ever reached — the adapter can never
+// run, no matter how it is configured.
+type connectionlessDeclarer interface {
+	Connectionless() bool
+}
+
+// Connectionless reports whether provider can be dispatched without a stored
+// connection. Unmarked adapters are not connectionless, which keeps the
+// credentialed majority on the existing path.
+func (r *Registry) Connectionless(provider string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	a, ok := r.adapters[provider]
+	if !ok {
+		return false
+	}
+	cl, ok := a.(connectionlessDeclarer)
+	return ok && cl.Connectionless()
+}
+
 // Resolve returns the adapter for provider, or the fallback.
 func (r *Registry) Resolve(provider string) (Adapter, bool) {
 	r.mu.RLock()

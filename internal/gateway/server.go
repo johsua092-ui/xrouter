@@ -310,31 +310,39 @@ func (g *Gateway) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 
 	// Which connection serves this provider? Read-only; the Go core does not
 	// write to the shared database.
-	conn, connErr := g.db.FindActiveConnection(providerName)
-	if connErr != nil || conn == nil {
-		jsonResponse(w, http.StatusServiceUnavailable, map[string]interface{}{
-			"error":    "no active connection for provider",
-			"provider": providerName,
-			"adapter":  adapter.Name(),
-			"ported":   explicit,
-			"detail":   errString(connErr),
-		})
-		return
-	}
+	//
+	// Providers that authenticate outside the database (the local subprocess
+	// ones, which sign in through their own CLI) have no row to find, so the
+	// lookup is skipped for them. They still authenticate — just not here.
+	cred := providers.Credential{BaseURL: ""}
 
-	cred := providers.CredentialFromConnection(providers.CredentialFromDB{
-		ProviderID: conn.Provider,
-		APIKey:     conn.APIKey,
-		Token:      conn.Token,
-		BaseURL:    conn.BaseURL,
-		AccountID:  conn.AccountID,
-		UserID:     conn.UserID,
-		Email:      conn.Email,
-		AgentID:    conn.AgentID,
-		SessionID:  conn.ConnectionID,
-		Region:     conn.Region,
-		Extra:      conn.Extra,
-	}, r.Header)
+	if !g.registry.Connectionless(providerName) {
+		conn, connErr := g.db.FindActiveConnection(providerName)
+		if connErr != nil || conn == nil {
+			jsonResponse(w, http.StatusServiceUnavailable, map[string]interface{}{
+				"error":    "no active connection for provider",
+				"provider": providerName,
+				"adapter":  adapter.Name(),
+				"ported":   explicit,
+				"detail":   errString(connErr),
+			})
+			return
+		}
+
+		cred = providers.CredentialFromConnection(providers.CredentialFromDB{
+			ProviderID: conn.Provider,
+			APIKey:     conn.APIKey,
+			Token:      conn.Token,
+			BaseURL:    conn.BaseURL,
+			AccountID:  conn.AccountID,
+			UserID:     conn.UserID,
+			Email:      conn.Email,
+			AgentID:    conn.AgentID,
+			SessionID:  conn.ConnectionID,
+			Region:     conn.Region,
+			Extra:      conn.Extra,
+		}, r.Header)
+	}
 
 	// Translate the request into the provider's dialect before it goes upstream.
 	//
@@ -382,6 +390,26 @@ func (g *Gateway) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		req.Body = shaped
+	}
+
+	// devin-cli is not an HTTP upstream: it runs a local binary over stdio. The
+	// adapter owns its own transport, so it is dispatched before a request is
+	// built rather than after. It produces client-ready SSE itself, so the
+	// response goes straight out.
+	if runner, ok := adapter.(providers.DevinRunner); ok {
+		stream, runErr := runner.RunACP(r.Context(), req, cred)
+		if runErr != nil {
+			jsonError(w, http.StatusBadGateway,
+				fmt.Sprintf("could not run %s adapter", adapter.Name()), runErr)
+			return
+		}
+		defer stream.Close()
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.Copy(w, stream)
+		return
 	}
 
 	proxied, err := g.upstream.Do(r.Context(), adapter, req, cred)
