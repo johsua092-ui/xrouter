@@ -2,6 +2,7 @@ package providers
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -584,6 +585,10 @@ const (
 	AntigravityIDEVersion   = "2.32.1"
 	AntigravityDefaultBase  = "https://daily-cloudcode-pa.googleapis.com"
 	AntigravityStallTimeout = 600 * time.Second
+	// AntigravityDefaultProject is what the shipped client presents before
+	// onboarding has resolved a per-account project. The backend answers a
+	// request with no project at all by refusing to draw quota against it.
+	AntigravityDefaultProject = "aicode-consumers"
 )
 
 // AntigravityIDEBases is the rotating base-url pool, in preference order.
@@ -647,6 +652,85 @@ func (a *Antigravity) Headers(req Request, cred Credential) (map[string]string, 
 		"Authorization": "Bearer " + token,
 		"User-Agent":    AntigravityIDEUserAgent,
 	}, nil
+}
+
+// AntigravityRequestTypeAgent is the requestType the official client uses for
+// agent (chat) turns. It is deliberately NOT sent — see RewriteBody.
+const AntigravityRequestTypeAgent = "agent"
+
+// RewriteBody stamps the two envelope fields the Antigravity backend
+// fingerprints, which the generic body translator does not produce:
+//
+//	userAgent  — "antigravity", matched against the UA header. A body that
+//	             disagrees with the header is not rejected, it is silently
+//	             downgraded to the generic Gemini Code Assist tier
+//	             (ineligibleTiers: UNSUPPORTED_CLIENT) — the account never
+//	             reaches its Antigravity models and nothing errors.
+//	project    — the Cloud Code Assist project the quota is drawn against.
+//
+// Node sends both (open-sse/executors/antigravity.js), so omitting them here
+// made the Go port present a different client than the Node port to the same
+// upstream. The Node comments also record that `requestType: "agent"` must NOT
+// be sent: Google buckets such requests and answers a detail-free
+// 429 RESOURCE_EXHAUSTED even with quota available. That is preserved by
+// deleting the key rather than adding it.
+func (a *Antigravity) RewriteBody(req Request, cred Credential, body []byte) ([]byte, error) {
+	if len(body) == 0 {
+		return nil, nil
+	}
+
+	var envelope map[string]any
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		// Not a JSON envelope (or not one we understand): leave it untouched
+		// rather than replacing a request the upstream may still accept.
+		return nil, nil
+	}
+
+	changed := false
+
+	if v, _ := envelope["userAgent"].(string); v != "antigravity" {
+		envelope["userAgent"] = "antigravity"
+		changed = true
+	}
+
+	if project := antigravityProject(cred); project != "" {
+		if v, _ := envelope["project"].(string); v != project {
+			envelope["project"] = project
+			changed = true
+		}
+	}
+
+	// Bucketing guard: the agent requestType must be absent, not present.
+	if _, present := envelope["requestType"]; present {
+		delete(envelope, "requestType")
+		changed = true
+	}
+
+	if !changed {
+		return nil, nil
+	}
+
+	out, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// antigravityProject resolves the project id the request draws quota against.
+// It rides on the credential because it is established once at onboarding and
+// then reused for every turn; the literal fallback matches what the shipped
+// client presents before onboarding has resolved a personal project.
+func antigravityProject(cred Credential) string {
+	if cred.Extra != nil {
+		if v := cred.Extra["projectId"]; v != "" {
+			return v
+		}
+		if v := cred.Extra["project"]; v != "" {
+			return v
+		}
+	}
+	return AntigravityDefaultProject
 }
 
 // imageModelSuffixes mark the models that go through the image pipeline.

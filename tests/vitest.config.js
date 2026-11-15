@@ -19,7 +19,11 @@ export default defineConfig({
     // Don't scan into git worktrees nested under .claude/ — they carry their
     // own copies of the test files but lack an installed node_modules (open-sse,
     // etc.), which makes provider imports fail during collection.
-    exclude: ["**/node_modules/**", "**/.claude/**", "**/dist/**"],
+    //
+    // .next/standalone/ is the same trap: it holds a build-time copy of the test
+    // tree that goes stale the moment the source tests are edited, so a green
+    // source run reports doubled failures against the frozen copy.
+    exclude: ["**/node_modules/**", "**/.claude/**", "**/dist/**", "**/.next/**"],
     // Allow many it.concurrent cases (real provider smoke runs ~50 providers in parallel)
     maxConcurrency: 60,
     // Suppress noisy console output from handlers under test

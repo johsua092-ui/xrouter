@@ -76,6 +76,22 @@ type Adapter interface {
 	Headers(req Request, cred Credential) (map[string]string, error)
 }
 
+// BodyRewriter is implemented by adapters that must mutate the request body
+// before it goes upstream — identity stamping, envelope reshaping, dropping
+// fields the upstream rejects. Adapters that do not implement it send req.Body
+// untouched, which is the majority.
+//
+// This exists because the upstream, not the gateway, is the authority on client
+// identity: a provider that fingerprints its client needs the envelope to carry
+// that identity regardless of what the calling client sent. Doing it here keeps
+// the rewrite next to the adapter that knows the shape, instead of in the
+// shared Transport where every other provider would have to tolerate it.
+type BodyRewriter interface {
+	// RewriteBody returns the body to send. Returning nil means "unchanged" —
+	// the caller falls back to req.Body rather than sending an empty request.
+	RewriteBody(req Request, cred Credential, body []byte) ([]byte, error)
+}
+
 // Transport performs the HTTP call. Shared by every adapter so there is exactly
 // one place where timeouts, proxying and SSE-streaming behaviour are defined.
 type Transport struct {
@@ -119,7 +135,19 @@ func (t *Transport) Do(ctx context.Context, a Adapter, req Request, cred Credent
 		return nil, fmt.Errorf("%s: headers: %w", a.Name(), err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(req.Body)))
+	body := req.Body
+	if rw, ok := a.(BodyRewriter); ok {
+		rewritten, rerr := rw.RewriteBody(req, cred, body)
+		if rerr != nil {
+			return nil, fmt.Errorf("%s: body rewrite: %w", a.Name(), rerr)
+		}
+		// nil means "leave it alone" — never treat it as an empty body.
+		if rewritten != nil {
+			body = rewritten
+		}
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
 	if err != nil {
 		return nil, fmt.Errorf("%s: build request: %w", a.Name(), err)
 	}

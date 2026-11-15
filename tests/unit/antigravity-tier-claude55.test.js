@@ -21,10 +21,13 @@ const helper = readFileSync(
 );
 
 describe("Antigravity: Claude 5.5 tier gating", () => {
-  it("lists the Claude 5.5 models in the registry", () => {
-    expect(registry).toContain('id: "claude-opus-5.5"');
-    expect(registry).toContain('id: "claude-opus-5.5-thinking"');
-    expect(registry).toContain('id: "claude-sonnet-5-5"');
+  it("does not advertise Claude 5.5, which the upstream tier does not serve", () => {
+    // Verified against a live fetchAvailableModels: the catalogue returns
+    // claude-opus-4-6-thinking and claude-sonnet-4-6 and no 5.5 id at all.
+    // Advertising 5.5 produced a guaranteed 404 on every request for it, which
+    // is indistinguishable from an identity rejection.
+    expect(registry).not.toContain('id: "claude-sonnet-5-5"');
+    expect(registry).not.toMatch(/id: "claude-(opus|sonnet)-5[-.]5/);
   });
 
   it("keeps the 4.6 models so existing traffic keeps working", () => {
@@ -32,7 +35,10 @@ describe("Antigravity: Claude 5.5 tier gating", () => {
     expect(registry).toContain('id: "claude-opus-4-6-thinking"');
   });
 
-  it("recognises every 5.5 spelling in the card helper", () => {
+  it("recognises every 5.5 spelling in the card helper so legacy callers are gated", () => {
+    // The card still has to understand 5.5 ids: clients on an older config will
+    // keep sending them, and they must be routed to a working model instead of
+    // silently 404ing.
     expect(card).toContain("const isClaude55");
     for (const id of [
       "claude-opus-5.5",
@@ -56,7 +62,9 @@ describe("Antigravity: Claude 5.5 tier gating", () => {
 
   it("paints the row red only when the probe says the tier is blocked", () => {
     expect(card).toContain("claude55Blocked");
-    expect(card).toContain("text-red-500");
+    // Design-token class, not a raw palette value: the app themes through
+    // --color-danger, and text-red-500 is not a defined utility in this build.
+    expect(card).toContain("text-danger");
     expect(card).toContain("/api/usage/antigravity-tier");
     // the probe must gate on the live answer, never on a hardcoded true
     expect(card).toContain("t.canUseClaude55 === false");

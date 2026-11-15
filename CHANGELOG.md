@@ -107,6 +107,59 @@
 - `ANTIGRAVITY_CHROME_VERSION` added so the `X-Goog-Api-Client` header matches the
   Electron/Chromium engine that the real hub reports.
 
+### Fixed — Antigravity: six spoofing gaps closed across Node, MITM, and Go
+
+- **One IDE identity, not three.** `open-sse/services/projectId.js` still stamped
+  `ideVersion: "1.107.0"` while `open-sse/providers/shared.js` carried `2.32.1`.
+  A caller sending the old value reached the upstream identity check as a
+  generation-old client and was answered with `404 Requested entity was not
+  found.` The module now imports `ANTIGRAVITY_IDE_VERSION` from `shared.js`, so
+  every producer reads the same constant.
+- **The MITM only rewrote two of six identity endpoints.** `URL_PATTERNS.antigravity`
+  matched `:generateContent` / `:streamGenerateContent` only, so
+  `loadCodeAssist` (the endpoint that returns `UNSUPPORTED_CLIENT`),
+  `onboardUser`, `fetchAvailableModels`, and `retrieveUserQuotaSummary` passed
+  through unrewritten. All four are now matched, and the new
+  `NON_CHAT_URL_PARTS` entries keep them on the identity-rewrite path without
+  being mistaken for chat traffic in `passthrough()`.
+- **An absent `metadata` object silently disabled the rewrite.**
+  `shouldRewriteMetadata` returned `false` when the incoming body carried no
+  `ideVersion`, so a body with no metadata at all was forwarded untouched.
+  `stampAntigravityIdentity()` now always writes `metadata.ideVersion`,
+  `ideType`, and `ideName` on identity endpoints.
+- **The chat path never got the spoof at all.** `applyAntigravityIdeVersionOverride`
+  was called from `passthrough()` only; `intercept()` — the path chat traffic
+  actually takes — rewrote nothing. `handlers/antigravity.js` now applies the
+  override before dispatch and `server.js` rewrites on the intercept branch as
+  soon as headers are read.
+- **Go sent a thinner payload than Node.** `internal/providers/wave2.go` set
+  three headers and no `metadata`/`userAgent` in the body, so the ported engine
+  fingerprinting differed from the Node engine. A `BodyRewriter` interface was
+  added in `internal/providers/registry.go`; the Antigravity adapter's
+  `RewriteBody` now stamps `project`, `model`, `userAgent`, `requestId`, and
+  `request`, matching the Node executor.
+- **Client-version regex was greedy.** `/antigravity\/([^\s]+)/` captured
+  `hub/2.32.1` as the platform token, so the rewritten user-agent came out as
+  `antigravity/hub/1.0.0`. An anchored `UA_PLATFORM_RE` keeps the caller's
+  platform and pins the version to `2.32.1`; `content-length` is recalculated
+  after the body is stamped so the request cannot be truncated.
+- **Model registry now mirrors the live catalogue.** `fetchAvailableModels`
+  answers with 22 models; the registry advertised `gemini-4-argon-medium`
+  (upstream: `-disabled`), `3.7-flash` (mapped to `3.8-flash-tiered`), and a
+  `claude-*-5.5-*` family that no longer exists. Registry, `MODEL_SYNONYMS`, and
+  the MITM `MODEL_PATTERNS` were synchronised to the catalogue the upstream
+  actually serves.
+- **Verified against a live account.** Identity handshake (`loadCodeAssist`,
+  `fetchAvailableModels`, `retrieveUserQuotaSummary`, `onboardUser`) answers
+  `200` with `currentTier: free-tier` and the provisioned project; an
+  intentionally corrupt token still answers `401 UNAUTHENTICATED`, confirming
+  the credential path is exercised. End-to-end chat through the router returns
+  a live completion (`gemini-3.8-flash-medium` and `claude-opus-4-6-thinking`).
+  The Antigravity suite went from 14 failing on the untouched baseline to
+  122 passing / 0 failing, with no new failures across the wider run.
+- `tests/vitest.config.js` now excludes `**/.next/**`: a stale standalone build
+  was being collected as a second copy of the suite and double-reporting results.
+
 ### Added — Antigravity: persist `cloudaicompanionProject` + `tierId` from the OAuth exchange
 
 - `mapTokens` in `src/lib/oauth/providers/antigravity.js` now resolves and stores

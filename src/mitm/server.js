@@ -334,6 +334,16 @@ const server = https.createServer(sslOptions, async (req, res) => {
       return passthrough(req, res, bodyBuffer);
     }
 
+    // The identity rewrite lives in passthrough(), but the chat path never goes
+    // through it — and this is the path that carries the Antigravity generation
+    // request the backend actually fingerprints. Apply it here too, on the body
+    // and headers handed to the handler, so intercept() forwards a corrected
+    // identity instead of the calling client's raw one.
+    const identity = applyAntigravityIdeVersionOverride(bodyBuffer, req.headers, req.url);
+    if (identity.applied) {
+      return handlers[tool].intercept(req, res, identity.bodyBuffer, mappedModel, passthrough, identity.headers);
+    }
+
     return handlers[tool].intercept(req, res, bodyBuffer, mappedModel, passthrough);
   } catch (e) {
     err(`Unhandled error: ${e.message}`);
