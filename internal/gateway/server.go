@@ -68,7 +68,8 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 	// cannot be a URL/header adapter either.
 	providers.RegisterWave6(registry)
 	// Wave 7 is the web-cookie set: Kimi and DeepSeek, driven by a pasted session
-	// cookie instead of an API key.
+	// cookie instead of an API key. Cursor rides here too, since it streams
+	// hand-rolled protobuf over a duplex connection.
 	providers.RegisterWave7(registry)
 
 	// Translator registry. Every request and response converter self-registers
@@ -244,6 +245,7 @@ func (g *Gateway) handleAdapterCoverage(w http.ResponseWriter, r *http.Request) 
 		"engine":              "golang",
 		"ported":              cov.Ported,
 		"ported_count":        len(cov.Ported),
+		"aliases":             cov.Aliases,
 		"generic":             cov.Generic,
 		"generic_count":       len(cov.Generic),
 		"node_executor_total": cov.NodeExecutorTotal,

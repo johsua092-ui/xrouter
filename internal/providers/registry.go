@@ -159,11 +159,34 @@ func (r *Registry) SetFallback(a Adapter) {
 	r.fallback = a
 }
 
-// Register adds or replaces an adapter under its own name.
+// Register adds or replaces an adapter under its own name, and under each of its
+// declared aliases.
+//
+// Aliases were previously declared but never consumed, so an adapter advertising
+// one was still unreachable by it and fell through to the generic fallback — a
+// request for "cu" would answer as if Cursor had never been ported.
 func (r *Registry) Register(a Adapter) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.adapters[a.Name()] = a
+	if aliased, ok := a.(aliasDeclarer); ok {
+		for _, alias := range aliased.Aliases() {
+			if alias == "" || alias == a.Name() {
+				continue
+			}
+			// An alias never displaces an adapter registered under its own name.
+			if _, taken := r.adapters[alias]; taken {
+				continue
+			}
+			r.adapters[alias] = a
+		}
+	}
+}
+
+// aliasDeclarer is implemented by adapters that answer to more than one provider
+// key. It is separate from Adapter so existing adapters need no change.
+type aliasDeclarer interface {
+	Aliases() []string
 }
 
 // Resolve returns the adapter for provider, or the fallback.
@@ -192,9 +215,49 @@ func (r *Registry) Names() []string {
 	return names
 }
 
-// Count reports how many providers are explicitly ported (fallback excluded).
+// CanonicalNames lists one key per distinct adapter, so an alias does not show
+// up as a second port. Use this for coverage counts and hand-off lists.
+func (r *Registry) CanonicalNames() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	seen := map[Adapter]bool{}
+	names := []string{}
+	for _, a := range r.adapters {
+		if seen[a] {
+			continue
+		}
+		seen[a] = true
+		names = append(names, a.Name())
+	}
+	sort.Strings(names)
+	return names
+}
+
+// Count reports how many distinct providers are explicitly ported (fallback
+// excluded). Aliases resolve to an adapter already counted, so they are folded
+// in rather than inflating the total.
 func (r *Registry) Count() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.adapters)
+	seen := map[Adapter]bool{}
+	for _, a := range r.adapters {
+		seen[a] = true
+	}
+	return len(seen)
+}
+
+// AliasNames lists the provider keys that resolve to an adapter registered under
+// a different name. Reported alongside the port list so an alias is visible
+// without being counted as a separate port.
+func (r *Registry) AliasNames() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	aliases := []string{}
+	for key, a := range r.adapters {
+		if key != a.Name() {
+			aliases = append(aliases, key)
+		}
+	}
+	sort.Strings(aliases)
+	return aliases
 }

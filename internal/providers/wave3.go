@@ -178,8 +178,11 @@ func (s *SearchAdapter) Headers(req Request, cred Credential) (map[string]string
 type Coverage struct {
 	// NodeExecutorTotal is the number of files under open-sse/executors.
 	NodeExecutorTotal int
-	// Ported lists providers with a dedicated Go adapter.
+	// Ported lists providers with a dedicated Go adapter, one entry each.
 	Ported []string
+	// Aliases lists the extra provider keys that resolve to a ported adapter.
+	// Kept separate so an alias is visible without inflating the port count.
+	Aliases []string
 	// Generic lists providers served by the shared OpenAI-compatible adapter.
 	Generic []string
 	// Fallback is true when an unported provider still routes.
@@ -197,9 +200,12 @@ func BuildCoverage(r *Registry) Coverage {
 	}
 	return Coverage{
 		NodeExecutorTotal: 37,
-		Ported:            r.Names(),
-		Generic:           generic,
-		Fallback:          r.fallback != nil,
+		// CanonicalNames, not Names: an alias resolves to an adapter that is
+		// already counted, so listing it again would overstate coverage.
+		Ported:   r.CanonicalNames(),
+		Aliases:  r.AliasNames(),
+		Generic:  generic,
+		Fallback: r.fallback != nil,
 	}
 }
 

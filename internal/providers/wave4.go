@@ -455,6 +455,10 @@ var _ = translate.FormatGemini
 // driven by a pasted session cookie rather than an API key. They share the
 // web-tool bridge, which parses tool calls out of free text because none of the
 // endpoints speaks the OpenAI function-calling contract.
+//
+// Cursor joins here as well: it authenticates with a bearer token and streams
+// hand-rolled protobuf over a duplex HTTP/2 connection, which no URL/header
+// override can express.
 func RegisterWave7(r *Registry) {
 	// Kiro's translator hooks and session store live in this package but are
 	// called from internal/translate, so the wiring happens with the registration
@@ -466,4 +470,5 @@ func RegisterWave7(r *Registry) {
 	r.Register(NewGeminiWeb())
 	r.Register(NewCodex())
 	r.Register(NewKiro())
+	r.Register(NewCursor())
 }
