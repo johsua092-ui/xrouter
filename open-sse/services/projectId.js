@@ -8,6 +8,7 @@
  */
 
 import { CLOUD_CODE_API, LOAD_CODE_ASSIST_HEADERS, ANTIGRAVITY_LOAD_CODE_ASSIST_HEADERS, LOAD_CODE_ASSIST_METADATA } from "../config/appConstants.js";
+import { ANTIGRAVITY_IDE_VERSION } from "../providers/shared.js";
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 // connectionId -> { projectId: string, fetchedAt: number }
@@ -228,8 +229,14 @@ async function onboardUser(accessToken, tierID, externalSignal, endpoints, provi
             ide_type: "ANTIGRAVITY",
             ideName: "antigravity",
             ide_name: "antigravity",
-            ideVersion: "1.107.0",
-            ide_version: "1.107.0",
+            // Pinned to the shipped hub version, not a stale literal. Google
+            // rejects an unknown client version here with a detail-free
+            // 404 "Requested entity was not found" (verified live), and this
+            // path is the one that establishes the account's tier — onboarding
+            // with a dead version is how an account ends up on the generic
+            // Gemini Code Assist tier instead of Antigravity.
+            ideVersion: ANTIGRAVITY_IDE_VERSION,
+            ide_version: ANTIGRAVITY_IDE_VERSION,
             ...LOAD_CODE_ASSIST_METADATA,
         }
     };

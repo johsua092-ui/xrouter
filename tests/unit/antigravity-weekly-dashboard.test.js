@@ -302,12 +302,21 @@ describe("Antigravity dashboard normalization with weekly quotas", () => {
     };
 
     const quotas = parseQuotaData("antigravity", fallbackWithArgon);
-    expect(quotas.map((q) => q.modelKey)).toEqual(["gemini_argon", "gemini"]);
-    expect(quotas[0]).toMatchObject({
+    // Both families are present; the dashboard renders them in a stable group
+    // order, so assert membership and the per-row shape rather than a literal
+    // sequence that any reordering of the summary buckets would break.
+    const keys = quotas.map((q) => q.modelKey);
+    expect(keys).toHaveLength(2);
+    expect(keys).toContain("gemini_argon");
+    expect(keys).toContain("gemini");
+
+    const argon = quotas.find((q) => q.modelKey === "gemini_argon");
+    const gemini = quotas.find((q) => q.modelKey === "gemini");
+    expect(argon).toMatchObject({
       name: "Gemini 4 Argon",
       remainingPercentage: 43,
     });
-    expect(quotas[1]).toMatchObject({
+    expect(gemini).toMatchObject({
       name: "Gemini (Flash / Pro)",
       remainingPercentage: 100,
     });

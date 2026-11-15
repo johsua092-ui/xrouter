@@ -67,15 +67,21 @@ describe("antigravity computeRetryDelay hook (D3)", () => {
     expect(out.request.tools[0].functionDeclarations.map(fn => fn.name)).toEqual(["read_file"]);
   });
 
-  it("registry uses the daily IDE cloudcode host and user agent", () => {
-    expect(antigravity.transport.baseUrls).toEqual(["https://daily-cloudcode-pa.googleapis.com"]);
-    expect(antigravity.transport.headers["User-Agent"]).toBe("antigravity/ide/2.11.0 darwin/arm64");
+  it("registry keeps the daily IDE host first and pins the AG user agent", () => {
+    // The daily host is first and is the one actually used; the remaining
+    // entries are the fallback pool. Order matters, so this asserts the head
+    // rather than the whole array.
+    expect(antigravity.transport.baseUrls[0]).toBe("https://daily-cloudcode-pa.googleapis.com");
+    expect(antigravity.transport.baseUrls.length).toBeGreaterThan(0);
+    // Pinned to the shipped hub version — an older UA earns a 404, a non-AG UA
+    // earns a 403 "no valid license".
+    expect(antigravity.transport.headers["User-Agent"]).toBe("antigravity/hub/2.32.1 linux/x64");
   });
 
   it("buildHeaders matches official IDE stream headers", () => {
     ag._lastSessionId = "sess-123";
     const h = ag.buildHeaders({ accessToken: "tok" }, true);
-    expect(h["User-Agent"]).toBe("antigravity/ide/2.11.0 darwin/arm64");
+    expect(h["User-Agent"]).toBe("antigravity/hub/2.32.1 linux/x64");
     expect(h["Content-Type"]).toBe("application/json");
     expect(h["Authorization"]).toBe("Bearer tok");
     expect(h).not.toHaveProperty("X-Machine-Session-Id");

@@ -6,15 +6,20 @@ const { fetchRouter, pipeSSE } = require("./base");
  * Intercept Antigravity request — forward Gemini body as-is to /v1/chat/completions.
  * Router auto-detects format via body.userAgent==="antigravity" + body.request.contents,
  * runs antigravity→openai→provider→openai→antigravity translators internally.
+ *
+ * `overrideHeaders`, when supplied, replaces the client's headers on the router
+ * call. server.js passes them after applying the Antigravity identity override,
+ * because the generation path is intercepted rather than passed through and so
+ * never reached the rewrite that lives in passthrough().
  */
-async function intercept(req, res, bodyBuffer, mappedModel) {
+async function intercept(req, res, bodyBuffer, mappedModel, passthrough, overrideHeaders) {
   const dumper = IS_DEV ? createResponseDumper(req, "intercept-antigravity") : null;
   const isStream = req.url.includes(":streamGenerateContent");
   try {
     const body = JSON.parse(bodyBuffer.toString());
     if (body.model) body.model = mappedModel;
 
-    const routerRes = await fetchRouter(body, "/v1/chat/completions", req.headers);
+    const routerRes = await fetchRouter(body, "/v1/chat/completions", overrideHeaders || req.headers);
     await pipeSSE(routerRes, res, dumper);
   } catch (error) {
     err(`[antigravity] ${error.message}`);

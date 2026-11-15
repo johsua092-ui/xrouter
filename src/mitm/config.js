@@ -24,7 +24,20 @@ const TARGET_HOSTS = [
 ];
 
 const URL_PATTERNS = {
-  antigravity: [":generateContent", ":streamGenerateContent"],
+  // Cloud Code Assist identity surface. Generation is the one XR re-routes;
+  // the rest (onboarding, model catalogue, quota) stay native but must still
+  // present the Antigravity identity — a mismatched one there is answered with
+  // a silent tier downgrade (ineligibleTiers: UNSUPPORTED_CLIENT) rather than
+  // an error, so it cannot be left to whatever the calling client sent.
+  // See src/mitm/antigravityIdeVersion.js.
+  antigravity: [
+    ":generateContent",
+    ":streamGenerateContent",
+    ":loadCodeAssist",
+    ":onboardUser",
+    ":fetchAvailableModels",
+    ":retrieveUserQuotaSummary",
+  ],
   copilot: ["/chat/completions", "/v1/messages", "/responses"],
   // Legacy path form. Kiro IDE 1.0.228+ posts to `/` with x-amz-target instead —
   // see isChatRequest() for the header-based match.
@@ -39,6 +52,10 @@ const URL_PATTERNS = {
  * (verified via live mitmproxy capture of Kiro IDE 1.0.228).
  */
 function isChatRequest(tool, req) {
+  // Onboarding/catalogue/quota are identity-bearing but not chat turns: they are
+  // rewritten in passthrough() and must not be handed to a chat handler.
+  if (NON_CHAT_URL_PARTS.some((p) => (req.url || "").includes(p))) return false;
+
   const patterns = URL_PATTERNS[tool] || [];
   if (patterns.some((p) => (req.url || "").includes(p))) return true;
   if (tool === "kiro") {
@@ -49,6 +66,17 @@ function isChatRequest(tool, req) {
 }
 
 // Synonym map: rawModel from request → canonical alias key in mitmAlias DB
+//
+// Values must name models that actually exist upstream (see the live
+// fetchAvailableModels note in registry/antigravity.js). Three groups were
+// rewritten after that sync:
+//   - claude 5.5 (all variants) → not served on this tier; folded onto the 4.6
+//     models so a client asking for 5.5 gets a working model instead of a 404.
+//   - gemini 3.6 / 3.7 flash → folded onto the 3.8 tier, which is what the
+//     upstream substitutes anyway.
+//   - self-referencing keys whose value was the same dead id (e.g.
+//     "gemini-3.7-flash-high" → "gemini-3.7-flash-high") were the worst case:
+//     they resolved successfully and then 404'd upstream.
 const MODEL_SYNONYMS = {
   antigravity: {
     "gemini-default": "gemini-3.8-flash-medium",
@@ -60,35 +88,35 @@ const MODEL_SYNONYMS = {
     "gemini-3.8-flash-high": "gemini-3.8-flash-high",
     "gemini-3.8-flash-medium": "gemini-3.8-flash-medium",
     "gemini-3.8-flash-low": "gemini-3.8-flash-low",
-    "gemini-3.7-flash-high": "gemini-3.7-flash-high",
-    "gemini-3.7-flash-medium": "gemini-3.7-flash-medium",
-    "gemini-3.7-flash-low": "gemini-3.7-flash-low",
-    "gemini-3.6-flash-high": "gemini-3.6-flash-high",
-    "gemini-3.6-flash-medium": "gemini-3.6-flash-medium",
-    "gemini-3.6-flash-low": "gemini-3.6-flash-low",
+    "gemini-3.7-flash-high": "gemini-3.8-flash-high",
+    "gemini-3.7-flash-medium": "gemini-3.8-flash-medium",
+    "gemini-3.7-flash-low": "gemini-3.8-flash-low",
+    "gemini-3.6-flash-high": "gemini-3.8-flash-high",
+    "gemini-3.6-flash-medium": "gemini-3.8-flash-medium",
+    "gemini-3.6-flash-low": "gemini-3.8-flash-low",
     "gemini-3.1-pro-high": "gemini-pro-agent",
     "gemini-3-pro-high": "gemini-pro-agent",
-    "gemini-3-pro-low": "gemini-3.1-pro-low",
-    "claude-sonnet-5-5-high": "claude-sonnet-5-5-high",
-    "claude-sonnet-5-5-medium": "claude-sonnet-5-5-medium",
-    "claude-sonnet-5-5-low": "claude-sonnet-5-5-low",
-    "claude-sonnet-5-5": "claude-sonnet-5-5",
-    "claude-sonnet-5.5": "claude-sonnet-5-5",
-    "claude-sonnet-5.5-high": "claude-sonnet-5-5-high",
-    "claude-sonnet-5.5-medium": "claude-sonnet-5-5-medium",
-    "claude-sonnet-5.5-low": "claude-sonnet-5-5-low",
-    "claude-sonnet-5-5-thinking": "claude-sonnet-5-5",
-    "claude-sonnet-5.5-thinking": "claude-sonnet-5-5",
-    "claude-opus-5-5-high": "claude-opus-5-5-high",
-    "claude-opus-5-5-medium": "claude-opus-5-5-medium",
-    "claude-opus-5-5-low": "claude-opus-5-5-low",
-    "claude-opus-5-5": "claude-opus-5-5",
-    "claude-opus-5.5": "claude-opus-5-5",
-    "claude-opus-5.5-high": "claude-opus-5-5-high",
-    "claude-opus-5.5-medium": "claude-opus-5-5-medium",
-    "claude-opus-5.5-low": "claude-opus-5-5-low",
-    "claude-opus-5-5-thinking": "claude-opus-5-5",
-    "claude-opus-5.5-thinking": "claude-opus-5-5",
+    "gemini-3-pro-low": "gemini-pro-agent",
+    "claude-sonnet-5-5-high": "claude-sonnet-4-6",
+    "claude-sonnet-5-5-medium": "claude-sonnet-4-6",
+    "claude-sonnet-5-5-low": "claude-sonnet-4-6",
+    "claude-sonnet-5-5": "claude-sonnet-4-6",
+    "claude-sonnet-5.5": "claude-sonnet-4-6",
+    "claude-sonnet-5.5-high": "claude-sonnet-4-6",
+    "claude-sonnet-5.5-medium": "claude-sonnet-4-6",
+    "claude-sonnet-5.5-low": "claude-sonnet-4-6",
+    "claude-sonnet-5-5-thinking": "claude-sonnet-4-6",
+    "claude-sonnet-5.5-thinking": "claude-sonnet-4-6",
+    "claude-opus-5-5-high": "claude-opus-4-6-thinking",
+    "claude-opus-5-5-medium": "claude-opus-4-6-thinking",
+    "claude-opus-5-5-low": "claude-opus-4-6-thinking",
+    "claude-opus-5-5": "claude-opus-4-6-thinking",
+    "claude-opus-5.5": "claude-opus-4-6-thinking",
+    "claude-opus-5.5-high": "claude-opus-4-6-thinking",
+    "claude-opus-5.5-medium": "claude-opus-4-6-thinking",
+    "claude-opus-5.5-low": "claude-opus-4-6-thinking",
+    "claude-opus-5-5-thinking": "claude-opus-4-6-thinking",
+    "claude-opus-5.5-thinking": "claude-opus-4-6-thinking",
     "claude-sonnet-4.6": "claude-sonnet-4-6",
     "claude-opus-4.6": "claude-opus-4-6-thinking",
     "claude-opus-4.6-thinking": "claude-opus-4-6-thinking",
@@ -97,24 +125,30 @@ const MODEL_SYNONYMS = {
 
 // Pattern fallback: rawModel regex → canonical alias key (when exact + prefix match fail)
 // Order matters: more specific patterns first. Catches AG renamed variants (e.g. gemini-pro-agent)
+//
+// Every alias here MUST exist in registry/antigravity.js models[]. Two whole
+// families were dropped after a live fetchAvailableModels: the claude 5.5 ids
+// and the 3.6 flash ids are not served on this tier at all, so patterns
+// pointing at them resolved to a guaranteed 404. The 3.7/3.5 flash ids are
+// folded onto the 3.8 tier instead — that remap is real, the upstream answers
+// 3.7 requests out of the 3.8 tier.
 const MODEL_PATTERNS = {
   antigravity: [
     { match: /flash.*extra.*low|extra.*low.*flash|flash.*low|low.*flash/i, alias: "gemini-3.8-flash-low" },
     { match: /flash.*medium|medium.*flash/i,                       alias: "gemini-3.8-flash-medium" },
     { match: /flash.*agent|agent.*flash|flash/i,                   alias: "gemini-3.8-flash-high" },
-    { match: /pro.*low|low.*pro/i,                                 alias: "gemini-3.1-pro-low" },
+    { match: /flash.*lite|lite.*flash/i,                           alias: "gemini-3.1-flash-lite" },
+    { match: /2[.]?5.*pro|pro.*2[.]?5/i,                           alias: "gemini-2.5-pro" },
+    { match: /2[.]?5.*flash.*think|think.*2[.]?5/i,                alias: "gemini-2.5-flash-thinking" },
+    { match: /2[.]?5.*flash/i,                                     alias: "gemini-2.5-flash" },
     { match: /gemini.*pro|pro.*gemini/i,                           alias: "gemini-pro-agent" },
-    { match: /opus.*5[.-]5.*high|5[.-]5.*opus.*high/i,             alias: "claude-opus-5-5-high" },
-    { match: /opus.*5[.-]5.*medium|5[.-]5.*opus.*medium/i,         alias: "claude-opus-5-5-medium" },
-    { match: /opus.*5[.-]5.*low|5[.-]5.*opus.*low/i,               alias: "claude-opus-5-5-low" },
-    { match: /sonnet.*5[.-]5.*high|5[.-]5.*sonnet.*high/i,         alias: "claude-sonnet-5-5-high" },
-    { match: /sonnet.*5[.-]5.*medium|5[.-]5.*sonnet.*medium/i,     alias: "claude-sonnet-5-5-medium" },
-    { match: /sonnet.*5[.-]5.*low|5[.-]5.*sonnet.*low/i,           alias: "claude-sonnet-5-5-low" },
-    { match: /opus.*5[.-]5|5[.-]5.*opus/i,                         alias: "claude-opus-5-5" },
-    { match: /sonnet.*5[.-]5|5[.-]5.*sonnet/i,                     alias: "claude-sonnet-5-5" },
+    { match: /opus.*4[.-]6|4[.-]6.*opus/i,                         alias: "claude-opus-4-6-thinking" },
     { match: /opus/i,                                              alias: "claude-opus-4-6-thinking" },
     { match: /sonnet|claude/i,                                     alias: "claude-sonnet-4-6" },
     { match: /gpt.*oss|oss/i,                                      alias: "gpt-oss-120b-medium" },
+    { match: /carbon/i,                                            alias: "gemini-4-carbon-disabled" },
+    { match: /hydrogen/i,                                          alias: "gemini-4-hydrogen-disabled" },
+    { match: /argon/i,                                             alias: "gemini-4-argon-disabled" },
   ],
 };
 
@@ -124,9 +158,22 @@ const MODEL_PATTERNS = {
 // it through X Router to an external chat model makes typing laggy and burns provider quota per
 // keystroke. Without this guard the broad `flash` pattern in MODEL_PATTERNS hijacks them onto the
 // flash-agent slot. Verified via MITM dump capture of streamGenerateContent (see AI_JOURNAL).
+// Onboarding/catalogue/quota carry no model and must not be judged by it.
 const MODEL_NO_MAP = {
   antigravity: [/^tab[_-]/i],
 };
+
+// URLs that are never a chat turn even though they sit on an intercepted host.
+// They still get the identity rewrite (URL_PATTERNS is consulted for that in
+// passthrough()), but isChatRequest() must not claim them: `onboardUser` and
+// friends have no model and no conversation to re-route, and handing them to a
+// chat handler would substitute a chat completion for an onboarding call.
+const NON_CHAT_URL_PARTS = [
+  ":loadCodeAssist",
+  ":onboardUser",
+  ":fetchAvailableModels",
+  ":retrieveUserQuotaSummary",
+];
 
 // URL substrings whose request/response should NOT be dumped to file (telemetry, polling, empty)
 const LOG_BLACKLIST_URL_PARTS = [
@@ -189,4 +236,4 @@ function extractModel(url, body) {
   }
 }
 
-module.exports = { IS_DEV, LSOF_BIN, TARGET_HOSTS, URL_PATTERNS, MODEL_SYNONYMS, MODEL_PATTERNS, MODEL_NO_MAP, LOG_BLACKLIST_URL_PARTS, getToolForHost, isChatRequest, extractModel };
+module.exports = { IS_DEV, LSOF_BIN, TARGET_HOSTS, URL_PATTERNS, MODEL_SYNONYMS, MODEL_PATTERNS, MODEL_NO_MAP, NON_CHAT_URL_PARTS, LOG_BLACKLIST_URL_PARTS, getToolForHost, isChatRequest, extractModel };
