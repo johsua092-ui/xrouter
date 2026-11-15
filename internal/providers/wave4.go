@@ -89,10 +89,53 @@ func (a *OpenCodeGo) Headers(req Request, cred Credential) (map[string]string, e
 // the session under three extra header names, sends a client/project identifier,
 // and falls back to a literal "public" bearer for free-tier models — which is the
 // provider's published convention, not a leaked credential.
-type OpenCodeZen struct{}
+type OpenCodeZen struct {
+	// sessions is the same generator OpenCode uses. Sharing it is deliberate:
+	// zen and opencode address one upstream, so a zen request must mint a
+	// session of exactly the shape that upstream decodes (ses_ + 12-hex
+	// descending timestamp + 14 base62). The adapter previously derived a
+	// digest-prefixed `ses_<30 hex>` value, which is both the wrong length and
+	// the wrong composition — upstream decodes the 12-round after the prefix as
+	// a millisecond timestamp, so a digest fails the freshness window and the
+	// request is refused. A session is per-conversation state, not a request
+	// nonce, so it must also be memoised rather than recomputed per call.
+	sessions *openCodeSessions
+}
 
 func (a *OpenCodeZen) Name() string       { return "opencode-zen" }
 func (a *OpenCodeZen) WireFormat() string { return FormatOpenAI }
+
+func (a *OpenCodeZen) init() {
+	if a.sessions == nil {
+		a.sessions = newOpenCodeSessions()
+	}
+}
+
+// Session resolves the zen session id for a request.
+//
+// Precedence mirrors OpenCode.SessionFor: a caller-minted valid session is
+// honoured outright, a caller-provided hint is translated onto a minted one so
+// the caller's conversation keeps its upstream state, and otherwise one
+// canonical session is memoised per downstream identity.
+func (a *OpenCodeZen) Session(req Request, cred Credential) string {
+	a.init()
+
+	// A session supplied by the downstream client wins outright. It may be any
+	// length the upstream is willing to key on — the canonical CLI shape is not
+	// required of a value we did not mint, and upstream holds the cached state
+	// that id refers to. Validating it here would reject real client sessions
+	// and silently swap in a fresh one, discarding that state.
+	if native := strings.TrimSpace(headerFrom(cred, opencodeSessionHeader)); native != "" {
+		return native
+	}
+	if pid := strings.TrimSpace(cred.Extra["providerSessionId"]); pid != "" {
+		return pid
+	}
+
+	// Nothing supplied: mint a canonical id, stable per connection + model, so
+	// the prompt cache warms across turns instead of opening a session per turn.
+	return a.sessions.stable_(openCodeIdentityKey(cred))
+}
 
 const opencodeZenResponsesURL = "https://opencode.ai/inference/v1/responses"
 
@@ -111,7 +154,7 @@ func (a *OpenCodeZen) Headers(req Request, cred Credential) (map[string]string, 
 
 	// Three session aliases plus the canonical header. Upstream reads whichever it
 	// finds first, so all four must agree.
-	session := sessionHeaderValue("opencode-zen", req, cred)
+	session := a.Session(req, cred)
 	h[opencodeSessionHeader] = session
 	h["x-opencode-session-id"] = session
 	h["x-session-affinity"] = session

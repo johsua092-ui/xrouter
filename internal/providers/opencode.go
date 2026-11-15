@@ -151,14 +151,20 @@ func newOpenCodeSessions() *openCodeSessions {
 	}
 }
 
-// descendingTimeHex encodes time and a counter as a DESCENDING 12-hex value.
+// descendingTimeHex encodes time and a counter as a 12-hex value, matching the
+// OpenCode CLI's `~(timeMs * 0x1000 + counter) & 0xFFFFFFFFFFFF`.
 //
-// The inversion is what makes the field descending, and upstream depends on it:
-// a session minted now must sort before an older one. Emitting an ascending
-// encoding produces ids that decode to a future timestamp and are refused.
+// The expression is written here as `mask - x` rather than `^x & mask` because
+// Go's `^` is full-width two's complement while the Node original operates on a
+// BigInt: `~x & mask` on a BigInt equals `mask - x`, but on a uint64 it first
+// spreads the complement across all 64 bits and the 48-bit mask then keeps a
+// different set of bits. Since x = ms*4096 exceeds 48 bits for any modern
+// timestamp, writing the syntax instead of the arithmetic yields a different
+// value than the CLI produces for the same clock — the port and the CLI would
+// mint incompatible ids, which matters because both talk to one upstream.
 func descendingTimeHex(t time.Time, counter uint64) string {
-	v := uint64(t.UnixMilli())*0x1000 + counter
-	v = ^v & sessionPrefixMask
+	x := uint64(t.UnixMilli())*0x1000 + counter
+	v := (sessionPrefixMask - x) & sessionPrefixMask
 	return fmt.Sprintf("%012x", v)
 }
 

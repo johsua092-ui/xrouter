@@ -207,18 +207,66 @@ function isUsefulServiceProcessLog(line) {
     && !/messages|prompt|content/i.test(line);
 }
 
-function resolveOpencodeBin() {
+// Candidate locations for the OpenCode CLI binary, in priority order.
+//
+// The list is platform-built rather than a single hardcoded set because the
+// install location differs by platform and getting it wrong is silent: an
+// unresolved binary falls through to the bare name "opencode", which only works
+// when it happens to be on PATH. A miss surfaces as a daemon that never starts
+// and a 502 on the whole free lane, with nothing in the log naming the cause.
+//
+// Windows needs its own entries for three independent reasons:
+//   1. the file carries a .exe suffix, so a Unix-shaped path never matches;
+//   2. the per-user install lives under %LOCALAPPDATA%, not the home directory;
+//   3. an npm global install lands in %APPDATA%\npm as a .cmd/.ps1 shim, and a
+//      shim is what must be spawned (the underlying .js is not executable).
+//
+// Exported with an injectable platform/env so the Windows branch is reachable
+// and testable from a Unix host — an untestable platform branch is how this gap
+// survived.
+export function opencodeBinCandidates({
+  platform = process.platform,
+  env = process.env,
+  homedir = os.homedir(),
+} = {}) {
+  if (platform === "win32") {
+    // Joined with an explicit separator rather than path.join: path.join uses
+    // the separator of the host, so building Windows paths from a Unix host
+    // (tests, cross-platform tooling) produced a mixed "\" and "/" string.
+    // Windows accepts both at runtime, but a mixed form defeats the exact-string
+    // comparisons the suffix gate and callers rely on.
+    const win = (...parts) => parts.filter(Boolean).join("\\");
+    const local = env.LOCALAPPDATA || win(homedir, "AppData", "Local");
+    const roaming = env.APPDATA || win(homedir, "AppData", "Roaming");
+    const userProfile = env.USERPROFILE || homedir;
+    return [
+      win(local, "opencode", "bin", "opencode.exe"),
+      win(local, "Programs", "opencode", "opencode.exe"),
+      win(userProfile, ".opencode", "bin", "opencode.exe"),
+      win(roaming, "npm", "opencode.exe"),
+      win(roaming, "npm", "opencode.cmd"),
+      win(roaming, "npm", "opencode.ps1"),
+      win(userProfile, "scoop", "shims", "opencode.exe"),
+    ];
+  }
+
+  return [
+    "/usr/local/bin/opencode",
+    path.join(homedir, ".opencode", "bin", "opencode"),
+    "/usr/bin/opencode",
+    path.join(homedir, ".local", "bin", "opencode"),
+  ];
+}
+
+export function resolveOpencodeBin() {
   if (process.env.OPENCODE_BIN && fs.existsSync(process.env.OPENCODE_BIN)) {
     return process.env.OPENCODE_BIN;
   }
-  const candidates = [
-    "/usr/local/bin/opencode",
-    path.join(os.homedir(), ".opencode", "bin", "opencode"),
-    "/usr/bin/opencode",
-  ];
-  for (const c of candidates) {
+  for (const c of opencodeBinCandidates()) {
     if (fs.existsSync(c)) return c;
   }
+  // Nothing resolved. The bare name is the last resort: correct when the binary
+  // is on PATH, and the resulting spawn error is the only signal a caller gets.
   return "opencode";
 }
 
@@ -1157,11 +1205,18 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
     const env = buildOpenCodeServiceEnv({ proxyUrl, noProxy, apiKey });
 
       const bin = resolveOpencodeBin();
+      // shell:true is needed ONLY to launch a Windows npm shim (.cmd/.ps1),
+      // which is not directly executable. Unconditionally enabling it on win32
+      // is wrong twice over: a genuine .exe path containing spaces ("C:\Program
+      // Files\...") gets tokenised by cmd.exe and fails, and every argument
+      // becomes subject to shell metacharacter interpretation. Gating on the
+      // suffix keeps shell parsing off the path for real executables.
+      const needsShell = process.platform === "win32" && /\.(cmd|ps1)$/i.test(bin);
       const p = spawn(bin, ["serve", "--port", "0", "--print-logs"], {
         env,
         cwd: os.tmpdir(),
         stdio: ["ignore", "pipe", "pipe"],
-        shell: process.platform === "win32",
+        shell: needsShell,
       });
 
       let buffer = "";
