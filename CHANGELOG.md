@@ -1,5 +1,35 @@
 # v0.1.0 (2026-11-14)
 
+### Fixed — Antigravity model catalogue restored: pruning against a free-tier sample hid models higher tiers serve
+
+- **Reverted the catalogue trim from `4a31766`.** That revision reconciled
+  `open-sse/providers/registry/antigravity.js`, the `MODEL_SYNONYMS` /
+  `MODEL_PATTERNS` tables and several tests against one live
+  `v1internal:fetchAvailableModels` call — from a single `free-tier` account.
+  The inference made from it ("absent from this account" ⇒ "not served at all")
+  was wrong upward: a Pro or Ultra plan serves `gemini-4-argon-*`, the
+  `claude-*-5-5-*` family and the 3.6/3.7 flash ids, all of which the trim
+  removed from the dashboard.
+- **Restored.** `gemini-4-argon-{high,medium,low}` (and the unadorned alias),
+  `gemini-3.7-flash-*`, `gemini-3.6-flash-*`, `gemini-3.1-pro-low`,
+  `claude-sonnet-5-5-*`, `claude-opus-5-5-*` are advertised again; the 3.8 flash
+  tiers map back onto `gemini-3.8-flash-tiered(<tier>)`; the `-disabled` suffixed
+  gemini-4 spellings are dropped in favour of the enabled names a serving plan
+  answers. Synonym and pattern tables match the restored table — dropdown no
+  longer offers a name that folds silently onto a lower tier.
+- **Spoofing left untouched, deliberately.** The identity layer that shipped in
+  the same revision — IDE version stamping (`antigravityIdeVersion.js`,
+  `ANTIGRAVITY_IDE_VERSION` in `projectId.js`), the `BodyRewriter` /
+  `RewriteBody` UA+project rewrite in Go, `NON_CHAT_URL_PARTS`, and the
+  `URL_PATTERNS` generateContent matching — is preserved verbatim. Only the
+  model catalogue was reverted.
+- **Tests realigned to the restored catalogue** rather than to the trim:
+  `antigravity-ide-version`, `antigravity-tier-claude55`,
+  `antigravity-identity-spoof`, `gemini-38-integration`. Antigravity suite:
+  98 passed / 12 files, the single remaining failure (`gemini-36-integration`,
+  cloudcode host list) reproduced on the unmodified tree — pre-existing, not
+  caused by this revert.
+
 ### Fixed — Dashboard navbar crashed on every load: `ERR_INVALID_ARG_TYPE` from a dynamic route that never awaited its params
 
 - **`TypeError: Provided value cannot be bound to SQLite parameter 1.`** at

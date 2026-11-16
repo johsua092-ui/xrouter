@@ -147,10 +147,12 @@ describe("antigravity model catalogue — no dead aliases", () => {
     expect(badPatterns).toEqual([]);
   });
 
-  it("carries no claude 5.5 or gemini 3.6/3.7 ids, which are not served", async () => {
+  it("carries the full claude 5.5 and gemini 3.6/3.7 families again", async () => {
+    // Restored with the catalogue. These ids were pruned on a free-tier
+    // sample; a Pro/Ultra plan serves them, so they are advertised again.
     const registry = (await import("../../open-sse/providers/registry/antigravity.js")).default;
     const ids = registry.models.map((m) => m.id);
-    expect(ids.filter((id) => /5-5|5\.5/.test(id))).toEqual([]);
-    expect(ids.filter((id) => /3\.[67]-flash/.test(id))).toEqual([]);
+    expect(ids.filter((id) => /5-5|5\.5/.test(id)).length).toBeGreaterThan(0);
+    expect(ids.filter((id) => /3\.[67]-flash/.test(id)).length).toBeGreaterThan(0);
   });
 });

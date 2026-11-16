@@ -21,13 +21,12 @@ const helper = readFileSync(
 );
 
 describe("Antigravity: Claude 5.5 tier gating", () => {
-  it("does not advertise Claude 5.5, which the upstream tier does not serve", () => {
-    // Verified against a live fetchAvailableModels: the catalogue returns
-    // claude-opus-4-6-thinking and claude-sonnet-4-6 and no 5.5 id at all.
-    // Advertising 5.5 produced a guaranteed 404 on every request for it, which
-    // is indistinguishable from an identity rejection.
-    expect(registry).not.toContain('id: "claude-sonnet-5-5"');
-    expect(registry).not.toMatch(/id: "claude-(opus|sonnet)-5[-.]5/);
+  it("advertises Claude 5.5 again; absence from one tier is not absence", () => {
+    // Restored with the catalogue. A free-tier fetchAvailableModels does not
+    // list the 5.5 ids, but a Pro/Ultra plan serves them — that one sample was
+    // never evidence the models are gone.
+    expect(registry).toContain('id: "claude-sonnet-5-5"');
+    expect(registry).toMatch(/id: "claude-(opus|sonnet)-5[-.]5/);
   });
 
   it("keeps the 4.6 models so existing traffic keeps working", () => {
