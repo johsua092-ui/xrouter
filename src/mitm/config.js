@@ -67,16 +67,19 @@ function isChatRequest(tool, req) {
 
 // Synonym map: rawModel from request → canonical alias key in mitmAlias DB
 //
-// Values must name models that actually exist upstream (see the live
-// fetchAvailableModels note in registry/antigravity.js). Three groups were
-// rewritten after that sync:
-//   - claude 5.5 (all variants) → not served on this tier; folded onto the 4.6
-//     models so a client asking for 5.5 gets a working model instead of a 404.
-//   - gemini 3.6 / 3.7 flash → folded onto the 3.8 tier, which is what the
-//     upstream substitutes anyway.
-//   - self-referencing keys whose value was the same dead id (e.g.
-//     "gemini-3.7-flash-high" → "gemini-3.7-flash-high") were the worst case:
-//     they resolved successfully and then 404'd upstream.
+// Every value names a model the catalogue advertises (registry/antigravity.js).
+// The same revision that synced this table to a single free-tier account also
+// rewrote three groups against it, and all three are now returned to their
+// original targets:
+//   - claude 5.5 (all variants) → back to the 5.5 ids. Folding them onto 4.6
+//     only made sense while 5.5 was believed gone; a Pro/Ultra plan serves 5.5,
+//     so folding sent that traffic down a lower tier it never asked for.
+//   - gemini 3.6 / 3.7 flash → back to their own ids. The upstream answers
+//     these names directly; the rewrite to 3.8 pinned every caller to the 3.8
+//     tier regardless of what was requested.
+//   - self-referencing keys are correct here: the id resolves to itself because
+//     the model is advertised and served, and the request must reach upstream
+//     under that exact name.
 const MODEL_SYNONYMS = {
   antigravity: {
     "gemini-default": "gemini-3.8-flash-medium",
@@ -88,12 +91,12 @@ const MODEL_SYNONYMS = {
     "gemini-3.8-flash-high": "gemini-3.8-flash-high",
     "gemini-3.8-flash-medium": "gemini-3.8-flash-medium",
     "gemini-3.8-flash-low": "gemini-3.8-flash-low",
-    "gemini-3.7-flash-high": "gemini-3.8-flash-high",
-    "gemini-3.7-flash-medium": "gemini-3.8-flash-medium",
-    "gemini-3.7-flash-low": "gemini-3.8-flash-low",
-    "gemini-3.6-flash-high": "gemini-3.8-flash-high",
-    "gemini-3.6-flash-medium": "gemini-3.8-flash-medium",
-    "gemini-3.6-flash-low": "gemini-3.8-flash-low",
+    "gemini-3.7-flash-high": "gemini-3.7-flash-high",
+    "gemini-3.7-flash-medium": "gemini-3.7-flash-medium",
+    "gemini-3.7-flash-low": "gemini-3.7-flash-low",
+    "gemini-3.6-flash-high": "gemini-3.6-flash-high",
+    "gemini-3.6-flash-medium": "gemini-3.6-flash-medium",
+    "gemini-3.6-flash-low": "gemini-3.6-flash-low",
     "gemini-3.1-pro-high": "gemini-pro-agent",
     "gemini-3-pro-high": "gemini-pro-agent",
     "gemini-3-pro-low": "gemini-3.1-pro-low",
@@ -126,11 +129,10 @@ const MODEL_SYNONYMS = {
 // Pattern fallback: rawModel regex → canonical alias key (when exact + prefix match fail)
 // Order matters: more specific patterns first. Catches AG renamed variants (e.g. gemini-pro-agent)
 //
-// Every alias here MUST exist in registry/antigravity.js models[]. Aliases were
-// restored together with that table: the client-facing names a Pro/Ultra plan
-// serves are advertised again, so patterns point at them rather than folding
-// them onto a lower tier. Absence from the free-tier catalogue was never proof
-// a model is gone.
+// Every alias here MUST exist in registry/antigravity.js models[]. Aliases follow
+// that table: the names the catalogue advertises are the names these patterns
+// resolve to, so a matched request lands on the model the caller asked for and
+// not on a lower tier it was folded onto.
 const MODEL_PATTERNS = {
   antigravity: [
     { match: /flash.*extra.*low|extra.*low.*flash|flash.*low|low.*flash/i, alias: "gemini-3.8-flash-low" },
