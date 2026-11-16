@@ -52,12 +52,12 @@ export default {
     clientSecret: process.env.ANTIGRAVITY_OAUTH_CLIENT_SECRET || ANTIGRAVITY_OAUTH_CLIENT.clientSecret,
   },
   models: [
-    // Catalogue restored verbatim from the pre-4a31766 table. The previous
-    // revision pruned entries after comparing against a single free-tier
-    // account's `v1internal:fetchAvailableModels`; that account is the
-    // narrowest tier, so "absent from this account" was recorded as "not
-    // served at all" and models that a Pro/Ultra plan does serve were dropped
-    // from the dashboard. Absence from one tier is not evidence of absence.
+    // Catalogue restored verbatim from the pre-4a31766 table. That revision
+    // pruned entries after comparing against a single free-tier account's
+    // `v1internal:fetchAvailableModels`; the account is the narrowest tier, so
+    // "absent from this account" was recorded as "not served at all" and models
+    // a Pro/Ultra plan does serve were dropped from the dashboard. A free-tier
+    // fetch is the floor, not the ceiling.
     //
     // The gemini-4 generation is listed under its enabled names. Upstream
     // advertises the `-disabled` suffixed spelling to accounts that cannot use
