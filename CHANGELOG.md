@@ -1,5 +1,38 @@
 # v0.1.0 (2026-11-14)
 
+### Fixed — Dashboard navbar crashed on every load: `ERR_INVALID_ARG_TYPE` from a dynamic route that never awaited its params
+
+- **`TypeError: Provided value cannot be bound to SQLite parameter 1.`** at
+  `Object.get (src/lib/db/adapters/nodeSqliteAdapter.js:68)` via `connectionsRepo.js`
+  fired on each dashboard render (the navbar path that loads GLM gift cards and
+  ZCode status). Root cause was a Next.js 16 migration miss, not the database:
+  dynamic route `params` became an async Promise in Next 16, so a bare
+  `const { connectionId } = params;` reads `undefined`. That `undefined` travelled
+  into `SELECT * FROM providerConnections WHERE id = ?` as a bind value, and
+  `node:sqlite` — unlike `better-sqlite3`, which silently coerces — throws
+  outright. Reproduced in isolation: `bind undefined => ERR_INVALID_ARG_TYPE`,
+  `bind null => ok`.
+- **Caller-side repair (the real fix).** Added the missing `await` at all five
+  remaining sites: `src/app/api/usage/[connectionId]/glm-claim/route.js` (GET +
+  POST), `src/app/api/usage/[connectionId]/glm-reset-cards/route.js` (GET + POST),
+  and `src/app/api/usage/[connectionId]/zcode-bridge/route.js`. The sibling routes
+  (`route.js`, `claude-reset`, `codex-reset-credits`) already awaited, which is how
+  the regression hid — the pattern was known, three files were simply missed.
+  A repo-wide audit of `src/app/api/` now reports **zero** un-awaited `= params;`
+  across all 46 dynamic route handlers.
+- **Adapter-side belt (defence in depth).** `cleanParams()` in
+  `nodeSqliteAdapter.js` now maps `undefined → null`, so the two SQLite adapters
+  stay interchangeable no matter which one the driver chain selects. Documented
+  caveat: `WHERE col = NULL` is never true, so this converts a loud crash into a
+  zero-row lookup — it must not be the only repair, which is why the caller-side
+  `await` lands alongside it.
+- Verified: adapter harness 7/7 (undefined no longer throws, valid id still
+  resolves, NUL-byte stripping preserved on `run`/`get`/`all`), route harness 7/7
+  (all six `[connectionId]` handlers carry `await params`), and a Promise-resolution
+  simulation showing raw `params` yields `undefined` while `await params` yields the
+  real id. DB suite unchanged — the same 3 pre-existing `db-concurrent` atomicity
+  failures appear with the patch stashed, so no regression.
+
 ### Fixed — Antigravity 403 storm: quota cache went blind on free-tier accounts
 
 - **Free-tier Antigravity connections returned `[403]: HTTP 403` on nearly every
