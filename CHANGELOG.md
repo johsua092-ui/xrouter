@@ -499,6 +499,39 @@ route.
   `getDashboardAuthSession` export. Reproduced identically on the unmodified
   tree — pre-existing mock drift, unrelated to the guard fix above.
 
+### Fixed — `Auth guard unavailable` stuck forever: a promise cached its own failure and never retried
+
+- **Symptom.** Every dashboard request answered `{"error":"Auth guard unavailable"}`
+  (HTTP 503) until the process was restarted. One transient failure at boot — a
+  file briefly missing, an import that threw once — pinned the whole server.
+- **Root cause: the load slot cached failure, not just success.** `getGuardModule()`
+  guarded its work with `if (!guardModulePromise)`, so the module was imported at
+  most once per process. On any failure the promise resolved to `null` and stayed
+  assigned; the guard never ran again, and because the two call sites fail
+  *closed* by design (503 rather than opening the gates), the cached `null`
+  turned a one-off miss into a permanent outage.
+- **Fix.** The slot is now re-armed from the promise's own `finally`, and only
+  while it still points at that same promise — a settled failure clears the slot,
+  the next request loads again, and a slow in-flight load is never duplicated or
+  discarded. Fail-closed behaviour is unchanged: the current request still
+  answers 503, and nothing is served unauthenticated in the meantime.
+- **Second fix: the standalone layout no longer hard-fails the guard.** Both
+  paths were built with a bare `path.join(__dirname, ...)`. When the server runs
+  from `.next/standalone/` (the layout the production `start` script uses),
+  `__dirname` is the standalone directory and neither `scripts/auth-guard-hooks.mjs`
+  nor `src/dashboardGuard.js` lives directly under it — `existsSync` failed and
+  the guard reported itself unavailable on every request. Resolution now probes
+  `__dirname` and its parent, which covers both the repo root and standalone.
+- **Verified.** A fixture that starts with neither file present returns `null`
+  (fail-closed, correct); after the files appear, the very next call loads the
+  module instead of returning the cached `null`. Pre-fix the second call stayed
+  `null` forever. `node --check custom-server.js` clean.
+- **Not a regression from the catalogue revert.** `tests/unit/dashboard-guard.test.js`
+  reports 22 failures on a plain checkout: the suite's `vi.mock` for
+  `@/lib/auth/dashboardSession` predates that module gaining the
+  `getDashboardAuthSession` export. Reproduced identically on the unmodified
+  tree — pre-existing mock drift, unrelated to the guard fix above.
+
 ### Fixed — Antigravity model catalogue restored: pruning against a free-tier sample hid models higher tiers serve
 
 - **Reverted the catalogue trim from `4a31766`.** That revision reconciled
