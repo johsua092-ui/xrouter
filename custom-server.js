@@ -203,9 +203,11 @@ let guardModulePromise = null;
 function getGuardModule() {
   if (!guardModulePromise) {
     guardModulePromise = (async () => {
-      const hooksPath = path.join(__dirname, "scripts", "auth-guard-hooks.mjs");
-      const guardPath = path.join(__dirname, "src", "dashboardGuard.js");
-      if (!fs.existsSync(hooksPath) || !fs.existsSync(guardPath)) return null;
+      const dirs = [__dirname, path.join(__dirname, "..")];
+      const resolve = (rel) => dirs.map((d) => path.join(d, rel)).find((p) => fs.existsSync(p));
+      const hooksPath = resolve(path.join("scripts", "auth-guard-hooks.mjs"));
+      const guardPath = resolve(path.join("src", "dashboardGuard.js"));
+      if (!hooksPath || !guardPath) return null;
       require("node:module").register(pathToFileURL(hooksPath).href);
       return await import(pathToFileURL(guardPath).href);
     })().catch((error) => {
@@ -213,7 +215,16 @@ function getGuardModule() {
       return null;
     });
   }
-  return guardModulePromise;
+  // A failed load must not stay cached: the promise settles to null forever,
+  // and `if (!guardModulePromise)` never fires again — every later request then
+  // answers 503 "Auth guard unavailable" until the process restarts. Clearing
+  // the slot from the promise's own finally re-arms the next request, so a
+  // transient failure (files mid-rebuild, a bad import once) self-heals.
+  const pending = guardModulePromise;
+  pending.finally(() => {
+    if (guardModulePromise === pending) guardModulePromise = null;
+  });
+  return pending;
 }
 
 // M11 fix: normalize dot-segments before the skip test — the old unanchored
@@ -286,6 +297,8 @@ async function runAuthGuard(req, res) {
     if (!runAuthGuard._warned) {
       runAuthGuard._warned = true;
       // L2 fix: fail CLOSED — an unavailable guard must not open the gates.
+      // The load slot is re-armed on failure (see getGuardModule), so a
+      // transient miss does not pin every later request to this 503.
       console.error("[AuthGuard] guard unavailable — FAILING CLOSED with 503 (src/ missing?)");
     }
     denyService(res, 503, "Auth guard unavailable");
