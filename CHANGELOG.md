@@ -15,8 +15,24 @@
   `claude-sonnet-5-5-*`, `claude-opus-5-5-*` are advertised again; the 3.8 flash
   tiers map back onto `gemini-3.8-flash-tiered(<tier>)`; the `-disabled` suffixed
   gemini-4 spellings are dropped in favour of the enabled names a serving plan
-  answers. Synonym and pattern tables match the restored table — dropdown no
-  longer offers a name that folds silently onto a lower tier.
+  answers. The registry diff against `4a31766^` is now empty — 29 entries in,
+  29 entries restored.
+- **Second pass on `MODEL_SYNONYMS` (`3cd70b9`).** The first pass restored the
+  registry but left two carries of the same free-tier sync behind:
+  `gemini-3.6-flash-*` and `gemini-3.7-flash-*` still folded onto the 3.8 tier,
+  where the pre-`4a31766` table pointed them at their own ids. Upstream answers
+  those names directly, so folding pinned every 3.6/3.7 caller to 3.8
+  regardless of what was requested. Both families now resolve to themselves —
+  the registry advertises all six ids and `extractModel` already handled the
+  `3.6/3.7/3.8-flash-tiered` paths. Dropdown no longer offers a name that folds
+  silently onto a lower tier.
+- **Stale comments corrected in the same pass.** Both files still carried the
+  trim's narration ("claude 5.5 → not served on this tier", "gemini 3.6/3.7 →
+  folded onto the 3.8 tier", self-referencing keys described as "the worst
+  case" that "404'd upstream"). Those claims are the reason the table looked
+  trimmed; left in place they would have re-justified the trim to the next
+  reader. Rewritten to describe the restore and why one tier's fetch is the
+  floor, not the ceiling.
 - **Spoofing left untouched, deliberately.** The identity layer that shipped in
   the same revision — IDE version stamping (`antigravityIdeVersion.js`,
   `ANTIGRAVITY_IDE_VERSION` in `projectId.js`), the `BodyRewriter` /
@@ -25,10 +41,14 @@
   model catalogue was reverted.
 - **Tests realigned to the restored catalogue** rather than to the trim:
   `antigravity-ide-version`, `antigravity-tier-claude55`,
-  `antigravity-identity-spoof`, `gemini-38-integration`. Antigravity suite:
-  98 passed / 12 files, the single remaining failure (`gemini-36-integration`,
-  cloudcode host list) reproduced on the unmodified tree — pre-existing, not
-  caused by this revert.
+  `antigravity-identity-spoof`, `gemini-38-integration` — each assertion that
+  had been pinned to the trimmed set now asserts the restored set. Verified on
+  the restored tree: core Antigravity suite 66 passed / 5 files in 446 ms;
+  3.6 / 3.7 / 3.8 / claude-5.5 suites 17 passed / 3 files. The single failure
+  (`gemini-36-integration`, cloudcode host list) reproduces on the unmodified
+  tree — pre-existing, not caused by this revert. The full-suite run was
+  deliberately skipped: twelve parallel workers exhaust the box, and the
+  affected surface is verified file by file.
 
 ### Fixed — Dashboard navbar crashed on every load: `ERR_INVALID_ARG_TYPE` from a dynamic route that never awaited its params
 
