@@ -96,27 +96,27 @@ const MODEL_SYNONYMS = {
     "gemini-3.6-flash-low": "gemini-3.8-flash-low",
     "gemini-3.1-pro-high": "gemini-pro-agent",
     "gemini-3-pro-high": "gemini-pro-agent",
-    "gemini-3-pro-low": "gemini-pro-agent",
-    "claude-sonnet-5-5-high": "claude-sonnet-4-6",
-    "claude-sonnet-5-5-medium": "claude-sonnet-4-6",
-    "claude-sonnet-5-5-low": "claude-sonnet-4-6",
-    "claude-sonnet-5-5": "claude-sonnet-4-6",
-    "claude-sonnet-5.5": "claude-sonnet-4-6",
-    "claude-sonnet-5.5-high": "claude-sonnet-4-6",
-    "claude-sonnet-5.5-medium": "claude-sonnet-4-6",
-    "claude-sonnet-5.5-low": "claude-sonnet-4-6",
-    "claude-sonnet-5-5-thinking": "claude-sonnet-4-6",
-    "claude-sonnet-5.5-thinking": "claude-sonnet-4-6",
-    "claude-opus-5-5-high": "claude-opus-4-6-thinking",
-    "claude-opus-5-5-medium": "claude-opus-4-6-thinking",
-    "claude-opus-5-5-low": "claude-opus-4-6-thinking",
-    "claude-opus-5-5": "claude-opus-4-6-thinking",
-    "claude-opus-5.5": "claude-opus-4-6-thinking",
-    "claude-opus-5.5-high": "claude-opus-4-6-thinking",
-    "claude-opus-5.5-medium": "claude-opus-4-6-thinking",
-    "claude-opus-5.5-low": "claude-opus-4-6-thinking",
-    "claude-opus-5-5-thinking": "claude-opus-4-6-thinking",
-    "claude-opus-5.5-thinking": "claude-opus-4-6-thinking",
+    "gemini-3-pro-low": "gemini-3.1-pro-low",
+    "claude-sonnet-5-5-high": "claude-sonnet-5-5-high",
+    "claude-sonnet-5-5-medium": "claude-sonnet-5-5-medium",
+    "claude-sonnet-5-5-low": "claude-sonnet-5-5-low",
+    "claude-sonnet-5-5": "claude-sonnet-5-5",
+    "claude-sonnet-5.5": "claude-sonnet-5-5",
+    "claude-sonnet-5.5-high": "claude-sonnet-5-5-high",
+    "claude-sonnet-5.5-medium": "claude-sonnet-5-5-medium",
+    "claude-sonnet-5.5-low": "claude-sonnet-5-5-low",
+    "claude-sonnet-5-5-thinking": "claude-sonnet-5-5",
+    "claude-sonnet-5.5-thinking": "claude-sonnet-5-5",
+    "claude-opus-5-5-high": "claude-opus-5-5-high",
+    "claude-opus-5-5-medium": "claude-opus-5-5-medium",
+    "claude-opus-5-5-low": "claude-opus-5-5-low",
+    "claude-opus-5-5": "claude-opus-5-5",
+    "claude-opus-5.5": "claude-opus-5-5",
+    "claude-opus-5.5-high": "claude-opus-5-5-high",
+    "claude-opus-5.5-medium": "claude-opus-5-5-medium",
+    "claude-opus-5.5-low": "claude-opus-5-5-low",
+    "claude-opus-5-5-thinking": "claude-opus-5-5",
+    "claude-opus-5.5-thinking": "claude-opus-5-5",
     "claude-sonnet-4.6": "claude-sonnet-4-6",
     "claude-opus-4.6": "claude-opus-4-6-thinking",
     "claude-opus-4.6-thinking": "claude-opus-4-6-thinking",
@@ -126,29 +126,29 @@ const MODEL_SYNONYMS = {
 // Pattern fallback: rawModel regex → canonical alias key (when exact + prefix match fail)
 // Order matters: more specific patterns first. Catches AG renamed variants (e.g. gemini-pro-agent)
 //
-// Every alias here MUST exist in registry/antigravity.js models[]. Two whole
-// families were dropped after a live fetchAvailableModels: the claude 5.5 ids
-// and the 3.6 flash ids are not served on this tier at all, so patterns
-// pointing at them resolved to a guaranteed 404. The 3.7/3.5 flash ids are
-// folded onto the 3.8 tier instead — that remap is real, the upstream answers
-// 3.7 requests out of the 3.8 tier.
+// Every alias here MUST exist in registry/antigravity.js models[]. Aliases were
+// restored together with that table: the client-facing names a Pro/Ultra plan
+// serves are advertised again, so patterns point at them rather than folding
+// them onto a lower tier. Absence from the free-tier catalogue was never proof
+// a model is gone.
 const MODEL_PATTERNS = {
   antigravity: [
     { match: /flash.*extra.*low|extra.*low.*flash|flash.*low|low.*flash/i, alias: "gemini-3.8-flash-low" },
     { match: /flash.*medium|medium.*flash/i,                       alias: "gemini-3.8-flash-medium" },
     { match: /flash.*agent|agent.*flash|flash/i,                   alias: "gemini-3.8-flash-high" },
-    { match: /flash.*lite|lite.*flash/i,                           alias: "gemini-3.1-flash-lite" },
-    { match: /2[.]?5.*pro|pro.*2[.]?5/i,                           alias: "gemini-2.5-pro" },
-    { match: /2[.]?5.*flash.*think|think.*2[.]?5/i,                alias: "gemini-2.5-flash-thinking" },
-    { match: /2[.]?5.*flash/i,                                     alias: "gemini-2.5-flash" },
+    { match: /pro.*low|low.*pro/i,                                 alias: "gemini-3.1-pro-low" },
     { match: /gemini.*pro|pro.*gemini/i,                           alias: "gemini-pro-agent" },
-    { match: /opus.*4[.-]6|4[.-]6.*opus/i,                         alias: "claude-opus-4-6-thinking" },
+    { match: /opus.*5[.-]5.*high|5[.-]5.*opus.*high/i,             alias: "claude-opus-5-5-high" },
+    { match: /opus.*5[.-]5.*medium|5[.-]5.*opus.*medium/i,         alias: "claude-opus-5-5-medium" },
+    { match: /opus.*5[.-]5.*low|5[.-]5.*opus.*low/i,               alias: "claude-opus-5-5-low" },
+    { match: /sonnet.*5[.-]5.*high|5[.-]5.*sonnet.*high/i,         alias: "claude-sonnet-5-5-high" },
+    { match: /sonnet.*5[.-]5.*medium|5[.-]5.*sonnet.*medium/i,     alias: "claude-sonnet-5-5-medium" },
+    { match: /sonnet.*5[.-]5.*low|5[.-]5.*sonnet.*low/i,           alias: "claude-sonnet-5-5-low" },
+    { match: /opus.*5[.-]5|5[.-]5.*opus/i,                         alias: "claude-opus-5-5" },
+    { match: /sonnet.*5[.-]5|5[.-]5.*sonnet/i,                     alias: "claude-sonnet-5-5" },
     { match: /opus/i,                                              alias: "claude-opus-4-6-thinking" },
     { match: /sonnet|claude/i,                                     alias: "claude-sonnet-4-6" },
     { match: /gpt.*oss|oss/i,                                      alias: "gpt-oss-120b-medium" },
-    { match: /carbon/i,                                            alias: "gemini-4-carbon-disabled" },
-    { match: /hydrogen/i,                                          alias: "gemini-4-hydrogen-disabled" },
-    { match: /argon/i,                                             alias: "gemini-4-argon-disabled" },
   ],
 };
 

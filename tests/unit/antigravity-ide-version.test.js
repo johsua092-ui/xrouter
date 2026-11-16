@@ -104,12 +104,12 @@ describe("Antigravity IDE version override", () => {
     expect(result.headers["user-agent"]).toBe(IDE_UA);
   });
 
-  it("leaves the model catalogue advertising only live models", () => {
-    // A model the upstream answers with 404 "Requested entity was not found" is
-    // worse than an absent one — the error reads as an identity rejection.
+  it("advertises the full catalogue a higher-tier plan can serve", () => {
+    // Catalogue is NOT trimmed to what one free-tier account lists. A model
+    // missing from the narrowest tier is unverified, not absent — pruning it
+    // hides models a Pro/Ultra plan still serves.
     const ids = REGISTRY.models.map((m) => m.id);
-    expect(ids).not.toContain("gemini-4-argon-medium");
-    expect(ids.some((id) => /^gemini-4-argon/.test(id))).toBe(true);
-    expect(ids.filter((id) => /5-5/.test(id))).toEqual([]);
+    expect(ids).toContain("gemini-4-argon-medium");
+    expect(ids.filter((id) => /5-5/.test(id)).length).toBeGreaterThan(0);
   });
 });
