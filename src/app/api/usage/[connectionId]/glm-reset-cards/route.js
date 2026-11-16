@@ -47,7 +47,9 @@ async function refresh(connection, force, proxyOptions) {
 }
 
 export async function GET(request, { params }) {
-  const { connectionId } = params;
+  // Next.js 16 passes `params` as a Promise; awaiting it keeps connectionId a
+  // real string instead of undefined, which node:sqlite refuses to bind.
+  const { connectionId } = await params;
   const resolved = await resolveConnection(connectionId);
   if (resolved.response) return resolved.response;
 
@@ -80,7 +82,7 @@ export async function POST(request, { params }) {
     if (!validId(body.recordId)) return failure("invalid_record_id", "recordId must be a safe integer or non-blank string.");
     if (!["FIVE_HOUR", "WEEK"].includes(body.type)) return failure("invalid_type", "type must be FIVE_HOUR or WEEK.");
 
-    const { connectionId } = params;
+    const { connectionId } = await params;
     lockKey = `${connectionId}:${body.type}:${body.recordId}`;
     if (inFlight.has(lockKey)) return failure("concurrent_request", "A reset card redemption is already in progress for this card.", 409);
     inFlight.add(lockKey);

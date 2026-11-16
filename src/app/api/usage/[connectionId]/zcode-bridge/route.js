@@ -10,7 +10,9 @@ function sanitizeHtml(str) {
 }
 
 export async function GET(request, { params }) {
-  const { connectionId } = params;
+  // Next.js 16 passes `params` as a Promise; awaiting it keeps connectionId a
+  // real string instead of undefined, which node:sqlite refuses to bind.
+  const { connectionId } = await params;
   let connection = null;
 
   if (connectionId && connectionId !== "undefined" && connectionId !== "null" && connectionId !== "default") {

@@ -7,6 +7,14 @@ const CHECKPOINT_INTERVAL_MS = 60 * 1000;
 function cleanParams(params) {
   if (!params || !Array.isArray(params)) return params;
   return params.map((p) => {
+    // node:sqlite throws ERR_INVALID_ARG_TYPE ("Provided value cannot be bound
+    // to SQLite parameter N") on undefined, where better-sqlite3 coerces it to
+    // null silently. Normalising here keeps the two adapters interchangeable:
+    // a bind of undefined means "no value", which is null in SQL.
+    // Note `WHERE col = NULL` is never true, so this turns a loud crash into a
+    // zero-row lookup. The caller-side fix (awaiting dynamic route params) is
+    // the real repair; this is the belt to that suspenders.
+    if (p === undefined) return null;
     if (typeof p === "string" && p.includes("\0")) {
       return p.replace(/\0/g, "");
     }

@@ -102,7 +102,11 @@ async function refresh(connection, force, proxyOptions) {
  * GET: Preview claimable plans / gift cards for this connection
  */
 export async function GET(request, { params }) {
-  const { connectionId } = params;
+  // Next.js 16 hands `params` over as a Promise, so destructuring it directly
+  // reads `connectionId` as undefined. That undefined then reaches the SQLite
+  // adapter as a bind value, which node:sqlite rejects with
+  // ERR_INVALID_ARG_TYPE before the query ever runs. Await first.
+  const { connectionId } = await params;
   const resolved = await resolveConnection(connectionId, request);
   if (resolved.response) return resolved.response;
 
@@ -161,7 +165,7 @@ export async function POST(request, { params }) {
       return failure("missing_plan_id", "planId is required.");
     }
 
-    const { connectionId } = params;
+    const { connectionId } = await params;
 
     // Sweep & sync mode: check all GLM connections for ZCode Start Plan
     if (connectionId === "sync" || body.action === "sync_all" || planId === "sync") {
