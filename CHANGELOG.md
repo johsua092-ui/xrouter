@@ -612,6 +612,69 @@ route.
   `gemini-3.8-flash-high => 0% reset=…` (`PRE_FILTER: ARMED`). 18 Antigravity
   suites pass (123 tests), and the full unit suite is unchanged elsewhere.
 
+### Fixed — Dashboard navbar crashed on every load: `ERR_INVALID_ARG_TYPE` from a dynamic route that never awaited its params
+
+- **`TypeError: Provided value cannot be bound to SQLite parameter 1.`** at
+  `Object.get (src/lib/db/adapters/nodeSqliteAdapter.js:68)` via `connectionsRepo.js`
+  fired on each dashboard render (the navbar path that loads GLM gift cards and
+  ZCode status). Root cause was a Next.js 16 migration miss, not the database:
+  dynamic route `params` became an async Promise in Next 16, so a bare
+  `const { connectionId } = params;` reads `undefined`. That `undefined` travelled
+  into `SELECT * FROM providerConnections WHERE id = ?` as a bind value, and
+  `node:sqlite` — unlike `better-sqlite3`, which silently coerces — throws
+  outright. Reproduced in isolation: `bind undefined => ERR_INVALID_ARG_TYPE`,
+  `bind null => ok`.
+- **Caller-side repair (the real fix).** Added the missing `await` at all five
+  remaining sites: `src/app/api/usage/[connectionId]/glm-claim/route.js` (GET +
+  POST), `src/app/api/usage/[connectionId]/glm-reset-cards/route.js` (GET + POST),
+  and `src/app/api/usage/[connectionId]/zcode-bridge/route.js`. The sibling routes
+  (`route.js`, `claude-reset`, `codex-reset-credits`) already awaited, which is how
+  the regression hid — the pattern was known, three files were simply missed.
+  A repo-wide audit of `src/app/api/` now reports **zero** un-awaited `= params;`
+  across all 46 dynamic route handlers.
+- **Adapter-side belt (defence in depth).** `cleanParams()` in
+  `nodeSqliteAdapter.js` now maps `undefined → null`, so the two SQLite adapters
+  stay interchangeable no matter which one the driver chain selects. Documented
+  caveat: `WHERE col = NULL` is never true, so this converts a loud crash into a
+  zero-row lookup — it must not be the only repair, which is why the caller-side
+  `await` lands alongside it.
+- Verified: adapter harness 7/7 (undefined no longer throws, valid id still
+  resolves, NUL-byte stripping preserved on `run`/`get`/`all`), route harness 7/7
+  (all six `[connectionId]` handlers carry `await params`), and a Promise-resolution
+  simulation showing raw `params` yields `undefined` while `await params` yields the
+  real id. DB suite unchanged — the same 3 pre-existing `db-concurrent` atomicity
+  failures appear with the patch stashed, so no regression.
+
+### Fixed — Antigravity 403 storm: quota cache went blind on free-tier accounts
+
+- **Free-tier Antigravity connections returned `[403]: HTTP 403` on nearly every
+  request (938 of 1341 logged attempts).** Two independent defects stacked:
+  1. `getAntigravityUsage` skipped the entire per-model block for free-tier
+     accounts (`if (!isFreeTier && data.models)`), so the returned quota map was
+     `{}` for every free-tier read. `getAntigravityModelQuota()` then resolved
+     `null` at the auth pre-filter (`src/sse/services/auth.js`), which read as
+     "quota unknown" rather than "quota exhausted" — the account was never
+     skipped and each request burned a fresh upstream 403 that was then recorded
+     as an account error.
+  2. `refreshGoogleToken` swallowed every non-OK OAuth response into a bare
+     `return null`, so a revoked/`invalid_grant` refresh token was indistinguish-
+     able from a transient network blip. The connection kept a dead bearer and
+     retried forever instead of being flagged for reauth.
+
+  The per-model block now runs for all tiers; on free-tier it projects the weekly
+  family reading (`gemini_weekly` / `claude_gpt_weekly`) onto the per-model keys
+  instead of trusting `fetchAvailableModels`, which reports the weekly limit as if
+  it were a rolling window. `refreshAntigravityQuota` arms a short
+  `TOKEN_REJECTED — CACHE_BLOCK 300s` window whenever upstream rejects the bearer
+  (`authentication expired`, `invalid_grant`, `refresh_token*`), so the pre-filter
+  skips a known-dead token rather than hammering upstream. `refreshGoogleToken`
+  now classifies the OAuth failure (`permanent` + `code`) before returning.
+- **Verified:** `antigravity-freetier-quota-smoke` against the live account before
+  the fix resolved `null` for every model (`PRE_FILTER: BLIND`); after the fix the
+  same path returns 16 quota keys and the pre-filter resolves
+  `gemini-3.8-flash-high => 0% reset=…` (`PRE_FILTER: ARMED`). 18 Antigravity
+  suites pass (123 tests), and the full unit suite is unchanged elsewhere.
+
 ### Changed — Runtime upgraded to Next.js 16.4.2 / React 19.2.4
 
 - **The dashboard now builds and runs on Next.js 16 with React 19.** Twenty-four
