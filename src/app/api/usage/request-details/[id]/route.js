@@ -20,7 +20,10 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request, context) {
   try {
-    const id = context?.params?.id;
+    // Next.js 16 hands route handlers `params` as a Promise. Reading it
+    // synchronously yields undefined, and the guard below then answered 400
+    // "Missing request id" for every request that had a perfectly good id.
+    const { id } = await context.params;
     if (!id) {
       return NextResponse.json({ error: "Missing request id" }, { status: 400 });
     }

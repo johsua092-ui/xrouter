@@ -1,5 +1,46 @@
 # v0.1.0 (2026-11-14)
 
+### Fixed — Next.js 16 async request APIs read synchronously: three routes returned 400/500 every time
+
+- **Symptom A — request payload detail never loaded.** `GET /api/usage/request-details/[id]`
+  answered `{"error":"Missing request id"}` (400) for every id in the database. The
+  admin "what did this request actually send" view was dead.
+- **Symptom B — backup/restore polling never advanced.** `GET
+  /api/settings/database/jobs/[jobId]` answered `{"error":"Missing job id"}` (400) on
+  every poll, so the dashboard sat on a job that never reported progress or completion.
+- **Symptom C — `POST /api/shutdown` threw before checking its token.** `headers()` was
+  dereferenced directly, so `.get` was called on a Promise
+  (`TypeError: headers(...).get is not a function`). Production-only guard returns 403
+  earlier, so this surfaced in dev — the route could never authenticate.
+- **Root cause.** Next.js 16 returns `params` and `headers()` as Promises for route
+  handlers. Both routes read `context?.params?.id` / `context?.params?.jobId`
+  synchronously, which on a Promise is `undefined` — the `if (!id)` guard then treated
+  every well-formed request as malformed. Confirmed in the installed framework source,
+  not from docs: `node_modules/next/dist/server/request/params.js` —
+  `createRenderParamsInProd()` returns `makeUntrackedParams()`, which returns
+  `Promise.resolve(...)`; `app-route/module.d.ts` declares
+  `params?: Promise<Record<string, string | string[] | undefined>>`.
+- **Fix.** `const { id } = await context.params` and `const { jobId } = await context.params`;
+  `const authorization = (await headers()).get("authorization")`. The other 26 dynamic
+  API routes already awaited correctly — this was two files out of twenty-eight, which is
+  why the earlier sweep for `const { id } = params` missed them: both used the two-argument
+  `(request, context)` signature instead of destructuring in the parameter list.
+- **Also fixed — `defaultProps` on five function components.** React 19 ignores
+  `defaultProps` on function components and dropped every one of them silently:
+  `TrendCard`, `OverviewCards`, `Sparkline`, `ActivityHeatmap`, `AvailableModelsCard`.
+  `trend = []`, `title = ""`, `visible = false` and friends were therefore `undefined` at
+  render time, so `trend.length` and `.map()` calls could throw on the first mount. Each
+  was converted to an ES6 default parameter, which is the form React 19 honours.
+- **Audit scope.** Swept `src/` for the whole class rather than the reported instances:
+  `context?.params`, `params.` outside `await`, synchronous `cookies()`, `headers()`,
+  `draftMode()`, `searchParams` in server components, removed React 19 APIs
+  (`ReactDOM.render`, `findDOMNode`, `createFactory`, string refs, legacy lifecycles).
+  Remaining hits are all clean: every other dynamic route awaits, every `cookies()` call
+  awaits, and the two `searchParams` reads that looked synchronous are inside
+  `"use client"` components using `useSearchParams()`, which is not affected.
+- **Verified.** `grep -rn "context?.params\|headers().get\|defaultProps" src` now returns
+  zero hits. `next build` compiles the six touched files.
+
 ### Fixed — `Auth guard unavailable` stuck forever: a promise cached its own failure and never retried
 
 - **Symptom.** Every dashboard request answered `{"error":"Auth guard unavailable"}`

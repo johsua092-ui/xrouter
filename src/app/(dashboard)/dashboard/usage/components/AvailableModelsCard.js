@@ -44,7 +44,7 @@ function StatusPill({ status }) {
  * GET /api/usage/available-models, which narrows the shared catalog to this
  * key's allowedModels before answering.
  */
-export default function AvailableModelsCard({ visible }) {
+export default function AvailableModelsCard({ visible = false }) {
   const [models, setModels] = useState(null);
   const [meta, setMeta] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -122,8 +122,4 @@ export default function AvailableModelsCard({ visible }) {
 
 AvailableModelsCard.propTypes = {
   visible: PropTypes.bool,
-};
-
-AvailableModelsCard.defaultProps = {
-  visible: false,
 };
