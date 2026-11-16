@@ -7,7 +7,9 @@ export async function POST() {
   }
 
   const secret = process.env.SHUTDOWN_SECRET;
-  const authorization = headers().get("authorization");
+  // Next.js 15+ made headers() async; calling .get() on the returned Promise
+  // threw a TypeError before this route could ever compare the token.
+  const authorization = (await headers()).get("authorization");
 
   if (!secret || authorization !== `Bearer ${secret}`) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });

@@ -15,13 +15,13 @@ const fmtCost = (n) => `$${(n || 0).toFixed(2)}`;
 function TrendCard({
   label,
   value,
-  title,
+  title = "",
   icon,
   accentColor = "bg-border",
   tone = "text-text-main",
-  footnote,
+  footnote = null,
   trend = [],
-  trendLabel,
+  trendLabel = "",
   className,
 }) {
   return (
@@ -82,9 +82,7 @@ TrendCard.propTypes = {
   className: PropTypes.string,
 };
 
-TrendCard.defaultProps = { title: "", tone: "", footnote: null, trend: [], trendLabel: "" };
-
-export default function OverviewCards({ stats, trends }) {
+export default function OverviewCards({ stats, trends = null }) {
   const cacheHitRate =
     stats.totalPromptTokens > 0
       ? ((stats.totalCachedTokens || 0) / stats.totalPromptTokens) * 100
@@ -167,5 +165,3 @@ OverviewCards.propTypes = {
   stats: PropTypes.object.isRequired,
   trends: PropTypes.object,
 };
-
-OverviewCards.defaultProps = { trends: null };

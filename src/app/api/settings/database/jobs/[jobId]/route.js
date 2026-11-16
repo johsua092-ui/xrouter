@@ -12,7 +12,10 @@ function isCliRequest(request) {
 
 export async function GET(request, context) {
   try {
-    const jobId = context?.params?.jobId;
+    // Next.js 16 hands route handlers `params` as a Promise. Reading it
+    // synchronously yielded undefined, so every job poll answered 400 "Missing
+    // job id" and the dashboard never saw a backup/restore job again.
+    const { jobId } = await context.params;
     if (!jobId) {
       return NextResponse.json({ error: "Missing job id" }, { status: 400 });
     }

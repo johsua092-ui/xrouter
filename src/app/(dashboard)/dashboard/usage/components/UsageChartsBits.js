@@ -86,8 +86,6 @@ Sparkline.propTypes = {
   ariaLabel: PropTypes.string,
 };
 
-Sparkline.defaultProps = { values: [], height: 28, stroke: "currentColor", fill: true, ariaLabel: "" };
-
 export { bucketTimestampsByDowHour };
 
 const HEAT_STEPS = [1, 2, 3]; // opacity stops for 1+, 2+, 4+ requests
@@ -168,7 +166,5 @@ ActivityHeatmap.propTypes = {
   cell: PropTypes.number,
   gap: PropTypes.number,
 };
-
-ActivityHeatmap.defaultProps = { grid: [], max: 0, cell: 14, gap: 3 };
 
 export default Sparkline;
