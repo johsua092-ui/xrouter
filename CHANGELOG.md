@@ -499,6 +499,37 @@ route.
   `getDashboardAuthSession` export. Reproduced identically on the unmodified
   tree — pre-existing mock drift, unrelated to the guard fix above.
 
+### Fixed — dashboard rendered a blank white screen: every JS chunk 404'd from the standalone build
+
+- **Symptom.** Opening `/dashboard` showed a white page frozen on `Loading...` forever.
+  No crash, no error page — the HTML shell loaded, the app never booted. First reported
+  as "layar freeze warna putih", which is exactly what it looks like from the browser.
+- **Root cause.** The production process serves `.next/standalone/` (`xrouter.service`
+  sets `WorkingDirectory=/root/xrouter`, and `custom-server.js` prefers
+  `server.js`/`.next/standalone/server.js`). A fresh `next build` regenerates
+  `.next/static/chunks/*` under `.next/`, but Next does **not** copy the client bundle
+  into the standalone tree — that has always been a manual copy step
+  (`cp -r .next/static .next/standalone/.next/static`, plus `public/`). After this
+  rebuild the copy was missed, so `standalone/.next/static/chunks/` contained **0 files**
+  against 74 in the real build. The HTML referenced the correct hashed filenames, but
+  every `GET /_next/static/chunks/*.js` answered 404, so no client code ever executed
+  and React had nothing to hydrate.
+- **How it was caught.** Not from logs — the server journal was clean, `/dashboard`
+  answered a healthy `307` and `/login` a `200` in 19ms. Reproduced in a real browser
+  and compared: the shell rendered, `document.body.innerText` was only `Loading...`,
+  and all twelve `<script src>` entries returned **404** when re-fetched. That isolated
+  it to asset delivery rather than the auth guard, a React error, or a slow origin.
+- **Fix.** Copied `.next/static` and `public/` into the standalone tree after the build.
+  `standalone/.next/static/chunks/` now holds all 74 files, `public/` all 18 entries;
+  `GET /_next/static/chunks/20n_drg1zb0_1.js` answers `200` with 31016 bytes.
+  Verified in the browser: the login page renders in full, all twelve chunks return
+  `200`, and `/dashboard` unauthenticated redirects to `/login` instead of hanging.
+- **Note for the next rebuild.** This step is not automated by Next and is easy to lose
+  again: after `next build`, always
+  `cp -a .next/static .next/standalone/.next/static` and
+  `cp -a public .next/standalone/public` before restarting the service. Build output
+  stays gitignored, so the copy is deployment state, not a commit.
+
 ### Fixed — Next.js 16 async request APIs read synchronously: three routes returned 400/500 every time
 
 - **Symptom A — request payload detail never loaded.** `GET /api/usage/request-details/[id]`
