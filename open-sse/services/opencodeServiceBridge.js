@@ -93,9 +93,13 @@ function registerDaemon(poolKey, info) {
  */
 function abandonDaemon(p, detach) {
   try { detach?.(); } catch {}
+  // Kill FIRST, then reap the descriptor. Destroying the read end while the
+  // process is still alive gives it a SIGPIPE on its next log flush, which kills
+  // it on Google's side of the handshake instead of ours — we lose the exit code
+  // and the log line that explains why. Signal, then clean up.
+  try { p?.kill?.("SIGKILL"); } catch {}
   try { p?.stdout?.destroy?.(); } catch {}
   try { p?.stderr?.destroy?.(); } catch {}
-  try { p?.kill?.("SIGKILL"); } catch {}
 }
 
 function isDaemonBusy(info) {
@@ -117,9 +121,18 @@ function scheduleDaemonReaper(poolKey, info) {
       scheduleDaemonReaper(poolKey, info);
       return;
     }
+    // Identity check before eviction. A reaper that outlived its daemon used to
+    // delete whatever occupied this poolKey at fire time, disowning a live
+    // replacement process. Only reclaim the slot if it still holds THIS entry.
+    const current = proxyDaemonPool.get(poolKey);
+    if (current !== info) {
+      dbg("OPENCODE_SVC", `Reaper for ${poolKey} is stale (slot re-registered); skipping`);
+      return;
+    }
     dbg("OPENCODE_SVC", `Reaping idle on-demand daemon for ${poolKey}`);
-    try { info.process?.kill?.(); } catch {}
     proxyDaemonPool.delete(poolKey);
+    info.reaperTimer = null;
+    try { info.process?.kill?.(); } catch {}
     // Close and evict all active sessions attached to this reaped daemon
     for (const [key, session] of serviceSessionPool) {
       if (session?.service?.url === info.url) {
@@ -1235,8 +1248,17 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
       scheduleDaemonReaper(poolKey, existing);
       return existing;
     }
-    try { existing.process.kill(); } catch {}
+    // The cached entry is dead or unreachable. Retire it completely: the reaper
+    // timer from its registration is still armed, and if we leave it running it
+    // fires later and blindly deletes whatever now sits under this poolKey —
+    // evicting a HEALTHY replacement daemon from the pool while its process
+    // keeps running untracked. That is a leak dressed up as a cleanup.
     proxyDaemonPool.delete(poolKey);
+    if (existing.reaperTimer) {
+      clearTimeout(existing.reaperTimer);
+      existing.reaperTimer = null;
+    }
+    try { existing.process.kill(); } catch {}
   }
 
   // Single-flight: two concurrent requests for the same poolKey must share one
@@ -1276,11 +1298,19 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
 
       // Stop reading daemon output. Called on success (logs no longer needed) and
       // on abandonment (process is being killed anyway).
+      //
+      // removeListener alone is the whole job: once no reader is attached the
+      // pipe is inert. Calling .destroy() on top of it closes the read end of a
+      // pipe whose writer is STILL LIVE (`opencode serve --print-logs` keeps
+      // running after we resolve), so the daemon's next log write raises SIGPIPE
+      // and kills it without a trace. Detaching must never become a kill signal.
       const detachLogPipes = () => {
         try { p.stdout?.removeListener("data", onData); } catch {}
         try { p.stderr?.removeListener("data", onData); } catch {}
-        try { p.stdout?.destroy?.(); } catch {}
-        try { p.stderr?.destroy?.(); } catch {}
+        // Drain rather than close: keep the fd open so the writer never sees a
+        // broken pipe, but drop the bytes on the floor so nothing buffers.
+        try { p.stdout?.resume?.(); } catch {}
+        try { p.stderr?.resume?.(); } catch {}
       };
 
       const onData = (data) => {
