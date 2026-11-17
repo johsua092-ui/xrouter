@@ -1,5 +1,59 @@
 # v0.1.0 (2026-11-17)
 
+### Fixed — Antigravity MITM certificate trust (Go backend rejected the Root CA)
+
+Antigravity's backend failed every call with:
+
+```
+Post "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist":
+tls: failed to verify certificate: x509: certificate signed by unknown authority
+```
+
+The error text is from Go's `net/http`/`crypto/tls`, which is the tell: the process
+reaching Cloud Code is `language_server.exe`, a Go binary — not the Electron shell. Three
+defects combined to produce it, and a fourth was found while fixing the third.
+
+- **Symptom 1 — the cert was installed and trusted, yet Go still refused it.**
+- **Root cause 1.** `manager.js` only exported `NODE_EXTRA_CA_CERTS` so "Node-based GUI apps
+  trust the MITM cert". Go's `crypto/x509` does not read that variable at all — on Windows it
+  consults the system root store (which *was* updated) but ignores `NODE_EXTRA_CA_CERTS`.
+  Go reads `SSL_CERT_FILE` from the process environment. Without it, `language_server.exe`
+  had no path to the MITM Root CA regardless of the Windows store being correct.
+- **Fix.** `startServer` now sets **both** `NODE_EXTRA_CA_CERTS` (Electron) **and**
+  `SSL_CERT_FILE` (Go) on Windows via `setx` and on macOS via `launchctl setenv`, guarded by
+  `fs.existsSync(rootCA.crt)` — Go will not fall back to the system store when
+  `SSL_CERT_FILE` points at a missing file, so an unguarded path would be worse than none.
+  `stopServer` clears both, so no stale trust survives MITM being switched off.
+
+- **Symptom 2 — the dashboard showed "cert not trusted" while MITM served a cert from a
+  different directory entirely.**
+- **Root cause 2.** `src/lib/dataDir.js` rejects Unix-style `DATA_DIR` values on Windows
+  (`/var/lib/xrouter` → `%APPDATA%\xrouter`). `src/mitm/paths.js` had no such guard, so with a
+  Linux-targeted `.env` the dashboard read `%APPDATA%\xrouter\mitm` while the MITM server
+  created and served certs from `D:\var\lib\xrouter\mitm`. The UI status could never match
+  the cert in use.
+- **Fix.** `paths.js` now applies the identical guard and fallback wording. A third offender
+  found during the fix: `src/lib/mitmAliasCache.js` read `process.env.DATA_DIR` raw, bypassing
+  the guard entirely; it now imports `DATA_DIR` from `dataDir.js` so all consumers resolve one
+  directory.
+
+- **Symptom 3 — "Trust Certificate" in the dashboard returned HTTP 403 on Windows even when
+  the user was happy to approve a UAC prompt.**
+- **Root cause 3.** The route checked `checkPrivilege()` before the `action === "trust-cert"`
+  branch, so a non-admin X Router returned 403 and the UAC path in `winElevated.js`
+  (`Start-Process -Verb RunAs`) never ran. The certificate was therefore never installed
+  automatically.
+- **Fix.** The admin gate is skipped only for `win32 && action === "trust-cert"`, letting the
+  existing elevation path show the UAC prompt. `enable`/`disable` still require real admin, and
+  `trustCert` in `manager.js` still demands a sudo password off Windows instead of silently
+  running unprivileged.
+
+Verified by a revert test (guard disabled → 2 tests fail → guard restored → green), a 14-test
+unit suite, a 6-case runtime smoke test that executes the real resolver with `platform` faked
+to `win32`, a production `npm run build`, and a live server on `:28080` exercising the route
+(401 before 500; no regression on switch enable/disable). Production on `:20128` was not
+touched.
+
 ### Fixed — five OpenCode resource-lifetime leaks (audit round 2)
 
 Second audit pass over `opencodeServiceBridge.js` / `opencodeTlsClient.js` after the

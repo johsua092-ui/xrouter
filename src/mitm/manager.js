@@ -657,21 +657,38 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
     mitmLastStartTime = Date.now();
   }
 
-  // Set NODE_EXTRA_CA_CERTS so Node-based GUI apps (Electron/AG language_server) trust MITM cert
-  if (IS_MAC) {
-    const rootCAPath = path.join(MITM_DIR, "rootCA.crt");
-    if (fs.existsSync(rootCAPath)) {
+  // Point GUI apps at the MITM Root CA before they connect.
+  //
+  // Two runtimes read the trust anchors differently, and Antigravity needs BOTH:
+  //   • NODE_EXTRA_CA_CERTS — Electron/Node. Read at process start, so it must be
+  //     set as a persistent user env var; a restart of the IDE picks it up.
+  //   • SSL_CERT_FILE — Go's crypto/x509. The Antigravity backend that actually
+  //     calls cloudcode-pa.googleapis.com is `language_server.exe`, a pure Go
+  //     binary. Go ignores NODE_EXTRA_CA_CERTS entirely, so without this the
+  //     loadCodeAssist request fails with "x509: certificate signed by unknown
+  //     authority" even though the cert is in the Windows store.
+  // Go reads SSL_CERT_FILE only when it is set in the process environment (it
+  // does not fall back to it if the file is unreadable), so the path must be
+  // correct and the file present — hence the existsSync guard on both.
+  const rootCAPath = path.join(MITM_DIR, "rootCA.crt");
+  if (fs.existsSync(rootCAPath)) {
+    if (IS_MAC) {
       exec(`launchctl setenv NODE_EXTRA_CA_CERTS "${rootCAPath}"`, { windowsHide: true }, (e) => {
         if (e) log(`[launchctl] Failed to set NODE_EXTRA_CA_CERTS: ${e.message}`);
         else log(`[launchctl] NODE_EXTRA_CA_CERTS set to ${rootCAPath}`);
       });
-    }
-  } else if (IS_WIN) {
-    const rootCAPath = path.join(MITM_DIR, "rootCA.crt");
-    if (fs.existsSync(rootCAPath)) {
+      exec(`launchctl setenv SSL_CERT_FILE "${rootCAPath}"`, { windowsHide: true }, (e) => {
+        if (e) log(`[launchctl] Failed to set SSL_CERT_FILE: ${e.message}`);
+        else log(`[launchctl] SSL_CERT_FILE set to ${rootCAPath}`);
+      });
+    } else if (IS_WIN) {
       exec(`setx NODE_EXTRA_CA_CERTS "${rootCAPath}"`, { windowsHide: true }, (e) => {
         if (e) log(`[setx] Failed to set NODE_EXTRA_CA_CERTS: ${e.message}`);
         else log(`[setx] NODE_EXTRA_CA_CERTS set for current user`);
+      });
+      exec(`setx SSL_CERT_FILE "${rootCAPath}"`, { windowsHide: true }, (e) => {
+        if (e) log(`[setx] Failed to set SSL_CERT_FILE: ${e.message}`);
+        else log(`[setx] SSL_CERT_FILE set for current user (Go binaries: language_server.exe, gcloud)`);
       });
     }
   }
@@ -796,16 +813,26 @@ async function stopServer(sudoPassword) {
     await removeAllDNSEntries(sudoPassword);
   }
 
-  // Unset NODE_EXTRA_CA_CERTS so apps don't keep trusting stale MITM cert
+  // Unset the trust-anchor overrides so apps don't keep trusting a stale MITM
+  // cert after MITM is off (and so a deleted rootCA.crt can't be referenced).
+  // Both vars were set in startServer; both must be cleared here.
   if (IS_MAC) {
     exec(`launchctl unsetenv NODE_EXTRA_CA_CERTS`, { windowsHide: true }, (e) => {
       if (e) log(`[launchctl] Failed to unset NODE_EXTRA_CA_CERTS: ${e.message}`);
       else log(`[launchctl] NODE_EXTRA_CA_CERTS unset`);
     });
+    exec(`launchctl unsetenv SSL_CERT_FILE`, { windowsHide: true }, (e) => {
+      if (e) log(`[launchctl] Failed to unset SSL_CERT_FILE: ${e.message}`);
+      else log(`[launchctl] SSL_CERT_FILE unset`);
+    });
   } else if (IS_WIN) {
     exec(`reg delete HKCU\\Environment /F /V NODE_EXTRA_CA_CERTS`, { windowsHide: true }, (e) => {
       if (e) log(`[reg] Failed to unset NODE_EXTRA_CA_CERTS: ${e.message}`);
       else log(`[reg] NODE_EXTRA_CA_CERTS unset`);
+    });
+    exec(`reg delete HKCU\\Environment /F /V SSL_CERT_FILE`, { windowsHide: true }, (e) => {
+      if (e) log(`[reg] Failed to unset SSL_CERT_FILE: ${e.message}`);
+      else log(`[reg] SSL_CERT_FILE unset`);
     });
   }
 
@@ -847,12 +874,16 @@ async function trustCert(sudoPassword) {
   const rootCACertPath = path.join(MITM_DIR, "rootCA.crt");
   if (!fs.existsSync(rootCACertPath)) throw new Error("Root CA not found. Start server first to generate it.");
   const { installCert } = require("./cert/install");
+  // Windows elevates itself: installCertWindows wraps certutil in
+  // Start-Process -Verb RunAs (UAC), so no sudo password applies there.
   if (!IS_WIN && !IS_MAC && !isSudoAvailable()) {
     log(`🔐 Cert: system trust unavailable (no sudo). Use file: ${rootCACertPath}`);
     return;
   }
   const password = sudoPassword || getCachedPassword() || await loadEncryptedPassword();
-  if (!password && isSudoPasswordRequired()) throw new Error("Sudo password required to trust certificate");
+  // macOS/Linux install through execWithPassword; with no password it would
+  // silently run unprivileged and fail, so require one up front.
+  if (!IS_WIN && !password && isSudoPasswordRequired()) throw new Error("Sudo password required to trust certificate");
   await installCert(password, rootCACertPath);
   if (password) setCachedPassword(password);
 }

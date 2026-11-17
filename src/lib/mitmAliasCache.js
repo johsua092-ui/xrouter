@@ -3,13 +3,14 @@
 // and after every UI write.
 import fs from "fs";
 import path from "path";
-import os from "os";
+import { DATA_DIR } from "./dataDir.js";
 
-const DATA_DIR = process.env.DATA_DIR
-  || (process.platform === "win32"
-    ? path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "xrouter")
-    : path.join(os.homedir(), ".xrouter"));
-
+// DATA_DIR comes from src/lib/dataDir.js so this cache resolves the SAME
+// directory as the rest of the app. It used to read the env var directly,
+// which on Windows honoured a Unix-style .env value like /var/lib/xrouter — the
+// same split that made the MITM server and the dashboard disagree about where
+// the certs live. One resolver, one path. This module is ESM (see package.json
+// "type": "module") and is imported from Next.js routes, so the alias matches.
 const CACHE_FILE = path.join(DATA_DIR, "mitm", "aliases.json");
 
 function writeAtomic(data) {
