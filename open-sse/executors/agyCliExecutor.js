@@ -20,7 +20,7 @@
  */
 import { buildErrorBody } from "../utils/error.js";
 import { ANTIGRAVITY_DEFAULT_SYSTEM } from "../config/appConstants.js";
-import { AgyTurnError, runAgyPrompt } from "../services/agyCliAcp.js";
+import { AgyTurnError, runAgyPrompt, scheduleStandbyPrewarm } from "../services/agyCliAcp.js";
 import { homeOf, inAccount } from "../services/agyCliPlatform.js";
 import { antigravityBodyToMessages } from "../services/agyPromptRender.js";
 import { classify429, decide429, SHORT_COOLDOWN_MS } from "../services/antigravity429Engine.js";
@@ -44,6 +44,10 @@ export function resolveAgyTransport(credentials, env = process.env) {
         return perConnection.trim().toLowerCase() === "acp" ? "acp" : "http";
     }
     return /^acp$/i.test((env.AGY_CLI_TRANSPORT || "").trim()) ? "acp" : "http";
+}
+
+if (!process.env.NEXT_PHASE && resolveAgyTransport(null) === "acp") {
+    scheduleStandbyPrewarm();
 }
 /** The tools the client declared, from the translated Antigravity envelope. */
 export function declaredTools(body) {

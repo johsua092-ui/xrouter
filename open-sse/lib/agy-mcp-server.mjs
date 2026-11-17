@@ -149,6 +149,7 @@ function controlRequest(payload) {
     }
 
     request.socket = socket;
+    socket.setNoDelay?.(true);
     socket.setEncoding("utf8");
     let buffer = "";
 
@@ -220,6 +221,7 @@ function startWatch() {
     return;
   }
   watchSocket = socket;
+  socket.setNoDelay?.(true);
   socket.setEncoding("utf8");
   let buffer = "";
   socket.on("connect", () => {
