@@ -57,7 +57,7 @@ describe("opencode daemon pool — lifetime invariants", () => {
 
     it("deletes the pool slot BEFORE killing, and clears its own handle", () => {
       const del = reaper.indexOf("proxyDaemonPool.delete(poolKey)");
-      const kill = reaper.indexOf("info.process?.kill");
+      const kill = reaper.indexOf("killDaemonProcess(info.process)");
       expect(del).toBeGreaterThan(-1);
       expect(kill).toBeGreaterThan(-1);
       expect(del).toBeLessThan(kill);
@@ -91,7 +91,10 @@ describe("opencode daemon pool — lifetime invariants", () => {
     const abandon = body("abandonDaemon");
 
     it("signals BEFORE reaping descriptors", () => {
-      const kill = abandon.indexOf('kill?.("SIGKILL")');
+      // Kill now routes through killDaemonProcess() so Windows gets the
+      // taskkill /T tree walk; ordering against the pipe teardown is what this
+      // test guards.
+      const kill = abandon.indexOf("killDaemonProcess(p)");
       const destroy = abandon.indexOf("stdout?.destroy");
       expect(kill).toBeGreaterThan(-1);
       expect(destroy).toBeGreaterThan(-1);
@@ -107,9 +110,12 @@ describe("opencode daemon pool — lifetime invariants", () => {
       expect(block).toMatch(/existing\.reaperTimer/);
       expect(block).toMatch(/clearTimeout\(existing\.reaperTimer\)/);
       expect(block).toMatch(/proxyDaemonPool\.delete\(poolKey\)/);
-      // Deletion must precede the kill for the same reason as the reaper.
+      // Deletion must precede the kill for the same reason as the reaper. The
+      // kill itself now goes through killDaemonProcess().
       const del = block.indexOf("proxyDaemonPool.delete(poolKey)");
-      const kill = block.indexOf("existing.process.kill()");
+      const kill = block.indexOf("killDaemonProcess(existing.process)");
+      expect(del).toBeGreaterThan(-1);
+      expect(kill).toBeGreaterThan(-1);
       expect(del).toBeLessThan(kill);
     });
   });

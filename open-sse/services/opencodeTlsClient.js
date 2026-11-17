@@ -224,11 +224,42 @@ function sessionKeyFor(proxyUrl = "") {
   return normalizeProxyUrl(proxyUrl) || "direct";
 }
 
+/**
+ * Bound on cached TLS sessions.
+ *
+ * A rotating proxy (e.g. `http://user-session123:pass@proxy.com`) mints a new
+ * cacheKey per rotation, and each miss allocates a native wreq/Rust session.
+ * That allocation lives OUTSIDE the V8 heap, so Node's GC never reclaims it —
+ * an unbounded cache turns proxy rotation into a slow native-memory leak. The
+ * sibling pools (`proxyDaemonPool`, `serviceSessionPool`) are already capped;
+ * this one was missed.
+ */
+const MAX_TLS_SESSIONS = 32;
+
+/** Close and drop every session except `keepKey`, oldest-first (Map is ordered). */
+function evictTlsSessionsOverCap(keepKey) {
+  while (sessionCache.size > MAX_TLS_SESSIONS) {
+    let victimKey = null;
+    for (const key of sessionCache.keys()) {
+      if (key !== keepKey) { victimKey = key; break; }
+    }
+    if (victimKey === null) break;
+    const promise = sessionCache.get(victimKey);
+    sessionCache.delete(victimKey);
+    // Sessions may still be in-flight when evicted; close on settle.
+    promise?.then((s) => s?.close?.()).catch(() => {});
+  }
+}
+
 async function getSession(proxyUrl = "") {
   const normalizedProxy = normalizeProxyUrl(proxyUrl);
   const cacheKey = sessionKeyFor(proxyUrl);
   if (sessionCache.has(cacheKey)) {
-    return sessionCache.get(cacheKey);
+    // Refresh LRU position so a hot proxy is not evicted ahead of a cold one.
+    const hit = sessionCache.get(cacheKey);
+    sessionCache.delete(cacheKey);
+    sessionCache.set(cacheKey, hit);
+    return hit;
   }
 
   const promise = (async () => {
@@ -257,6 +288,7 @@ async function getSession(proxyUrl = "") {
   });
 
   sessionCache.set(cacheKey, promise);
+  evictTlsSessionsOverCap(cacheKey);
   return promise;
 }
 

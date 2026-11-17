@@ -1,5 +1,73 @@
 # v0.1.0 (2026-11-17)
 
+### Fixed — five OpenCode resource-lifetime leaks (audit round 2)
+
+Second audit pass over `opencodeServiceBridge.js` / `opencodeTlsClient.js` after the
+fork-bomb fix. All five findings were reproduced against the source at `35953b9` and
+verified by a revert test (fix removed → new test fails → fix restored → green).
+
+- **Symptom A — server RSS climbed steadily on hosts using rotating proxies.** No request
+  was in flight, the daemon pool was within its cap of 4, and the V8 heap was flat, yet
+  memory kept growing until the box was restarted.
+- **Root cause A.** `opencodeTlsClient.js` cached sessions in an unbounded
+  `const sessionCache = new Map()`. Every distinct `proxyUrl` — a rotating residential
+  proxy mints a new one per rotation — was a cache miss and allocated a fresh native
+  wreq/Rust TLS session. That allocation lives outside the V8 heap, so Node's GC never
+  reclaims it. `proxyDaemonPool` (4) and `serviceSessionPool` (100) were both capped; this
+  cache was the one that was missed.
+- **Fix A.** `MAX_TLS_SESSIONS = 32` with an LRU eviction pass that calls `close()` on every
+  session it drops (closing is the actual fix — the cap only makes closing happen), and
+  cache hits are re-inserted so a hot proxy is not the first evicted.
+
+- **Symptom B — orphaned `opencode.exe` processes on Windows, each holding ~175 MB and the
+  daemon port.** Killing a daemon appeared to succeed, the pool counted it as gone, yet the
+  process survived and the next start collided on the port.
+- **Root cause B.** Daemons spawn with `shell: process.platform === "win32"`, so
+  `child.pid` belongs to `cmd.exe`, not `opencode.exe`. `child.kill()` reaps the shell and
+  leaves the grandchild running. `opencodeCliRunner.js` already solved this with
+  `taskkill /F /T /PID`; the bridge was never given the same treatment.
+- **Fix B.** New `killDaemonProcess()` helper uses the same `taskkill /F /T` tree walk on
+  Windows and `SIGKILL` elsewhere, and **every** daemon-kill site now routes through it —
+  LRU eviction, daemon reaper, unhealthy-entry retirement, and `abandonDaemon`. A partial
+  migration would have left the orphan open on whichever path kept the old call, so the
+  regression test asserts no direct `.kill()` remains.
+
+- **Symptom C — pooled sessions on an externally managed daemon held live connections
+  forever.** Each session pins one long-poll `/api/event` reader plus one client-MCP
+  WebSocket. Nothing ever released them.
+- **Root cause C.** A daemon started via `getOpencodeServiceInfo()` is never entered into
+  `proxyDaemonPool`, so `scheduleDaemonReaper` never sees it — and never sees the sessions
+  hanging off it either. `serviceSessionPool` had a size cap (100) but no TTL, so abandoned
+  sessions accumulated until the cap filled instead of being reclaimed.
+- **Fix C.** 30-minute idle TTL swept every 5 minutes by an unref'd interval. Turn
+  boundaries (`beginTurn`/`endTurn`) and upstream events now stamp `lastUsedAt`, and the
+  sweeper skips any session that owns in-flight work (`inFlight` | `activeTurn` |
+  `pendingCalls` | `queuedCalls`) — a session mid-turn must never be closed under itself.
+
+- **Symptom D — Node refused to exit for up to 30 seconds at a time.** Shutdown stalled;
+  under churn the delay stacked.
+- **Root cause D.** The MCP relay's graceful-drain `setTimeout(..., 30_000)` was not
+  unref'd, so each pending timer pinned the event loop. A grace period is a courtesy, not
+  work in flight.
+- **Fix D.** `unref()` the drain timer, matching the already-correct pattern in
+  `executors/opencode.js`.
+
+- **Symptom E — Ctrl+C ran the cleanup and then hung.** The daemons were reaped but the
+  process never terminated.
+- **Root cause E.** Registering any `SIGINT`/`SIGTERM` listener cancels Node's default
+  termination, and `cleanupAllDaemons` never called `process.exit()`. Harmless under an
+  orchestrator that terminates the group; a hang when the bridge is run directly.
+- **Fix E.** Handlers moved to `process.once` (a second Ctrl+C must not queue another
+  sweep) and exit with the conventional `130` (SIGINT) / `143` (SIGTERM) codes.
+
+**Verification.** `tests/unit/opencode-resource-lifetime.test.js` (17 new assertions, one
+per finding plus guards that no direct kill survives and that no busy session is swept),
+`opencode-daemon-lifetime.test.js` updated to assert the new kill path and ordering,
+`opencode-session.test.js` green. 50/50 across the three files. Revert-tested: removing
+the `unref` fails finding 4. No regressions — `opencode-fingerprint`,
+`opencode-free-tool-choice`, and `opencode-muse-spark-thinking` are red at baseline and at
+HEAD with identical counts.
+
 ### Fixed — OpenCode daemon pool could disown a live daemon or kill it via SIGPIPE
 
 Follow-up to the process-leak fix. The pool is now bounded and single-flight, but three

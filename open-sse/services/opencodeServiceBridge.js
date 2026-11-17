@@ -27,7 +27,7 @@ export function notifyDaemonRateLimit(daemonUrl, rawMessage) {
   }
 }
 
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -75,7 +75,7 @@ function registerDaemon(poolKey, info) {
     proxyDaemonPool.delete(oldestKey);
     if (oldest?.reaperTimer) clearTimeout(oldest.reaperTimer);
     dbg("OPENCODE_SVC", `Pool full (${MAX_PROXY_DAEMONS}); evicting LRU daemon ${oldestKey}`);
-    try { oldest?.process?.kill?.(); } catch {}
+    killDaemonProcess(oldest?.process);
     for (const [key, session] of serviceSessionPool) {
       if (session?.service?.url === oldest?.url) {
         try { session.close(); } catch {}
@@ -97,7 +97,7 @@ function abandonDaemon(p, detach) {
   // process is still alive gives it a SIGPIPE on its next log flush, which kills
   // it on Google's side of the handshake instead of ours — we lose the exit code
   // and the log line that explains why. Signal, then clean up.
-  try { p?.kill?.("SIGKILL"); } catch {}
+  killDaemonProcess(p);
   try { p?.stdout?.destroy?.(); } catch {}
   try { p?.stderr?.destroy?.(); } catch {}
 }
@@ -132,7 +132,7 @@ function scheduleDaemonReaper(poolKey, info) {
     dbg("OPENCODE_SVC", `Reaping idle on-demand daemon for ${poolKey}`);
     proxyDaemonPool.delete(poolKey);
     info.reaperTimer = null;
-    try { info.process?.kill?.(); } catch {}
+    killDaemonProcess(info.process);
     // Close and evict all active sessions attached to this reaped daemon
     for (const [key, session] of serviceSessionPool) {
       if (session?.service?.url === info.url) {
@@ -148,18 +148,98 @@ export function touchDaemonActivity(poolKey) {
   if (info) scheduleDaemonReaper(poolKey, info);
 }
 
+/**
+ * Terminate a daemon process AND its children.
+ *
+ * On Windows the daemon is spawned with `shell: true`, so `p.pid` belongs to
+ * cmd.exe, not opencode.exe. `child.kill()` therefore reaps the shell while the
+ * real daemon keeps running — still bound to its port, still holding ~175 MB.
+ * `taskkill /T` walks the tree, which is the only reliable way to reach the
+ * grandchild. Non-Windows has no shell wrapper and a plain signal is enough.
+ */
+function killDaemonProcess(p, signal = "SIGKILL") {
+  if (!p || p.killed) return;
+  if (process.platform === "win32" && p.pid) {
+    try {
+      execSync(`taskkill /F /T /PID ${p.pid}`, {
+        stdio: "ignore",
+        windowsHide: true,
+        timeout: 2000,
+      });
+      return;
+    } catch {
+      // taskkill can fail if the tree is already gone; fall through to signal.
+    }
+  }
+  try { p.kill(signal); } catch {}
+}
+
 // Ensure all child daemon processes terminate when 9Router server exits
 if (typeof process !== "undefined" && !globalThis._opencodeCleanupRegistered) {
   globalThis._opencodeCleanupRegistered = true;
   const cleanupAllDaemons = () => {
     for (const [key, info] of proxyDaemonPool) {
-      try { info.process?.kill?.(); } catch {}
+      killDaemonProcess(info?.process);
     }
     proxyDaemonPool.clear();
   };
+  // `exit` cannot await anything, so it only gets the synchronous sweep.
   process.on("exit", cleanupAllDaemons);
-  process.on("SIGINT", cleanupAllDaemons);
-  process.on("SIGTERM", cleanupAllDaemons);
+  // SIGINT/SIGTERM otherwise cancel Node's default termination: registering any
+  // listener suppresses the built-in exit, so a Ctrl+C here would run the sweep
+  // and then leave the event loop alive forever. Clean up, then actually exit.
+  // `once` because a second Ctrl+C should not queue another sweep.
+  const onTerminationSignal = (signal) => {
+    try { cleanupAllDaemons(); } catch {}
+    // 128 + signal number is the shell's convention for "died from signal".
+    process.exit(signal === "SIGINT" ? 130 : 143);
+  };
+  process.once("SIGINT", () => onTerminationSignal("SIGINT"));
+  process.once("SIGTERM", () => onTerminationSignal("SIGTERM"));
+}
+
+/**
+ * Idle sweeper for `serviceSessionPool`.
+ *
+ * An EXTERNALLY managed daemon (the `getOpencodeServiceInfo()` path) is never
+ * entered into `proxyDaemonPool`, so `scheduleDaemonReaper` never touches it —
+ * and neither does it touch the sessions hanging off it. Each pooled session
+ * holds one long-poll `/api/event` reader plus one client-MCP WebSocket, so
+ * abandoned sessions sit on live connections until the 100-entry cap fills.
+ *
+ * Unlike the daemon reaper (10 min, because restarting a daemon is expensive),
+ * sessions are cheap to rebuild from the next request, so the idle window is
+ * shorter. Unref'd: housekeeping must never by itself keep Node alive.
+ */
+const SERVICE_SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
+function sweepIdleServiceSessions() {
+  const now = Date.now();
+  for (const [key, session] of serviceSessionPool) {
+    if (!session || session.closed) continue;
+    // Never interrupt a session that owns work. activeTurn/pendingCalls/
+    // queuedCalls are the same signals the daemon reaper treats as busy.
+    if (
+      session.inFlight
+      || session.activeTurn
+      || session.pendingCalls?.size > 0
+      || session.queuedCalls?.length > 0
+    ) {
+      session.lastUsedAt = now;
+      continue;
+    }
+    const idleFor = now - (session.lastUsedAt || now);
+    if (idleFor < SERVICE_SESSION_IDLE_TIMEOUT_MS) continue;
+    dbg("OPENCODE_SVC", `Sweeping idle service session ${key} (idle ${Math.round(idleFor / 1000)}s)`);
+    try { session.close(); } catch {}
+    serviceSessionPool.delete(key);
+  }
+}
+
+let serviceSessionSweepTimer = null;
+if (typeof setInterval === "function") {
+  serviceSessionSweepTimer = setInterval(sweepIdleServiceSessions, 5 * 60 * 1000);
+  if (serviceSessionSweepTimer.unref) serviceSessionSweepTimer.unref();
 }
 // Persistent OpenCode sessions own one event subscriber and one client-MCP
 // socket. The HTTP request from the downstream agent is intentionally shorter
@@ -767,9 +847,16 @@ class OpenCodeClientMcpRelay {
     } else if (sock) {
       // Graceful drain period (30s) so pending JSON-RPC invocations from OpenCode CLI
       // complete cleanly instead of throwing "Connection closed" or timing out.
-      setTimeout(() => {
+      //
+      // Unref'd: this timer is a courtesy drain, not work in flight. A referenced
+      // 30s timer pins the event loop, so a burst of open/close cycles (or a
+      // shutdown) leaves Node hanging until the last one expires. unref lets the
+      // process exit immediately if nothing else is pending; the drain still runs
+      // when the loop is otherwise alive.
+      const drainTimer = setTimeout(() => {
         try { sock.close?.(); } catch {}
       }, 30_000);
+      if (drainTimer.unref) drainTimer.unref();
     }
   }
 }
@@ -806,6 +893,12 @@ class OpenCodeServiceSession {
     this.permissionsFingerprint = "";
     this.turnCount = 0;
     this.lastContextLength = 0;
+    // Wall-clock of the last observed activity, used by the idle sweeper. Seeded
+    // at construction so a session that never receives an event still expires.
+    this.lastUsedAt = Date.now();
+    // Only sessions that are provably parked may be swept. In-flight work is
+    // owned by activeTurn/pendingCalls/queuedCalls and is never interrupted.
+    this.inFlight = false;
   }
 
   async initialize(tools) {
@@ -964,6 +1057,9 @@ class OpenCodeServiceSession {
     if (event?.data?.sessionID && event.data.sessionID !== this.sessionId) return;
     this.lastEventType = event?.type || null;
     this.lastEventAt = Date.now();
+    // Feed the idle sweeper: any upstream event counts as use, so a session in
+    // the middle of a long reasoning turn is never swept out from under itself.
+    this.lastUsedAt = this.lastEventAt;
     const eventData = event?.data || {};
     if (event?.type === "session.tool.input.started" && eventData.id && eventData.name) {
       this.toolNamesById.set(eventData.id, eventData.name);
@@ -1186,11 +1282,15 @@ class OpenCodeServiceSession {
     if (this.activeTurn) throw new Error(`OpenCode service session ${this.sessionId} is busy`);
     const turn = { queue: new ServiceTurnQueue(), prefetched: [], startedAt: Date.now() };
     this.activeTurn = turn;
+    this.inFlight = true;
+    this.lastUsedAt = Date.now();
     return turn;
   }
 
   endTurn(turn) {
     if (this.activeTurn === turn) this.activeTurn = null;
+    this.inFlight = false;
+    this.lastUsedAt = Date.now();
     turn.queue.close();
   }
 
@@ -1258,7 +1358,7 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
       clearTimeout(existing.reaperTimer);
       existing.reaperTimer = null;
     }
-    try { existing.process.kill(); } catch {}
+    killDaemonProcess(existing.process);
   }
 
   // Single-flight: two concurrent requests for the same poolKey must share one
