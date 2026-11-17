@@ -1,3 +1,54 @@
+# v0.1.0 (2026-11-17)
+
+### Fixed — OpenCode daemon pool could disown a live daemon or kill it via SIGPIPE
+
+Follow-up to the process-leak fix. The pool is now bounded and single-flight, but three
+lifetime defects survived and could each reproduce the same class of failure by a different
+route.
+
+- **Symptom A — a healthy daemon vanished from the pool while its process kept running.**
+  Every request then saw an empty slot and spawned a replacement, rebuilding the unbounded
+  growth the earlier fix removed.
+- **Root cause A.** `getDaemonForProxy()` retired an unhealthy cached entry with
+  `existing.process.kill()` but never cleared `existing.reaperTimer`. The abandoned 10-minute
+  timer stayed armed and later fired `proxyDaemonPool.delete(poolKey)` — which removes
+  *whatever now occupies that key*, i.e. the healthy replacement. The reaper also deleted
+  its slot without confirming the slot still held its own entry.
+- **Symptom B — daemons died silently moments after a successful start.** No exit reason, no
+  log line; the first chat request after readiness was enough.
+- **Root cause B.** `detachLogPipes()` called `.destroy()` on `p.stdout` / `p.stderr` while
+  `opencode serve --print-logs` was still running. Closing the read end of a pipe whose
+  writer is alive raises `SIGPIPE` on the daemon's next log flush, killing it on the far side
+  of the handshake.
+- **Root cause C (found while fixing B).** The same helper already called
+  `removeListener("data", onData)` immediately before destroying the pipes. That unhook is
+  sufficient to stop consumption, which made the `destroy()` call redundant *and* harmful:
+  zero benefit, full SIGPIPE risk.
+- **Root cause D.** `abandonDaemon()` destroyed the stdio pipes *before* signalling, leaving
+  a window where the child died of `SIGPIPE` rather than our `SIGKILL` — losing both the exit
+  code and the log line that explains the failure.
+- **Fix.** Four changes, all in `opencodeServiceBridge.js`:
+  - **Retire cached entries completely.** `getDaemonForProxy()` now deletes the slot first,
+    then clears `existing.reaperTimer` and nulls the handle, then kills the process.
+  - **Identity guard in the reaper.** Before evicting, `scheduleDaemonReaper()` compares
+    `proxyDaemonPool.get(poolKey)` against its captured `info` and returns early on mismatch,
+    so a stale timer can never reclaim a slot it no longer owns. It also nulls its own timer
+    handle once fired.
+  - **Detach by draining, never by closing.** `detachLogPipes()` keeps `removeListener` and
+    replaces `destroy()` with `resume()`: the fd stays open so the writer never sees a broken
+    pipe, while bytes are discarded instead of buffered.
+  - **Signal before cleanup.** `abandonDaemon()` sends `SIGKILL` first, then destroys the
+    descriptors, so termination is always attributable to us.
+- **Verification.** `tests/unit/opencode-daemon-lifetime.test.js` (new, 7 assertions) passes
+  7/7. Reverting the identity guard makes it fail, confirming the test pins the defect rather
+  than describing it. `opencode-session.test.js` stays 26/26. No regression:
+  `opencode-go-session`, `opencode-go-models`, `opencode-go-transport-routing` produce a
+  byte-identical pass/fail split with and without this change (the `opencode-go-*` reds are
+  pre-existing upstream-path failures, not caused here).
+- **Not changed.** The 2000 ms readiness wait and `MAX_PROXY_DAEMONS = 4` are tuning choices,
+  not defects. On a constrained box the supported answer remains disabling *Use Local Service
+  Daemon* and using the TLS HTTP wire, which spawns no local process at all.
+
 # v0.1.0 (2026-11-16)
 
 ### Fixed — OpenCode free lane threw a TypeError on every request without a proxy
