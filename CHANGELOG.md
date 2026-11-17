@@ -1,5 +1,36 @@
 # v0.1.0 (2026-11-17)
 
+### Added — OpenCode free-tier gates bypassed for third-party clients (port of decolua/9router#5725)
+
+Claude Code, Codex CLI, and other non-OpenCode apps routed through the OpenCode free tier
+kept hitting `429 FreeUsageLimitError` with quota remaining. Upstream (PR by Tonklaistonton)
+found five hidden client-fingerprint gates; this ports the three code fixes.
+
+- **Pair gates on tool names.** The upstream 429s the *pairs* `ReportFindings` +
+  `ScheduleWakeup` and `ReportFindings` + `DeferredToolPlaceholder` in under 350 ms while
+  each member alone passes — Claude Code ships all three on every request. Codex has the same
+  shape with `exec_command` + `write_stdin`. The common member of each pair now travels under
+  the existing `run_command` alias, clearing both pairs without touching other names.
+- **Name+schema gate (fourth gate).** Claude Code's `Edit(old_string, new_string)` and
+  `Read(file_path)` are fingerprinted by name *and* parameter shape, so a renamed caller still
+  carried the gate-triggering schema. New `GATED_NAME_SCHEMA_RULES` alias them to
+  `file_edit`/`file_read` only when the name matches **and** the schema declares the gate
+  properties — near-misses (lowercase `read`, offset-only `Read`) stay untouched.
+- **Per-client session pools.** Every app sharing one 9Router API key pooled into a single
+  upstream session; upstream quota is per session on the anonymous "Bearer public" lane, so
+  two agents running together exhausted it while a native opencode client kept its own pool.
+  Session identity now includes the detected client tool, or a sha256 of the raw User-Agent
+  when none is detected — each downstream app gets its own stable pool.
+- **Dev origins.** `allowedDevOrigins` permits `127.0.0.1`/`localhost` so the dashboard HMR
+  websocket connects in development.
+
+**Verification.** 3 new fingerprint tests + 2 new session tests, all green; 46/46 across the
+opencode-lifetime and MITM suites; production build verified the gates landed in the bundle.
+The 9 pre-existing failures in `opencode-fingerprint.test.js` are unchanged from the
+unpatched baseline (verified via stash). Upstream's snapshot entries for the
+chatgpt/deepseek/gemini/muse-web providers are omitted — those providers do not exist in this
+fork.
+
 ### Fixed — Antigravity OAuth login hit the MITM cert (x509 unknown authority)
 
 Antigravity sign-in failed while MITM DNS was enabled:
