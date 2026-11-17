@@ -107,6 +107,18 @@ const MITM_BYPASS_HOSTS = [
   "q.us-east-1.amazonaws.com",
   "codewhisperer.us-east-1.amazonaws.com",
   "api2.cursor.sh",
+  // kiro.dev was in TOOL_HOSTS but missing here — same loop class as below:
+  // with MITM DNS on, XR's own fetch to the Kiro runtime resolved to 127.0.0.1.
+  "runtime.us-east-1.kiro.dev",
+  // Google auth endpoints are never MITM targets, but a spoofed/stale hosts entry
+  // or DNS hijack pointing them at a local interceptor kills token exchange with
+  // Go's "x509: certificate signed by unknown authority" (Antigravity login) or an
+  // undici cert error. Resolve them via 8.8.8.8 like the other bypassed hosts so
+  // the OAuth flow always reaches real Google.
+  "oauth2.googleapis.com",
+  "accounts.google.com",
+  "www.googleapis.com",
+  "openidconnect.googleapis.com",
 ];
 const GOOGLE_DNS_SERVERS = ["8.8.8.8", "8.8.4.4"];
 const HTTPS_PORT = 443;
