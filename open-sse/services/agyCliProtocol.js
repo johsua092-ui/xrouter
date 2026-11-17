@@ -155,10 +155,11 @@ const FIT_TOOLS_CACHE_MAX = 64;
 const fitToolsCache = new Map();
 
 /** The tools agy receives over the bridge, fitted into its own token budget (LRU cached). */
-export function fitBridgeTools(tools) {
+export function fitBridgeTools(tools, preSerialized = undefined) {
     if (!Array.isArray(tools) || tools.length === 0)
         return [];
-    const key = crypto.createHash("sha256").update(JSON.stringify(tools)).digest("hex");
+    const serialized = typeof preSerialized === "string" ? preSerialized : JSON.stringify(tools);
+    const key = crypto.createHash("sha256").update(serialized).digest("hex");
     const hit = fitToolsCache.get(key);
     if (hit) {
         // Refresh LRU position
@@ -361,7 +362,7 @@ export async function ensureShimDir() {
         }
         else {
             const isBun = Boolean(process.versions?.bun);
-            const heapFlag = isBun ? "" : "--max-old-space-size=64 ";
+            const heapFlag = isBun ? "" : "--no-warnings --no-deprecation --max-old-space-size=64 ";
             await fs.promises.writeFile(path.join(dir, "nc"), `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${heapFlag}${shellQuote(server)}\n`, { mode: 0o700 });
         }
         shimDir = dir;

@@ -119,7 +119,7 @@ export class BridgeToolCatalog {
             this.fitted = this.fit(this.tools.map((tool) => ({
                 ...tool,
                 _meta: { ...(isObject(tool._meta) ? tool._meta : {}), [ALWAYS_LOAD]: true },
-            })));
+            })), this.signature);
             this.fittedFor = this.signature;
         }
         return this.fitted;
@@ -277,6 +277,7 @@ function endWith(socket, payload) {
     }
 }
 export function handleControlConnection(socket) {
+    socket.setNoDelay?.(true);
     socket.setEncoding("utf8");
     let buffer = "";
     let handled = false;

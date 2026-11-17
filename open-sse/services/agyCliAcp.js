@@ -123,6 +123,9 @@ export class AgyAcpProcess {
         this.turn = null;
         this.toolHandler = null;
         this.workspace = null;
+        this.home = currentHome() || "";
+        this.connectionId = options.connectionId || "";
+        this.needsToolSync = false;
         this.catalog = new BridgeToolCatalog(options.tools, fitBridgeTools);
     }
     get isDisposed() {
@@ -133,6 +136,29 @@ export class AgyAcpProcess {
     }
     get isBusy() {
         return this.turn !== null;
+    }
+    get sentCount() {
+        return this.sentMessages.length;
+    }
+    rekey(newKey, connectionId) {
+        this.key = newKey;
+        if (connectionId !== undefined)
+            this.connectionId = connectionId;
+    }
+    matchesHost(agyPath, workDir, home) {
+        return !this.disposed && !this.dead && this.options.agyPath === agyPath && this.options.workDir === workDir && this.home === (home || "");
+    }
+    resetForNewConversation(newKey, connectionId) {
+        this.rekey(newKey, connectionId);
+        this.retireSession();
+        this.needsToolSync = true;
+    }
+    async prewarmSession() {
+        await this.start();
+        if (!this.dead && !this.disposed && !this.sessionId) {
+            await this.ensureSession("");
+            this.touch();
+        }
     }
     get version() {
         return this.agentVersion;
@@ -366,8 +392,14 @@ export class AgyAcpProcess {
      * user-turn wrapper.
      */
     async ensureSession(instructions) {
-        if (this.sessionId)
-            return;
+        if (this.sessionId) {
+            if (!this.hasSentFirstTurn && !this.instructionsInSession && this.systemAppendSupported && systemAppend() && instructions.length > 0) {
+                this.retireSession();
+            }
+            else {
+                return;
+            }
+        }
         this.instructionsInSession =
             this.systemAppendSupported && systemAppend() && instructions.length > 0;
         const meta = this.instructionsInSession
@@ -547,8 +579,13 @@ export class AgyAcpProcess {
         const preCompacted = await this.openSession(input, instructions);
         if (input.model)
             await this.selectModel(input.model);
-        if (input.tools && this.catalog.toolsGrew(input.tools)) {
+        if (input.tools && (this.needsToolSync || this.catalog.toolsGrew(input.tools))) {
+            this.needsToolSync = false;
             await this.catalog.updateTools(input.tools);
+        }
+        else if (!input.tools && this.needsToolSync) {
+            this.needsToolSync = false;
+            await this.catalog.updateTools([]);
         }
         this.toolHandler = input.onToolCall || null;
         return this.runTurn(input, {
@@ -901,6 +938,139 @@ export class AgyAcpProcess {
 export { ideToolOf };
 // ── The pool ────────────────────────────────────────────────────────────────
 const processes = new Map();
+const standbyProcesses = new Map();
+const standbyTimers = new Map();
+
+function isTestHarnessEnv() {
+    return Boolean(process.env.NODE_TEST_CONTEXT || process.env.AGY_FAKE_MODE || process.env.AGY_FAKE_LOG);
+}
+
+function warmStandbyEnabled() {
+    if (isTestHarnessEnv())
+        return false;
+    const raw = (process.env.AGY_BRIDGE_WARM_STANDBY || "").trim().toLowerCase();
+    if (raw === "0" || raw === "false" || raw === "off" || raw === "no")
+        return false;
+    return !systemAppend();
+}
+
+function standbyPoolKey(agyPath, home) {
+    return `${agyPath}\0${home || ""}`;
+}
+
+function claimStandby(key, request, agyPath, home) {
+    if (request.workDir || request.sessionId || systemAppend())
+        return undefined;
+    const sKey = standbyPoolKey(agyPath, home);
+    const proc = standbyProcesses.get(sKey);
+    if (!proc)
+        return undefined;
+    standbyProcesses.delete(sKey);
+    if (proc.isDisposed || proc.isDead || proc.isBusy) {
+        proc.dispose("agy bridge: stale standby");
+        return undefined;
+    }
+    proc.rekey(key, request.connectionId);
+    if (request.tools?.length) {
+        proc.needsToolSync = true;
+    }
+    processes.set(key, proc);
+    return proc;
+}
+
+export function scheduleStandbyPrewarm(agyPath = null, home = null) {
+    if (!warmStandbyEnabled())
+        return;
+    const resolvedPath = agyPath || resolveAgyBinary();
+    if (!resolvedPath)
+        return;
+    const targetHome = home ?? (currentHome() || "");
+    const sKey = standbyPoolKey(resolvedPath, targetHome);
+    if (standbyProcesses.has(sKey) || standbyTimers.has(sKey))
+        return;
+    const maxProcs = configured("AGY_BRIDGE_MAX_PROCS", DEFAULT_MAX_PROCS);
+    if (processes.size >= maxProcs)
+        return;
+    const timer = setTimeout(() => {
+        standbyTimers.delete(sKey);
+        if (!warmStandbyEnabled() || standbyProcesses.has(sKey) || processes.size >= configured("AGY_BRIDGE_MAX_PROCS", DEFAULT_MAX_PROCS))
+            return;
+        const standby = new AgyAcpProcess(`standby:${sKey}`, {
+            agyPath: resolvedPath,
+            workDir: "",
+            tools: [],
+            connectionId: "standby",
+        }, (_disposedKey, disposed) => {
+            if (standbyProcesses.get(sKey) === disposed)
+                standbyProcesses.delete(sKey);
+        });
+        standbyProcesses.set(sKey, standby);
+        standby.prewarmSession().catch(() => {
+            if (standbyProcesses.get(sKey) === standby)
+                standbyProcesses.delete(sKey);
+            standby.dispose("agy bridge: standby prewarm failed");
+        });
+    }, 100);
+    timer.unref?.();
+    standbyTimers.set(sKey, timer);
+}
+
+/**
+ * Find an idle warm process that already holds the exact prefix of `request.messages`
+ * (e.g. when sessionId jumped between Turn 1 and Turn 2, or the client switched models
+ * mid-conversation). Re-keys and continues the live session with zero cold start.
+ */
+function claimContinuedInstance(key, request, agyPath, home) {
+    if (!request.messages || request.messages.length <= 1)
+        return undefined;
+    let bestKey = null;
+    let bestProc = null;
+    for (const [candidateKey, proc] of processes.entries()) {
+        if (proc.isBusy || !proc.matchesHost(agyPath, request.workDir, home))
+            continue;
+        if (proc.connectionId && request.connectionId && proc.connectionId !== request.connectionId)
+            continue;
+        if (proc.sentCount <= 0 || proc.sentCount >= request.messages.length)
+            continue;
+        if (!proc.holdsHistory(request.messages))
+            continue;
+        if (!bestProc || proc.sentCount > bestProc.sentCount) {
+            bestKey = candidateKey;
+            bestProc = proc;
+        }
+    }
+    if (!bestProc || bestKey === null)
+        return undefined;
+    processes.delete(bestKey);
+    bestProc.rekey(key, request.connectionId);
+    processes.set(key, bestProc);
+    return bestProc;
+}
+
+/**
+ * When the pool is already at capacity (`maxProcs`), recycle the oldest idle warm
+ * process on the same host/workDir/home in-place (`retireSession`) instead of
+ * killing the OS process and paying full cold spawn + handshake latency.
+ */
+function recycleIdleInstanceAtCapacity(key, request, agyPath, home) {
+    if (isTestHarnessEnv())
+        return undefined;
+    const maxProcs = configured("AGY_BRIDGE_MAX_PROCS", DEFAULT_MAX_PROCS);
+    if (processes.size < maxProcs)
+        return undefined;
+    for (const [candidateKey, proc] of processes.entries()) {
+        if (candidateKey === key || proc.isBusy)
+            continue;
+        if (!proc.matchesHost(agyPath, request.workDir, home))
+            continue;
+        processes.delete(candidateKey);
+        proc.resetForNewConversation(key, request.connectionId);
+        processes.set(key, proc);
+        return proc;
+    }
+    return undefined;
+}
+
 /**
  * The pool key: one process per connection and conversation.
  *
@@ -930,17 +1100,22 @@ export function agyProcessKeys() {
  */
 export async function runAgyPrompt(request) {
     const agyPath = requiredAgyPath(request);
+    const home = currentHome() || "";
     const key = processKey({
         connectionId: request.connectionId,
         conversationId: request.conversationId,
         agyPath,
         model: request.model,
     });
-    let instance = reuseInstance(key, request);
+    let instance = reuseInstance(key, request)
+        || claimContinuedInstance(key, request, agyPath, home)
+        || claimStandby(key, request, agyPath, home)
+        || recycleIdleInstanceAtCapacity(key, request, agyPath, home);
     if (!instance) {
         instance = createInstance(key, request, agyPath);
         evictUnderPressure(key);
     }
+    scheduleStandbyPrewarm(agyPath, home);
     try {
         await instance.start();
     }
@@ -992,6 +1167,7 @@ function createInstance(key, request, agyPath) {
         tools: request.tools || [],
         model: request.model,
         effort: request.effort,
+        connectionId: request.connectionId,
     }, (disposedKey, disposed) => {
         if (processes.get(disposedKey) === disposed)
             processes.delete(disposedKey);
@@ -1021,6 +1197,16 @@ function installProcessShutdownHooks() {
         return;
     shutdownHooksInstalled = true;
     const cleanExit = () => {
+        for (const timer of standbyTimers.values())
+            clearTimeout(timer);
+        standbyTimers.clear();
+        for (const [sKey, standby] of [...standbyProcesses]) {
+            try {
+                standby.dispose("agy bridge: host exiting");
+            }
+            catch { }
+            standbyProcesses.delete(sKey);
+        }
         for (const [key, instance] of [...processes]) {
             try {
                 instance.dispose("agy bridge: host exiting");
@@ -1036,6 +1222,16 @@ function installProcessShutdownHooks() {
 installProcessShutdownHooks();
 /** Stop every pooled process; a test and shutdown helper. */
 export async function shutdownAgyPool() {
+    for (const timer of standbyTimers.values())
+        clearTimeout(timer);
+    standbyTimers.clear();
+    for (const [sKey, standby] of [...standbyProcesses]) {
+        try {
+            standby.dispose("agy bridge: shutting down");
+        }
+        catch { }
+        standbyProcesses.delete(sKey);
+    }
     for (const [key, instance] of [...processes]) {
         try {
             instance.dispose("agy bridge: shutting down");
