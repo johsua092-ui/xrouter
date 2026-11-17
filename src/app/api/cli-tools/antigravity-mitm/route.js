@@ -171,7 +171,14 @@ export async function PATCH(request) {
     if (requiresSudoPassword(pwd)) {
       return NextResponse.json({ error: "Missing sudoPassword" }, { status: 400 });
     }
-    if (!checkPrivilege(pwd)) {
+    // On Windows, installing the Root CA does not need this process to already
+    // be elevated: installCertWindows → runElevatedPowerShell wraps certutil in
+    // Start-Process -Verb RunAs, so the user gets a UAC prompt. Gating here
+    // returned 403 before that path could ever run, which is why the cert was
+    // never installed automatically. Other actions (enable/disable DNS) still
+    // need real admin, so only trust-cert is exempted.
+    const needsAdmin = !(isWin && action === "trust-cert");
+    if (needsAdmin && !checkPrivilege(pwd)) {
       return NextResponse.json(
         { error: isWin ? "Administrator required — restart X Router as Administrator" : "Root or sudo password required to modify DNS" },
         { status: 403 }
