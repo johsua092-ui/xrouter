@@ -124,6 +124,9 @@ const nextConfig = {
   poweredByHeader: false,
   distDir: process.env.NEXT_DIST_DIR || ".next",
   output: "standalone",
+  // Dev-only: dashboard is opened via 127.0.0.1 and the HMR websocket to
+  // /_next/hmr is otherwise rejected as a cross-origin dev resource.
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   // Top-level keys for Next.js 15 / 16
   outputFileTracingRoot: tracingRoot,
   outputFileTracingExcludes: tracingExcludes,

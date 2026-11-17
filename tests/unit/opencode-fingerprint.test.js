@@ -84,6 +84,32 @@ describe("opencodeFingerprint — request side", () => {
     expect(body.tools).toHaveLength(5);
   });
 
+  it("aliases ReportFindings, the common member of the upstream pair gates (#5690)", () => {
+    // Upstream 429s the pairs ReportFindings+ScheduleWakeup and
+    // ReportFindings+DeferredToolPlaceholder; single members pass. Concealing
+    // ReportFindings on every request clears both pairs for Claude Code,
+    // which ships all three names at once.
+    const body = { tools: chat(["ReportFindings", "ScheduleWakeup", "DeferredToolPlaceholder"]) };
+    const map = applyFingerprintTools(body, false);
+    const sent = body.tools.map((t) => t.function.name);
+    expect(sent.some((name) => /reportfindings/i.test(name))).toBe(false);
+    expect(map.get("run_command")).toBe("ReportFindings");
+    expect(sent).toContain("ScheduleWakeup");
+    expect(sent).toContain("DeferredToolPlaceholder");
+  });
+
+  it("aliases exec_command, the common member of the Codex pair gate", () => {
+    // Upstream 429s the pair exec_command+write_stdin in <400 ms; single
+    // members pass. Codex CLI ships both on every request, so concealing
+    // exec_command clears the pair while write_stdin stays visible.
+    const body = { tools: chat(["exec_command", "write_stdin"]) };
+    const map = applyFingerprintTools(body, false);
+    const sent = body.tools.map((t) => t.function.name);
+    expect(sent.some((name) => /exec_command/i.test(name))).toBe(false);
+    expect(map.get("run_command")).toBe("exec_command");
+    expect(sent).toContain("write_stdin");
+  });
+
   it("retargets flat tool_choice that points at a renamed tool", () => {
     const body = { tools: flat(CC_TOOLS), tool_choice: { type: "function", name: "Bash" } };
     applyFingerprintTools(body, true);
@@ -103,6 +129,48 @@ describe("opencodeFingerprint — request side", () => {
     const body = { tools: flat(CC_TOOLS) };
     const map = applyFingerprintTools(body, true);
     expect(takeRenamedToolNames(body)).toBe(map);
+  });
+
+  it("aliases Claude Code name+schema fingerprints (fourth gate)", () => {
+    const edit = { type: "function", function: { name: "Edit", description: "x", parameters: { type: "object", properties: { file_path: { type: "string" }, old_string: { type: "string" }, new_string: { type: "string" } } } } };
+    const read = { type: "function", function: { name: "Read", description: "x", parameters: { type: "object", properties: { file_path: { type: "string" } } } } };
+    const body = { tools: [edit, read] };
+    const map = applyFingerprintTools(body, false);
+
+    const sent = body.tools.map((t) => t.function.name);
+    expect(sent).toContain("file_edit");
+    expect(sent).toContain("file_read");
+    expect(map.get("file_edit")).toBe("Edit");
+    expect(map.get("file_read")).toBe("Read");
+    const sentEdit = body.tools.find((t) => t.function?.name === "file_edit");
+    expect(sentEdit.function.parameters.properties).toEqual(edit.function.parameters.properties);
+  });
+
+  it("does not gate near-miss name+schema combinations", () => {
+    const body = {
+      tools: [
+        { type: "function", name: "read", description: "x", parameters: { type: "object", properties: { file_path: { type: "string" } }, required: ["file_path"] } },
+        { type: "function", name: "Edit", description: "x", parameters: { type: "object", properties: { file_path: { type: "string" } }, required: ["file_path"] } },
+        { type: "function", name: "Read", description: "x", parameters: { type: "object", properties: { offset: { type: "integer" } }, required: [] } },
+      ],
+    };
+    const map = applyFingerprintTools(body, true);
+    const names = body.tools.map((t) => t.name);
+    // The caller's read is fingerprint-mismatched (file_path vs OpenCode's
+    // path/offset/limit), so it travels under an alias; the quartet members
+    // that are still missing get appended after it.
+    expect(names[0]).toBe("read_client");
+    expect(map.get("read_client")).toBe("read");
+    // Near-miss name+schema tools must NOT be concealed by the fourth gate:
+    // lowercase "read" with file_path matches no GATED_NAME_SCHEMA_RULES alias
+    // (the /Read$/ rule is case-sensitive and the /edit/i rule requires
+    // old_string/new_string), and "Read" with offset-only is a near-miss.
+    for (const n of names) {
+      expect(n).not.toBe("file_edit");
+      expect(n).not.toBe("file_read");
+    }
+    expect(names).toContain("Edit");
+    expect(names).toContain("Read");
   });
 
   it("never throws on malformed tools", () => {
