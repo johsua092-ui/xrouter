@@ -1,4 +1,43 @@
-# v0.1.0 (2026-11-14)
+# v0.1.0 (2026-11-16)
+
+### Fixed — OpenCode local daemon leaked a process per request, pinning every core at 100% CPU
+
+- **Symptom.** With "Use Local Service Daemon" enabled, `htop` showed dozens of
+  `/usr/local/bin/opencode serve --port 0 --print-logs` processes for a single XRouter
+  instance. 24 live daemons at ~175 MB each consumed 7.6 GB of 7.75 GB RAM, load average
+  climbed past 15 on a 4-core box, and CPU stayed pinned at 100% until the processes were
+  killed by hand.
+- **Root cause.** `getDaemonForProxy()` in `open-sse/services/opencodeServiceBridge.js`
+  raced a 2s readiness timer against the daemon's `server listening on ...` log line. When
+  the timer won — a slow start, or log output the regex could not match — the promise
+  resolved via `getOpencodeServiceInfo()` and **nothing called `p.kill()`**. The spawn had
+  also never been written to `proxyDaemonPool`, which happens only on the success path, so
+  the process was unreachable by the idle reaper, the pool, and the shutdown hook alike.
+  Every subsequent request found an empty pool and spawned another orphan. The same
+  failure existed on the `p.on("error")` branch. `isOpencodeServiceAlive()` compounded it
+  by calling `getDaemonForProxy()` whenever it was handed no info, so one request could
+  start two daemons when the first readiness wait timed out. `proxyDaemonPool` itself had
+  no size bound, so a rotating proxy URL — each one producing a fresh `poolKey` — turned
+  the leak into a fork bomb with no ceiling.
+- **Fix.** Four changes, all in `opencodeServiceBridge.js`:
+  - New `abandonDaemon(p, detach)` kills the child with `SIGKILL` and destroys its stdio
+    pipes. Called on both the readiness timeout and the spawn `error` branch, so no code
+    path can leave an untracked daemon alive.
+  - New `registerDaemon(poolKey, info)` bounds the pool at `MAX_PROXY_DAEMONS` (4) and
+    evicts the least-recently-used daemon — killing it and closing its sessions — when a
+    new entry would exceed the cap.
+  - Single-flight via `proxyDaemonPending`: concurrent callers for the same `poolKey`
+    await one shared spawn instead of each starting their own.
+  - `isOpencodeServiceAlive()` is now a pure probe. It returns `false` for missing info
+    instead of spawning, so a health check can never create a daemon.
+  - The listener-URL success path detaches log pipes (a daemon's own logger writing into
+    a buffer nobody drains is wasted RAM per daemon).
+- **How it was verified.** Two throwaway harnesses against the real module with a stub
+  binary (`OPENCODE_BIN`) that never prints a listener URL and refuses to die. Before the
+  fix, three concurrent callers spawned **3 daemons**. After, **1**, and a `/proc` scan
+  confirmed **zero** surviving processes once the readiness timeout fired. The pre-fix
+  file was then swapped back in and the identical test failed again, confirming the test
+  catches the bug rather than passing by accident.
 
 ### Fixed — dashboard rendered a blank white screen: every JS chunk 404'd from the standalone build
 
