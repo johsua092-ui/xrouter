@@ -33,8 +33,11 @@ const MAX_SESSION_LENGTH = 256;
 const MAX_TOOL_NAME_LEN = 128;
 const SESSION_HEADER = "x-opencode-session";
 const SESSION_FIELD = "_opencodeSession";
-export function generateRequestId() {
-  return crypto.randomUUID();
+export function generateRequestId(timestamp = Date.now()) {
+  // Mirrors generateSessionId's shape with the msg_ prefix upstream expects.
+  // A bare crypto.randomUUID() (36 chars, hyphenated) is not the canonical id
+  // format and gets rejected the same way a non-canonical session id does.
+  return `msg_${descendingTimeHex(timestamp, 1)}${unstableRandom()}`;
 }
 
 export const OPENCODE_SESSION_RE = /^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
@@ -664,7 +667,7 @@ export class OpenCodeExecutor extends BaseExecutor {
       ...args,
       proxyOptions: effectiveProxyOptions,
       credentials: preparedCredentials,
-      directFetch: async (url, options, extra = {}) => {
+      directFetch: async (url, options, extra) => {
         await paceOpencodeStart();
         return opencodeTlsFetch(url, {
           method: options.method,
@@ -672,7 +675,10 @@ export class OpenCodeExecutor extends BaseExecutor {
           body: options.body,
         }, {
           signal: options.signal,
-          proxy: extra.proxyUrl || options.proxyUrl || proxyUrl,
+          // BaseExecutor forwards its `proxyOptions` (null when no proxy is
+          // configured) as the third argument, so a parameter default never
+          // fires here. Normalise before reading.
+          proxy: extra?.proxyUrl || options.proxyUrl || proxyUrl,
           timeoutMs: args.stream ? 0 : undefined,
         });
       },

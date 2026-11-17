@@ -1,5 +1,36 @@
 # v0.1.0 (2026-11-16)
 
+### Fixed — OpenCode free lane threw a TypeError on every request without a proxy
+
+- **Symptom.** Any `opencode/*-free` call routed through the TLS client failed with
+  `TypeError: Cannot read properties of null (reading 'proxyUrl')`, surfaced to clients as a
+  502 on the free lane.
+- **Root cause.** `BaseExecutor.execute()` forwards its own `proxyOptions` as the third
+  argument to `directFetch`. That value is `null` whenever no proxy is configured, so the
+  `extra = {}` parameter default in `open-sse/executors/opencode.js` never fired and
+  `extra.proxyUrl` dereferenced `null`.
+- **Fix.** Read the proxy through optional chaining (`extra?.proxyUrl`) instead of relying on
+  a default that only applies to `undefined`.
+- **Verification.** `tests/unit/opencode-session.test.js` now passes 26/26 (was 20 failing).
+  `tests/unit/opencode-fingerprint.test.js` produces a byte-identical failure list with and
+  without this change, confirming no regression.
+
+### Fixed — OpenCode session tests asserted a superseded v1 contract
+
+- **`generateRequestId` emitted `crypto.randomUUID()`.** Upstream expects the canonical
+  `msg_` + 12 hex + 14 base62 shape, mirroring `generateSessionId`. Eleven assertions caught
+  the mismatch; the generator now follows the documented format.
+- **Stale expectations corrected in `tests/unit/opencode-session.test.js`.** The User-Agent
+  assertion still described the v1 form `opencode/1.18.31` while the code emits the v2
+  `opencode/<channel>/<version>/<client>` shape; `tool_choice: "none"` was expected to survive
+  even though it is deliberately stripped to avoid a 403 FreeTierError; the fingerprint tool
+  set was described as a quartet though it is the `edit/glob/grep/read/shell` quintet; and
+  `bash` was expected on the Responses lane where the canonical name is `shell`.
+- **Daemon path no longer reached from tests.** The executor gates the service-daemon branch
+  on `NODE_ENV === "test"`, which Vitest does not set on its own, and the request path calls
+  `opencodeTlsFetch` rather than `proxyAwareFetch`. The test now sets the environment and
+  mocks the TLS client, so it no longer attempts a real outbound connection.
+
 ### Fixed — OpenCode local daemon leaked a process per request, pinning every core at 100% CPU
 
 - **Symptom.** With "Use Local Service Daemon" enabled, `htop` showed dozens of
