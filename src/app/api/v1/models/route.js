@@ -24,6 +24,7 @@ import { updateProviderCredentials } from "@/sse/services/tokenRefresh";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { getLiveCatalogSnapshot, requestLiveCatalogRefresh } from "@/lib/modelCatalog/liveCatalogs.js";
 import { capabilitiesFromServiceKind, getCapabilitiesForModel, aggregateComboCapabilities } from "open-sse/providers/capabilities.js";
+import { resolveAgyTransport } from "open-sse/executors/agyCliExecutor.js";
 import { getThinkingLevels } from "open-sse/providers/thinkingLevels.js";
 import { fetchSuggestedModelsServer } from "@/app/api/providers/suggested-models/filters.js";
 
@@ -382,6 +383,16 @@ export async function buildModelsList(kindFilter, options = {}) {
         isActive: true,
       });
     }
+  }
+
+  // Expose Antigravity models when opt-in agy ACP transport is enabled even without an active OAuth DB row
+  if (!activeConnectionByProvider.has("antigravity") && resolveAgyTransport(null) === "acp") {
+    activeConnectionByProvider.set("antigravity", {
+      id: "agy-cli",
+      provider: "antigravity",
+      isActive: true,
+      providerSpecificData: { transport: "acp" },
+    });
   }
 
   const models = [];
