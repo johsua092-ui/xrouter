@@ -1,5 +1,32 @@
 # v0.1.0 (2026-11-17)
 
+### Fixed — Antigravity OAuth login hit the MITM cert (x509 unknown authority)
+
+Antigravity sign-in failed while MITM DNS was enabled:
+
+```
+Post "https://oauth2.googleapis.com/token":
+tls: failed to verify certificate: x509: certificate signed by unknown authority
+```
+
+- **Symptom.** The Antigravity OAuth token exchange died on TLS verification even though the
+  X Router Root CA was trusted — and the same error class had been reported for
+  `cloudcode-pa.googleapis.com` in the previous fix.
+- **Root cause.** `oauth2.googleapis.com` is **not** a MITM target (`mitmToolHosts.js` only
+  redirects the `cloudcode-pa` pair), but the MITM-bypass list in `proxyFetch.js` covered only
+  the chat hosts. With MITM DNS writing `127.0.0.1` entries into the hosts file, any fetch
+  whose host was missing from the bypass list resolved to the local interceptor and was
+  answered with the X Router Root CA — which the Go OAuth client rejects. The chat hosts were
+  protected; the auth endpoints were not.
+- **Fix.** Added the Google auth endpoints to `MITM_BYPASS_HOSTS`:
+  `oauth2.googleapis.com`, `accounts.google.com`, `www.googleapis.com`,
+  `openidconnect.googleapis.com` — token exchange now resolves the real IP via 8.8.8.8, same
+  as the chat hosts. A second gap found by the new suite: `runtime.us-east-1.kiro.dev` was in
+  `TOOL_HOSTS` but missing from the bypass list (same loop class, one provider over); added.
+- **Verification.** Revert-tested (entry removed → suite fails → restored → green); 8 runtime
+  assertions including negative cases (`translation.googleapis.com` must **not** bypass);
+  22/22 across both MITM suites; production build verified the list landed in the bundle.
+
 ### Fixed — Antigravity MITM certificate trust (Go backend rejected the Root CA)
 
 Antigravity's backend failed every call with:
