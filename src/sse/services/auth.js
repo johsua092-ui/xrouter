@@ -4,6 +4,7 @@ import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLock
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
 import { resolveProviderId, FREE_PROVIDERS, FREE_TIER_PROVIDERS, AI_PROVIDERS } from "@/shared/constants/providers.js";
 import { getAntigravityQuotaCache, getAntigravityModelQuota } from "./antigravityQuota.js";
+import { resolveAgyTransport } from "open-sse/executors/agyCliExecutor.js";
 import { getAffinityConnectionId, setAffinityConnection, touchAffinity, clearAffinity } from "./conversationAffinity.js";
 import { tripCircuitBreaker, isCircuitBreakerOpen, recordCircuitSuccess } from "./circuitBreaker.js";
 import { cooldownRegistry } from "./cooldownRegistry.js";
@@ -164,6 +165,23 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     log.debug("AUTH", `${provider} | total connections: ${connections.length}, excludeIds: ${excludeSet.size > 0 ? [...excludeSet].join(",") : "none"}, model: ${model || "any"}`);
 
     if (connections.length === 0) {
+      if (providerId === "antigravity" && resolveAgyTransport(null) === "acp") {
+        if (
+          excludeSet.has("agy-cli") ||
+          cooldownRegistry.isCooling("agy-cli") ||
+          (model && cooldownRegistry.isCooling(`agy-cli|${model}`))
+        ) {
+          return null;
+        }
+        return {
+          id: "agy-cli",
+          connectionId: "agy-cli",
+          connectionName: "agy CLI (ACP)",
+          isActive: true,
+          accessToken: "agy-cli",
+          providerSpecificData: { transport: "acp" },
+        };
+      }
       log.warn("AUTH", `No credentials for ${provider}`);
       return null;
     }
@@ -412,7 +430,7 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
     // A proxy failure on a free no-auth provider should rotate IMMEDIATELY (0ms) to another proxy in pool!
     return { shouldFallback: true, cooldownMs: 0 };
   }
-  if (connectionId === "noauth" || connectionId === "noauth-direct") {
+  if (connectionId === "noauth" || connectionId === "noauth-direct" || connectionId === "agy-cli") {
     // If direct VPS IP encounters a temporary 403, 429, 524, 502, 504, try next fallback connection if available
     if (status === 403 || status === 429 || status === 524 || status === 502 || status === 504) {
       return { shouldFallback: true, cooldownMs: 15000 };

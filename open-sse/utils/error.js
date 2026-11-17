@@ -6,7 +6,7 @@ import { ERROR_TYPES, DEFAULT_ERROR_MESSAGES } from "../config/errorConfig.js";
  * @param {string} message - Error message
  * @returns {object} Error response object
  */
-export function buildErrorBody(statusCode, message) {
+export function buildErrorBody(statusCode, message, _details = undefined, options = undefined) {
   const errorInfo = ERROR_TYPES[statusCode] || 
     (statusCode >= 500 
       ? { type: "server_error", code: "internal_server_error" }
@@ -15,7 +15,7 @@ export function buildErrorBody(statusCode, message) {
   return {
     error: {
       message: message || DEFAULT_ERROR_MESSAGES[statusCode] || "An error occurred",
-      type: errorInfo.type,
+      type: options?.type || errorInfo.type,
       code: errorInfo.code
     }
   };
