@@ -51,7 +51,52 @@ function clearStaleOpenCodeLimitErrors() {
 
 // Cache of on-demand daemon processes per proxy URL
 const proxyDaemonPool = new Map();
+const proxyDaemonPending = new Map();
 const DAEMON_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes idle reaper
+// Hard cap on concurrent daemons. Each one is a full `opencode serve` process
+// (~175 MB resident), so an unbounded pool turns a rotating proxy list into a
+// fork bomb. Four covers the proxy/auth combinations a normal install uses
+// without ever letting the pool grow past what the box can hold.
+const MAX_PROXY_DAEMONS = 4;
+
+/**
+ * Register a live daemon, evicting the least-recently-used one when the pool is
+ * full. Eviction is explicit because `proxyDaemonPool` had no bound at all: a
+ * rotating proxy URL minted a new poolKey per request, each one spawning a
+ * daemon that only the 10-minute reaper could reclaim.
+ */
+function registerDaemon(poolKey, info) {
+  proxyDaemonPool.delete(poolKey);
+  proxyDaemonPool.set(poolKey, info);
+  while (proxyDaemonPool.size > MAX_PROXY_DAEMONS) {
+    const oldestKey = proxyDaemonPool.keys().next().value;
+    if (oldestKey === poolKey) break;
+    const oldest = proxyDaemonPool.get(oldestKey);
+    proxyDaemonPool.delete(oldestKey);
+    if (oldest?.reaperTimer) clearTimeout(oldest.reaperTimer);
+    dbg("OPENCODE_SVC", `Pool full (${MAX_PROXY_DAEMONS}); evicting LRU daemon ${oldestKey}`);
+    try { oldest?.process?.kill?.(); } catch {}
+    for (const [key, session] of serviceSessionPool) {
+      if (session?.service?.url === oldest?.url) {
+        try { session.close(); } catch {}
+        serviceSessionPool.delete(key);
+      }
+    }
+  }
+}
+
+/**
+ * Kill a daemon spawn that never reported a listener URL, and stop buffering its
+ * output. Without this the process survived the readiness timeout as an orphan
+ * that no pool entry, reaper, or shutdown hook knew about — the actual source of
+ * the runaway process count.
+ */
+function abandonDaemon(p, detach) {
+  try { detach?.(); } catch {}
+  try { p?.stdout?.destroy?.(); } catch {}
+  try { p?.stderr?.destroy?.(); } catch {}
+  try { p?.kill?.("SIGKILL"); } catch {}
+}
 
 function isDaemonBusy(info) {
   for (const session of serviceSessionPool.values()) {
@@ -1146,13 +1191,19 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
     proxyDaemonPool.delete(poolKey);
   }
 
+  // Single-flight: two concurrent requests for the same poolKey must share one
+  // spawn. Without this, both miss the pool, both call spawn(), and the loser's
+  // daemon is unreachable garbage.
+  const inflight = proxyDaemonPending.get(poolKey);
+  if (inflight) return inflight;
+
   dbg(
     "OPENCODE_SVC",
     `Starting native OpenCode daemon worker proxy=${displayProxyUrl(proxyUrl)}`
       + ` noProxy=${normalizeServiceNoProxy(noProxy)}`
       + ` auth=${apiKey === "public" ? "public" : apiKey === undefined ? "native" : "configured"}`,
   );
-  return new Promise((resolve) => {
+  const spawned = new Promise((resolve) => {
     try {
     const env = buildOpenCodeServiceEnv({ proxyUrl, noProxy, apiKey });
 
@@ -1167,6 +1218,15 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
       let buffer = "";
       let processLogBuffer = "";
       let settled = false;
+
+      // Stop reading daemon output. Called on success (logs no longer needed) and
+      // on abandonment (process is being killed anyway).
+      const detachLogPipes = () => {
+        try { p.stdout?.removeListener("data", onData); } catch {}
+        try { p.stderr?.removeListener("data", onData); } catch {}
+        try { p.stdout?.destroy?.(); } catch {}
+        try { p.stderr?.destroy?.(); } catch {}
+      };
 
       const onData = (data) => {
         const text = data.toString();
@@ -1194,13 +1254,17 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
         const matchPass = buffer.match(/server password ([^\s]+)/);
         if (matchUrl && !settled) {
           settled = true;
+          // Once the listener URL is known the process output has served its
+          // purpose. Leaving the pipe attached keeps the daemon's own logger
+          // writing into a buffer nobody reads, which is pure waste per daemon.
+          detachLogPipes();
           const info = {
             url: matchUrl[1],
             password: matchPass ? matchPass[1] : (env.OPENCODE_SERVER_PASSWORD || ""),
             process: p,
           };
           scheduleDaemonReaper(poolKey, info);
-          proxyDaemonPool.set(poolKey, info);
+          registerDaemon(poolKey, info);
           resolve(info);
         }
       };
@@ -1210,6 +1274,7 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
       p.on("error", () => {
         if (!settled) {
           settled = true;
+          abandonDaemon(p, detachLogPipes);
           resolve(getOpencodeServiceInfo());
         }
       });
@@ -1220,6 +1285,13 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
       setTimeout(() => {
         if (!settled) {
           settled = true;
+          // Never leave the spawn alive here. A daemon that missed the readiness
+          // window is unreachable AND untracked: it is not in proxyDaemonPool, so
+          // no reaper and no shutdown hook will ever reclaim it. The next request
+          // found an empty pool and spawned another, and another — which is how a
+          // single slow start became dozens of orphaned `opencode serve` processes
+          // pinning every core.
+          abandonDaemon(p, detachLogPipes);
           resolve(getOpencodeServiceInfo());
         }
       }, 2000);
@@ -1227,6 +1299,13 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
       resolve(getOpencodeServiceInfo());
     }
   });
+
+  proxyDaemonPending.set(poolKey, spawned);
+  try {
+    return await spawned;
+  } finally {
+    proxyDaemonPending.delete(poolKey);
+  }
 }
 
 /**
@@ -1256,9 +1335,11 @@ export function getOpencodeServiceInfo() {
  * Check if local OpenCode daemon is alive and healthy.
  */
 export async function isOpencodeServiceAlive(serviceInfo) {
-  if (!serviceInfo) {
-    serviceInfo = await getDaemonForProxy();
-  }
+  // Never spawn from here. This is a health probe; callers that want a daemon
+  // start one explicitly via getDaemonForProxy(). The old fallback re-entered the
+  // spawn path, so one request could start two daemons when the first readiness
+  // wait timed out.
+  if (!serviceInfo) return false;
   if (!serviceInfo?.url || !serviceInfo?.password) return false;
   try {
     const auth = "Basic " + Buffer.from(`opencode:${serviceInfo.password}`).toString("base64");
