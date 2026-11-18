@@ -1,5 +1,32 @@
 # v0.1.0 (2026-11-18)
 
+### Fixed — dashboard self-heals stale-chunk crashes after every rebuild
+
+After each server rebuild, open dashboard tabs showed the built-in Next.js error boundary
+("This page couldn't load — Reload to try again"): the cached HTML referenced
+`/_next/static/chunks/<hash>.js` files whose hashes the new build reshuffled, so lazy route
+loads 404'd and React surfaced `ChunkLoadError`. Recovery was a manual hard reload, every
+time, for every user.
+
+- **Fix.** A custom `src/app/global-error.js` now detects the stale-chunk family
+  (`ChunkLoadError`, "Loading chunk N failed", "Failed to fetch dynamically imported module",
+  "error while loading route") and reloads automatically via `location.replace` — the broken
+  URL never enters history.
+- **Loop guard.** A `sessionStorage` counter (max 2 auto-reloads within a 10 s window) stops a
+  genuinely broken page from reloading forever; after the window the counter resets, so
+  occasional stale chunks still self-heal days apart. Server-error digests (`NEXT_*`) never
+  reload — a 500 would only be masked.
+- **Dependency-free boundary.** One `react` import, inline styles, own `<html>/<body>` per the
+  global-error contract: it renders even when the rest of the bundle failed to load. Manual
+  Reload and `reset()` buttons remain for cases the auto-path declines.
+
+**Verification.** 9 source-contract tests + an 8-case runtime smoke that compiles the JSX with
+the project's own SWC and executes the extracted detector against real error shapes
+(ChunkLoadError names/messages, server digests, plain TypeErrors, null). Production build
+verified the boundary in the bundle (`_global-error` route emitted).
+
+# v0.1.0 (2026-11-18) — earlier
+
 ### Fixed — MITM cert chain + bypassed OAuth bodies + Antigravity prompt/catalog (four fixes)
 
 Four failure chains from the 2026-11-18 Antigravity reports and upstream PRs #5738/#5734.
