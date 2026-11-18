@@ -78,6 +78,14 @@ export function copyStandaloneAssets({ projectRoot = process.cwd(), distDir = pr
     cpSync(guardSrc, guardDest, { force: true });
   }
 
+  // Copy agy-mcp-server.mjs so the opt-in Antigravity ACP transport can spawn its stdio MCP shim in standalone mode
+  const agyMcpSrc = resolve(projectRoot, "open-sse", "lib", "agy-mcp-server.mjs");
+  const agyMcpDest = resolve(standaloneDir, "open-sse", "lib", "agy-mcp-server.mjs");
+  if (existsSync(agyMcpSrc)) {
+    cpSync(agyMcpSrc, agyMcpDest, { force: true });
+    console.log(`[standalone-assets] Copied agy-mcp-server.mjs to ${agyMcpDest}`);
+  }
+
   // Copy wreq-js and @wreq-js native bindings so TLS fingerprint impersonation works in standalone mode
   const standaloneDirs = [standaloneDir];
   try {
