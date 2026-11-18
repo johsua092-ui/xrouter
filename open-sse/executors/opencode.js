@@ -219,6 +219,47 @@ const stableSessionCleanup = setInterval(() => {
 }, MEMORY_CONFIG.sessionCleanupIntervalMs);
 if (stableSessionCleanup.unref) stableSessionCleanup.unref();
 
+// Satu sesi kanonik per PERCAKAPAN, bukan per credential. Provider free-lane
+// memakai `Bearer public` tanpa connectionId, jadi identityKey lama jatuh ke
+// satu nilai global ("opencode:default") dan SEMUA percakapan berbagi satu
+// sesi: kuota per-sesi upstream tercampur dan tidak ada isolasi percakapan.
+// Cakupan diturunkan dari awalan percakapan (system + pesan user pertama),
+// sehingga tetap sama saat riwayat bertambah dan berbeda untuk percakapan lain.
+export function conversationScope(body) {
+  try {
+    const arr = Array.isArray(body?.messages)
+      ? body.messages
+      : Array.isArray(body?.input)
+        ? body.input
+        : null;
+    if (!arr || arr.length === 0) return null;
+    const textOf = (msg) => {
+      const c = msg?.content;
+      if (typeof c === "string") return c;
+      if (Array.isArray(c)) return c.map((part) => part?.text || "").join("");
+      return "";
+    };
+    // Hanya awalan percakapan (system + pesan user PERTAMA). Jawaban assistant
+    // tidak ikut: begitu ia muncul di riwayat, scope akan berubah dan sesi pindah
+    // di tengah percakapan — justru mematikan cache prefix yang mau dijaga.
+    let system = "";
+    let firstUser = "";
+    for (const msg of arr) {
+      const role = msg?.role;
+      if (role === "system" || role === "developer") system += `${textOf(msg)}\n`;
+      else if (role === "user" && !firstUser) {
+        firstUser = textOf(msg);
+        break;
+      }
+    }
+    const seed = [system.slice(0, 4000), firstUser.slice(0, 4000)].join("\u0001").trim();
+    if (!seed.replace(/\u0001/g, "").trim()) return null;
+    return crypto.createHash("sha256").update(seed).digest("hex").slice(0, 24);
+  } catch {
+    return null;
+  }
+}
+
 // Generic chat apps all map to clientTool null; fall back to the raw
 // User-Agent so each downstream app keeps its own session/quota pool.
 function clientIdentity(clientTool, headers) {
@@ -228,27 +269,35 @@ function clientIdentity(clientTool, headers) {
   return ua ? crypto.createHash("sha256").update(ua).digest("hex").slice(0, 16) : "";
 }
 
-// Include the downstream client identity: every app sharing one 9Router API
-// key otherwise pools into one upstream session (upstream quota is per
-// session, on an anonymous "Bearer public" lane), so two coding agents
-// running together burn that session's free-tier quota and surface 429
-// FreeUsageLimitError — while a native opencode client, which sends its own
-// session, keeps its separate pool.
-function identityKey(credentials, clientTool = "") {
+// Include downstream client identity AND conversation scope:
+// - Downstream client isolates different tools/apps sharing one connection
+// - Conversation scope isolates distinct conversations on the same pooled connection
+export function identityKey(credentials, clientToolOrScope = "", scope = null) {
   const raw = credentials?.rawHeaders || {};
-  const client = clientIdentity(clientTool, raw) || "generic";
+  let client = "";
+  let conv = scope;
+
+  // Support both (credentials, client, scope) and legacy (credentials, convScope)
+  if (clientToolOrScope && typeof clientToolOrScope === "string" && /^[0-9a-f]{24}$/.test(clientToolOrScope) && scope === null) {
+    conv = clientToolOrScope;
+    client = clientIdentity("", raw) || "generic";
+  } else {
+    client = clientIdentity(clientToolOrScope, raw) || "generic";
+  }
+
+  const suffix = conv ? `:conv:${conv}` : "";
   const connectionId = credentials?.connectionId || credentials?.id;
-  if (connectionId) return `opencode:conn:${String(connectionId).slice(0, 128)}:${client}`;
+  if (connectionId) return `opencode:conn:${String(connectionId).slice(0, 128)}:${client}${suffix}`;
   const auth = raw.authorization || raw.Authorization || raw["x-api-key"] || raw["X-Api-Key"] || "";
   if (auth) {
     const digest = crypto.createHash("sha256").update(String(auth)).digest("hex").slice(0, 32);
-    return `opencode:auth:${digest}:${client}`;
+    return `opencode:auth:${digest}:${client}${suffix}`;
   }
-  return `opencode:default:${client}`;
+  return `opencode:default:${client}${suffix}`;
 }
 
-export function stableSessionId(credentials, clientTool = "") {
-  const key = identityKey(credentials, clientTool);
+export function stableSessionId(credentials, clientToolOrScope = "", scope = null) {
+  const key = identityKey(credentials, clientToolOrScope, scope);
   const existing = stableOpencodeSessions.get(key);
   if (existing) {
     existing.lastUsed = Date.now();
@@ -329,7 +378,7 @@ function isMessagesModel(model) {
   return MESSAGES_MODELS.has(baseModelId(model));
 }
 
-function resolveOpencodeSession(body, credentials, providerSessionId, clientTool) {
+export function resolveOpencodeSession(body, credentials, providerSessionId, clientTool) {
   const headers = credentials?.rawHeaders || {};
   const native = nativeSession(headers);
   if (native) return native;
@@ -337,6 +386,7 @@ function resolveOpencodeSession(body, credentials, providerSessionId, clientTool
   // Generic chat apps all map to clientTool null; fall back to the raw
   // User-Agent so each downstream app keeps its own session/quota pool.
   const client = clientIdentity(clientTool, headers);
+  const convScope = conversationScope(body);
 
   let incoming = null;
   for (const [key, value] of Object.entries(headers)) {
@@ -347,7 +397,10 @@ function resolveOpencodeSession(body, credentials, providerSessionId, clientTool
   }
 
   const hinted = incoming || normalizeSession(providerSessionId);
-  if (hinted) return translateSessionId(hinted, client);
+  if (hinted) {
+    const effectiveHint = convScope ? `${hinted}:conv:${convScope}` : hinted;
+    return translateSessionId(effectiveHint, client);
+  }
 
   if (credentials?.connectionId || bodyHasSessionHints(body)) {
     let viaManager = null;
@@ -361,10 +414,13 @@ function resolveOpencodeSession(body, credentials, providerSessionId, clientTool
     } catch {
       viaManager = null;
     }
-    if (viaManager) return translateSessionId(viaManager, client);
+    if (viaManager) {
+      const effectiveManager = convScope ? `${viaManager}:conv:${convScope}` : viaManager;
+      return translateSessionId(effectiveManager, client);
+    }
   }
 
-  return stableSessionId(credentials, client);
+  return stableSessionId(credentials, client, convScope);
 }
 
 function normalizeResponsesTools(body) {
