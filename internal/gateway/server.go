@@ -74,6 +74,12 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 	// Wave 8 — chat-LLM long tail from the Node registry (2026-11-18 sync).
 	providers.RegisterWave8(registry)
 	providers.RegisterWave8Anthropic(registry)
+	// Wave 9 — non-chat modalities + web-cookie, completing the Node set.
+	providers.RegisterWave9Search(registry)
+	providers.RegisterWave9TtsStt(registry)
+	providers.RegisterWave9Image(registry)
+	providers.RegisterWave9WebCookie(registry)
+	providers.RegisterWave9Misc(registry)
 
 	// Translator registry. Every request and response converter self-registers
 	// from its own file's init(), so this only needs to hand out the shared set.

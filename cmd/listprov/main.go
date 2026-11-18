@@ -17,6 +17,11 @@ func main() {
 	providers.RegisterWave7(r)
 	providers.RegisterWave8(r)
 	providers.RegisterWave8Anthropic(r)
+	providers.RegisterWave9Search(r)
+	providers.RegisterWave9TtsStt(r)
+	providers.RegisterWave9Image(r)
+	providers.RegisterWave9WebCookie(r)
+	providers.RegisterWave9Misc(r)
 	names := r.Names()
 	fmt.Println("TOTAL:", len(names))
 	for _, n := range names {
