@@ -71,6 +71,9 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 	// cookie instead of an API key. Cursor rides here too, since it streams
 	// hand-rolled protobuf over a duplex connection.
 	providers.RegisterWave7(registry)
+	// Wave 8 — chat-LLM long tail from the Node registry (2026-11-18 sync).
+	providers.RegisterWave8(registry)
+	providers.RegisterWave8Anthropic(registry)
 
 	// Translator registry. Every request and response converter self-registers
 	// from its own file's init(), so this only needs to hand out the shared set.
