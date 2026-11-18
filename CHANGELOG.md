@@ -1,5 +1,26 @@
 # v0.1.0 (2026-11-18)
 
+### Fixed — login page stuck on "Loading…" after rebuilds (prod served a deleted build)
+
+Opening `/login` (or any dashboard page) after a server rebuild hung forever on the app's own
+"Loading…" screen — even after Ctrl+F5, on every device, not just the tab that was open.
+
+- **Symptom.** The HTML rendered, then every `/_next/static/chunks/<hash>.js` request 404'd.
+  A hard reload fetched the same dead HTML, so the page never finished booting.
+- **Root cause.** Not browser cache and not code: the production process had been running
+  since the previous day with its working directory
+  `/root/xrouter/.next/standalone (deleted)`. Every `npm run build` replaces `.next/`
+  in-place, so the running server kept serving HTML from the *deleted* build in memory while
+  the chunk files it referenced no longer existed on disk. The HTML was a ghost: 10/10
+  chunks it referenced were missing from disk.
+- **Fix.** Restart the service after builds (the new process re-resolves
+  `.next/standalone` and serves a consistent HTML+chunk pair). Verified post-restart:
+  login 200, **10/10 referenced chunks return 200**, dashboard 307 to login as expected,
+  public URL 200, RSS ~200 MB, cwd no longer `(deleted)`.
+- **Prevention already shipped.** The `global-error.js` boundary from this same release
+  auto-reloads stale-chunk crashes; this incident adds the operational rule the boundary
+  can't cover — the server itself must be restarted when `.next/` is replaced under it.
+
 ### Fixed — dashboard self-heals stale-chunk crashes after every rebuild
 
 After each server rebuild, open dashboard tabs showed the built-in Next.js error boundary
