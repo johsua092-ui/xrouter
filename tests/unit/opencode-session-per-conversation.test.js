@@ -41,6 +41,12 @@ describe("conversationScope", () => {
     expect(conversationScope(other)).not.toBe(conversationScope(bodyA));
   });
 
+  it("membedakan format Claude yang menaruh system prompt di root body.system", () => {
+    const claude1 = { system: "You are an angel.", messages: [{ role: "user", content: "Hi" }] };
+    const claude2 = { system: "You are a demon.", messages: [{ role: "user", content: "Hi" }] };
+    expect(conversationScope(claude1)).not.toBe(conversationScope(claude2));
+  });
+
   it("null bila tidak ada pesan yang bisa dipakai", () => {
     expect(conversationScope({ messages: [] })).toBe(null);
     expect(conversationScope(undefined)).toBe(null);

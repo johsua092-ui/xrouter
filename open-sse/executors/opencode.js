@@ -236,13 +236,19 @@ export function conversationScope(body) {
     const textOf = (msg) => {
       const c = msg?.content;
       if (typeof c === "string") return c;
-      if (Array.isArray(c)) return c.map((part) => part?.text || "").join("");
+      if (Array.isArray(c)) return c.map((part) => (typeof part === "string" ? part : part?.text || "")).join("");
       return "";
     };
     // Hanya awalan percakapan (system + pesan user PERTAMA). Jawaban assistant
     // tidak ikut: begitu ia muncul di riwayat, scope akan berubah dan sesi pindah
     // di tengah percakapan — justru mematikan cache prefix yang mau dijaga.
     let system = "";
+    if (typeof body?.system === "string") {
+      system += `${body.system}\n`;
+    } else if (Array.isArray(body?.system)) {
+      system += `${body.system.map((s) => (typeof s === "string" ? s : s?.text || "")).join("")}\n`;
+    }
+
     let firstUser = "";
     for (const msg of arr) {
       const role = msg?.role;
