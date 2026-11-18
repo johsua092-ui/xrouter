@@ -1,3 +1,32 @@
+# v0.1.0 (2026-11-18) — wave 8
+
+### Added — wave 8: chat-LLM long tail ported (45 providers, 93/145 coverage)
+
+Ported every remaining chat-LLM provider from the Node registry to Go — all pure
+URL/headers adapters, zero custom execute() bodies:
+
+- **38 OpenAI /chat/completions upstreams** via the wave-1 OpenAICompat adapter
+  (agnes through xai — alicode/alims/alitp, baidu, bazaarlink, blackbox, byteplus,
+  chutes, cline/clinepass, cloudflare-ai, cohere, gitlab, glm-cn, llm7, morph, muse,
+  nebius, openai, siliconflow, tencent, tokenharbor, tokenrouter, venice,
+  vercel-ai-gateway, volcengine-ark, xai, and friends).
+- **7 Anthropic /v1/messages upstreams** via a new AnthropicCompatAdapter wrapper
+  binding per-provider BaseURL to the wave-4 header logic (anthropic, claude, glm,
+  kimi, minimax, minimax-cn, minimax-code-global). Vendor paths like
+  api.minimax.io/anthropic and zcode.z.ai/... are preserved in BaseURL; Endpoint
+  appends /messages.
+- **cmd/listprov** debug helper: prints live registry names, so coverage numbers
+  come from the compiled binary rather than source greps.
+
+Registry now resolves 93 provider names at runtime (was 48). Remaining 56 Node
+providers are non-chat modalities (13 TTS/STT, 9 image, 16 search, 6 web-cookie,
+12 misc) — future waves.
+
+**Load-test baseline recorded this session:** Go binary idles at 13.8 MB RSS,
+peaks at 20.5 MB under 650 requests (150 concurrent light + 500 x 100KB bodies +
+SSE streams, zero errors) — Node prod sits at 309 MB. The <64 MB peak requirement
+holds with 3x margin.
+
 # v0.1.0 (2026-11-18) — go-migration sync
 
 ### Synced — main → go-migration catch-up (18 non-merge commits)
