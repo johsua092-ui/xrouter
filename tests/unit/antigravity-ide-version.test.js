@@ -1,16 +1,9 @@
 /**
- * Antigravity IDE version override — identity rewrite on the Cloud Code Assist surface.
+ * Antigravity IDE version override — normalized to decolua/9router behavior.
  *
- * The rewrite applies to the whole `v1internal:` surface, not only generation:
- * the live backend fingerprints the caller on onboarding and catalogue calls too,
- * and the failure there is a silent tier downgrade rather than an error:
- *
- *   UA antigravity/hub/2.32.1  → currentTier: free-tier
- *   UA curl/8.0                → ineligibleTiers: [{ reasonCode: "UNSUPPORTED_CLIENT" }]
- *
- * Every request on the surface therefore gets the pinned identity whether or not
- * the caller supplied one, and a caller whose identity talks about another IDE is
- * corrected rather than trusted.
+ * Rewrites identity only on generation endpoints (:generateContent / :streamGenerateContent).
+ * Non-chat endpoints (:loadCodeAssist, :onboardUser, :fetchAvailableModels, :retrieveUserQuotaSummary)
+ * are left untouched so that IDE onboarding and Google protobuf schema checks pass cleanly.
  */
 
 import { createRequire } from "module";
@@ -37,20 +30,19 @@ function makeRequest(metadata = { ideName: "antigravity", ideVersion: CALLER_VER
   return { bodyBuffer, headers };
 }
 
-describe("Antigravity IDE version override", () => {
-  it("rewrites identity on the model catalogue", () => {
+describe("Antigravity IDE version override (normalized to decolua)", () => {
+  it("leaves model catalogue and onboarding endpoints untouched for native passthrough", () => {
     const { bodyBuffer, headers } = makeRequest();
 
-    const result = applyAntigravityIdeVersionOverride(bodyBuffer, headers, "/v1internal:fetchAvailableModels");
+    const resultModels = applyAntigravityIdeVersionOverride(bodyBuffer, headers, "/v1internal:fetchAvailableModels");
+    expect(resultModels.applied).toBe(false);
 
-    expect(result.applied).toBe(true);
-    expect(result.headers["user-agent"]).toBe(IDE_UA);
-    expect(JSON.parse(result.bodyBuffer.toString()).metadata.ideVersion).toBe(ANTIGRAVITY_IDE_VERSION);
-    expect(result.headers["content-length"]).toBe(String(result.bodyBuffer.length));
+    const resultOnboard = applyAntigravityIdeVersionOverride(bodyBuffer, headers, "/v1internal:loadCodeAssist");
+    expect(resultOnboard.applied).toBe(false);
   });
 
   it.each([":generateContent", ":streamGenerateContent"])(
-    "rewrites identity for %s requests",
+    "rewrites identity for %s requests when metadata is present",
     (endpoint) => {
       const { bodyBuffer, headers } = makeRequest();
 
@@ -67,29 +59,13 @@ describe("Antigravity IDE version override", () => {
     }
   );
 
-  it("keeps a malformed non-JSON body byte-for-byte while correcting the UA", () => {
-    // The body is left alone — it cannot be stamped — but a non-Antigravity UA
-    // would earn a 403 "no valid license" on this endpoint, so it is corrected.
-    const bodyBuffer = Buffer.from([0xff, 0x00, 0x7b, 0x6e, 0x6f, 0x74, 0x2d, 0x6a, 0x73, 0x6f, 0x6e]);
+  it("does not inject metadata into payloads that do not have it (prevents protobuf schema rejection)", () => {
+    const bodyBuffer = Buffer.from(JSON.stringify({ contents: [] }));
     const headers = {
-      "content-type": "application/octet-stream",
+      "content-type": "application/json",
       "content-length": String(bodyBuffer.length),
       "user-agent": `antigravity/${CALLER_VERSION}`,
     };
-
-    const result = applyAntigravityIdeVersionOverride(bodyBuffer, headers, "/v1internal:loadCodeAssist");
-
-    expect(result.bodyBuffer).toBe(bodyBuffer);
-    expect(result.headers["content-length"]).toBe(String(bodyBuffer.length));
-    expect(result.headers["user-agent"]).toBe(IDE_UA);
-  });
-
-  it("synthesizes the identity a third-party caller cannot supply", () => {
-    // A client that is not the Antigravity IDE has no identity to present on
-    // onboarding, which is exactly the caller this rewrite serves: leaving the
-    // body untouched gets the account silently downgraded to UNSUPPORTED_CLIENT.
-    const bodyBuffer = Buffer.from(JSON.stringify({ metadata: {}, request: { contents: [] } }));
-    const headers = { "content-type": "application/json", "content-length": String(bodyBuffer.length) };
 
     const result = applyAntigravityIdeVersionOverride(
       bodyBuffer,
@@ -97,17 +73,11 @@ describe("Antigravity IDE version override", () => {
       "/v1internal/models/gemini-3.7-flash-tiered:generateContent"
     );
 
-    expect(result.applied).toBe(true);
     const parsed = JSON.parse(result.bodyBuffer.toString());
-    expect(parsed.metadata.ideVersion).toBe(ANTIGRAVITY_IDE_VERSION);
-    expect(parsed.metadata.ideName).toBe(ANTIGRAVITY_IDE_NAME);
-    expect(result.headers["user-agent"]).toBe(IDE_UA);
+    expect(parsed.metadata).toBeUndefined();
   });
 
   it("advertises the full catalogue a higher-tier plan can serve", () => {
-    // Catalogue is NOT trimmed to what one free-tier account lists. A model
-    // missing from the narrowest tier is unverified, not absent — pruning it
-    // hides models a Pro/Ultra plan still serves.
     const ids = REGISTRY.models.map((m) => m.id);
     expect(ids).toContain("gemini-4-argon-medium");
     expect(ids.filter((id) => /5-5/.test(id)).length).toBeGreaterThan(0);
