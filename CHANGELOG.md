@@ -1,3 +1,19 @@
+# v0.1.0 (2026-11-18) — go-migration sync
+
+### Synced — main → go-migration catch-up (18 non-merge commits)
+
+Brought the Go-migration branch up to date with main. 9 commits cherry-picked cleanly
+(next16 params/headers awaits, auth-guard re-arm, blank-screen + deleted-build changelog
+entries, ACP transport + prewarm, SSL_CERT_FILE removal, sandbox mirror removal, MITM
+identity rewrite normalization). 17 commits skipped as cherry-pick conflicts — content
+audit confirms all of them already exist on this branch via earlier direct ports:
+opencode lifetime fixes, fingerprint gates port, oauth2 bypass + body serialization,
+leaf-cert serial/AKI, global-error boundary, antigravity identity unification (4a31766),
+and the antigravity model catalogue reverts.
+
+Verified present on go-migration: oauth2 bypass + URLSearchParams body serialization,
+cert serial '01'+randomBytes(15), global-error.js, sandbox mirror removal. Tree clean.
+
 # v0.1.0 (2026-11-18)
 
 ### Fixed — login page stuck on "Loading…" after rebuilds (prod served a deleted build)
