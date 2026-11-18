@@ -296,6 +296,36 @@ async function createBypassRequest(parsedUrl, realIP, options) {
     const socket = new net.Socket();
 
     socket.connect(HTTPS_PORT, realIP, () => {
+      // Normalize headers: callers may pass a web Headers instance, whose
+      // spread is empty ({...new Headers()} === {}) — that silently dropped
+      // Content-Type and every other header on bypassed requests.
+      const rawHeaders = options.headers instanceof Headers
+        ? Object.fromEntries(options.headers.entries())
+        : (options.headers ? { ...options.headers } : {});
+      // Serialize the body the way fetch() would. URLSearchParams was being
+      // JSON.stringify'd to "{}" — Google answered every bypassed token
+      // refresh with 400 unsupported_grant_type because the form body never
+      // made it onto the wire.
+      let bodyData = null;
+      if (options.body !== undefined && options.body !== null) {
+        if (typeof options.body === "string" || Buffer.isBuffer(options.body)) {
+          bodyData = options.body;
+        } else if (typeof URLSearchParams !== "undefined" && options.body instanceof URLSearchParams) {
+          bodyData = options.body.toString();
+        } else if (typeof options.body === "object" && typeof options.body.toString === "function" && options.body.toString !== Object.prototype.toString) {
+          // FormData-style / custom body types with a meaningful toString
+          bodyData = options.body.toString();
+        } else {
+          bodyData = JSON.stringify(options.body);
+        }
+      }
+      // fetch() sets Content-Length from the serialized body; a raw socket
+      // request must do the same or servers mis-frame the request.
+      const hasLength = Object.keys(rawHeaders).some((k) => k.toLowerCase() === "content-length");
+      if (bodyData !== null && !hasLength) {
+        rawHeaders["Content-Length"] = String(Buffer.byteLength(bodyData));
+      }
+
       const reqOptions = {
         socket,
         // SNI + cert hostname are validated against the hostname the caller
@@ -308,7 +338,7 @@ async function createBypassRequest(parsedUrl, realIP, options) {
         path: parsedUrl.pathname + parsedUrl.search,
         method: options.method || "POST",
         headers: {
-          ...options.headers,
+          ...rawHeaders,
           Host: parsedUrl.hostname,
         },
       };
@@ -318,7 +348,13 @@ async function createBypassRequest(parsedUrl, realIP, options) {
           ok: res.statusCode >= HTTP_SUCCESS_MIN && res.statusCode < HTTP_SUCCESS_MAX,
           status: res.statusCode,
           statusText: res.statusMessage,
-          headers: new Map(Object.entries(res.headers)),
+          // Case-insensitive lookup, matching the web Headers.get() contract
+          // callers rely on (e.g. headers.get("Content-Type") vs "content-type").
+          headers: new Map(Object.entries(res.headers).map(([k, v]) => [k.toLowerCase(), v])),
+          get: (name) => {
+            const v = Object.entries(res.headers).find(([k]) => k.toLowerCase() === String(name).toLowerCase());
+            return v ? v[1] : null;
+          },
           body: Readable.toWeb(res),
           text: async () => {
             const chunks = [];
@@ -331,8 +367,8 @@ async function createBypassRequest(parsedUrl, realIP, options) {
       });
 
       req.on("error", reject);
-      if (options.body) {
-        req.write(typeof options.body === "string" ? options.body : JSON.stringify(options.body));
+      if (bodyData !== null) {
+        req.write(bodyData);
       }
       req.end();
     });
