@@ -23,31 +23,29 @@ const DATA_DIR_JS = read("src/lib/dataDir.js");
 const ROUTE = read("src/app/api/cli-tools/antigravity-mitm/route.js");
 const ALIAS_CACHE = read("src/lib/mitmAliasCache.js");
 
-describe("finding 1 — Go backends get SSL_CERT_FILE, not just Node", () => {
-  it("sets NODE_EXTRA_CA_CERTS (Electron) AND SSL_CERT_FILE (Go) on Windows", () => {
-    // The backend that calls cloudcode-pa is language_server.exe — a Go binary.
-    // Go's crypto/x509 reads SSL_CERT_FILE and ignores NODE_EXTRA_CA_CERTS, so
-    // setting only the latter leaves the original error in place.
+describe("finding 1 — Node gets NODE_EXTRA_CA_CERTS while Go uses system cert store without SSL_CERT_FILE", () => {
+  it("sets NODE_EXTRA_CA_CERTS on Windows, but DOES NOT set SSL_CERT_FILE", () => {
+    // Setting SSL_CERT_FILE overrides Go's system root pool, breaking non-intercepted
+    // HTTPS endpoints like oauth2.googleapis.com. Go on Windows uses CryptoAPI to
+    // check the Windows Root Certificate store natively.
     expect(MANAGER).toMatch(/setx NODE_EXTRA_CA_CERTS/);
-    expect(MANAGER).toMatch(/setx SSL_CERT_FILE/);
+    expect(MANAGER).not.toMatch(/setx SSL_CERT_FILE/);
     expect(MANAGER).toMatch(/reg delete HKCU\\\\Environment \/F \/V SSL_CERT_FILE/);
   });
 
-  it("sets both on macOS via launchctl too", () => {
+  it("sets NODE_EXTRA_CA_CERTS on macOS via launchctl, but NOT SSL_CERT_FILE", () => {
     expect(MANAGER).toMatch(/launchctl setenv NODE_EXTRA_CA_CERTS/);
-    expect(MANAGER).toMatch(/launchctl setenv SSL_CERT_FILE/);
+    expect(MANAGER).not.toMatch(/launchctl setenv SSL_CERT_FILE/);
     expect(MANAGER).toMatch(/launchctl unsetenv SSL_CERT_FILE/);
   });
 
-  it("only sets them when the root CA actually exists on disk", () => {
-    // Go does not fall back to the system store if SSL_CERT_FILE points at a
-    // missing file, so an unguarded path would be worse than not setting it.
+  it("only sets NODE_EXTRA_CA_CERTS when the root CA actually exists on disk", () => {
     const at = MANAGER.indexOf("const rootCAPath = path.join(MITM_DIR, \"rootCA.crt\")");
     const block = MANAGER.slice(at, at + 2600);
     expect(block).toMatch(/if \(fs\.existsSync\(rootCAPath\)\)/);
   });
 
-  it("clears BOTH vars on stopServer, so no stale trust survives", () => {
+  it("clears vars on stopServer, so no stale trust survives", () => {
     const at = MANAGER.indexOf("async function stopServer");
     const block = MANAGER.slice(at, at + 6000);
     expect(block).toMatch(/unsetenv NODE_EXTRA_CA_CERTS|reg delete.*NODE_EXTRA_CA_CERTS/);
