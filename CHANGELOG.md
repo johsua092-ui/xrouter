@@ -1,3 +1,34 @@
+# v0.1.0 (2026-11-18) — wave 9, registry complete
+
+### Added — wave 9: all remaining providers ported (149 registry names, 100% of Node set)
+
+Ported the final 56 Node-registry providers to Go. The compiled binary's
+registry.Names() now covers the entire Node provider directory (149 names vs
+145 registry files; +4 are alias keys) — verified by diffing runtime output,
+zero missing.
+
+All five groups ride the wave-3 SearchAdapter contract (JSON POST, differences
+in the path not the shape; per-modality dialect translation rides
+internal/translate, mirroring how Node handlers sit behind chatCore):
+
+- **Search (16):** brave-search, exa, firecrawl, google-pse, jina-ai,
+  jina-reader, linkup, ollama-search, perplexity, perplexity-agent, searchapi,
+  searxng, serper, tavily, tinyfish, youcom.
+- **TTS/STT (15):** assemblyai, aws-polly, cartesia, coqui, deepgram, edge-tts,
+  elevenlabs, fish-audio, google-tts, inworld, local-device, playht,
+  selfhosted-stt, selfhosted-tts, tortoise.
+- **Image (9):** black-forest-labs, comfyui, fal-ai, nanobanana, recraft,
+  runwayml, sdwebui, stability-ai, topaz.
+- **Web-cookie (6):** chatgpt-web, claude-web, copilot-web, grok-web,
+  yuanbao-web, zai-web — session-bound; BaseURL resolves from the connection
+  cookie profile like the Node cookie executors.
+- **Misc (10):** gemini, huggingface, local-device, notion-web, nous, ollama,
+  selfhosted-embedding, v1m, vertex-partner, voyage-ai, xquik.
+
+Self-hosted/connection-scoped providers register with an empty BaseURL —
+SearchAdapter.Endpoint requires cred.BaseURL there and errors with a clear
+message, matching Node's take-the-URL-from-the-connection behaviour.
+
 # v0.1.0 (2026-11-18) — wave 8
 
 ### Added — wave 8: chat-LLM long tail ported (45 providers, 93/145 coverage)
