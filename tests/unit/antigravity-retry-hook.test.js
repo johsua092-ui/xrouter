@@ -73,6 +73,9 @@ describe("antigravity computeRetryDelay hook (D3)", () => {
     // rather than the whole array.
     expect(antigravity.transport.baseUrls[0]).toBe("https://daily-cloudcode-pa.googleapis.com");
     expect(antigravity.transport.baseUrls.length).toBeGreaterThan(0);
+    // Google sandbox endpoints (autopush/daily.sandbox) reject public OAuth
+    // tokens with 403 and must never be dialed as fallback mirrors.
+    expect(antigravity.transport.baseUrls.some(u => u.includes("sandbox.googleapis.com"))).toBe(false);
     // Pinned to the shipped hub version — an older UA earns a 404, a non-AG UA
     // earns a 403 "no valid license".
     expect(antigravity.transport.headers["User-Agent"]).toBe("antigravity/hub/2.32.1 linux/x64");
