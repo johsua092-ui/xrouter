@@ -119,7 +119,14 @@ function generateLeafCert(domain, rootCA) {
   // Create leaf certificate
   const cert = forge.pki.createCertificate();
   cert.publicKey = keys.publicKey;
-  cert.serialNumber = Math.floor(Math.random() * 1000000).toString();
+  // RFC 5280 §4.1.2.2: the serial must be a positive INTEGER. node-forge
+  // treats this property as HEX, so a random decimal string whose first hex
+  // digit is ≥ 8 (e.g. "958622") encodes with the MSB set and Go's strict
+  // crypto/x509 parser reads it as a NEGATIVE serial — the TLS handshake dies
+  // with "x509: negative serial number" before trust even comes into play.
+  // A leading "01" byte guarantees a positive ~16-byte serial (~20% of leaf
+  // certs were being rejected before this).
+  cert.serialNumber = "01" + require("crypto").randomBytes(15).toString("hex");
   cert.validity.notBefore = new Date();
   cert.validity.notAfter = new Date();
   cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
@@ -144,6 +151,13 @@ function generateLeafCert(domain, rootCA) {
       name: "extKeyUsage",
       serverAuth: true,
       clientAuth: true
+    },
+    {
+      // Chain-building on Windows CryptoAPI (CertGetCertificateChain — which
+      // Go uses natively) matches the leaf to its issuer by AKI→SKI; without
+      // it the chain can fail to resolve even with the Root CA installed.
+      name: "authorityKeyIdentifier",
+      keyIdentifier: rootCA.cert.generateSubjectKeyIdentifier().getBytes()
     },
     {
       name: "subjectAltName",
