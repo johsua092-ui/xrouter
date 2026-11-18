@@ -1,3 +1,48 @@
+# v0.1.0 (2026-11-18)
+
+### Fixed — MITM cert chain + bypassed OAuth bodies + Antigravity prompt/catalog (four fixes)
+
+Four failure chains from the 2026-11-18 Antigravity reports and upstream PRs #5738/#5734.
+
+- **Bypassed OAuth requests lost their body (regression of the oauth2 bypass).**
+  `- Symptom.` The proactive token-refresh loop failed every 5 minutes with
+  `400 {"error":"unsupported_grant_type","error_description":"Invalid grant_type: "}`.
+  `- Root cause.` Once `oauth2.googleapis.com` entered `MITM_BYPASS_HOSTS`, the refresh went
+  through `createBypassRequest`, whose body write was
+  `typeof body === "string" ? body : JSON.stringify(body)`. A `URLSearchParams` body
+  stringified to `"{}"`, and a web `Headers` instance spread to `{}` — Google received an
+  empty form payload. `- Fix.` Headers normalize through `entries()`;
+  `URLSearchParams`/`Buffer`/`toString()`-able bodies serialize the way `fetch()` would;
+  `Content-Length` is set from the serialized body when missing; response headers resolve
+  case-insensitively with a `get()` helper.
+
+- **~20% of MITM leaf certs were rejected by Go outright.**
+  `- Root cause.` node-forge treats `cert.serialNumber` as **hex**, but the code assigned a
+  random **decimal** string. A first hex digit ≥ 8 (e.g. `"958622"`) encodes with the MSB
+  set, and Go's strict `crypto/x509` reads a **negative serial** (RFC 5280 §4.1.2.2 violation)
+  — the TLS handshake died before trust was even evaluated. `- Fix.` Serials are now
+  `"01" + 15 random bytes` — always a positive ~16-byte integer.
+
+- **Leaf certs lacked `authorityKeyIdentifier`.**
+  Windows CryptoAPI (`CertGetCertificateChain`, which Go uses natively) resolves the chain by
+  AKI→SKI matching; without the extension the leaf could fail to chain to the installed Root
+  CA. The AKI now embeds the root's `subjectKeyIdentifier`.
+
+- **Antigravity fake 429 + stale model catalog (upstream #5738 / #5734).**
+  OpenClaw's system-prompt header ("You are a personal assistant running inside OpenClaw.")
+  triggers a fake `429 RESOURCE_EXHAUSTED` upstream — rewritten to Antigravity, same as the
+  Claude Code rules. The provider models route now calls the live per-account
+  `v1internal:fetchAvailableModels` (Hub fingerprint headers; `-disabled`/`tab_`/internal
+  filtered) instead of the sandbox `/v1internal:models`, and antigravity joined the dashboard
+  live-catalog providers — accounts stop advertising models they cannot serve
+  (`404 NOT_FOUND`).
+
+**Verification.** 12 tests in `mitm-cert-oauth.test.js` including end-to-end leaf generation
+(positive serial, AKI == root SKI, `verifyCertificateChain` passes) plus an 8-case runtime
+serialization smoke executing the real extraction block (URLSearchParams → form-encoding,
+Headers → entries, Content-Length, GET no-body, Buffer, plain JSON); 62/62 across the MITM
+and opencode-session suites; production build verified the fixes in the bundle.
+
 # v0.1.0 (2026-11-17)
 
 ### Added — OpenCode free-tier gates bypassed for third-party clients (port of decolua/9router#5725)
