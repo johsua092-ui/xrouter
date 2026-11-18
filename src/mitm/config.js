@@ -24,19 +24,11 @@ const TARGET_HOSTS = [
 ];
 
 const URL_PATTERNS = {
-  // Cloud Code Assist identity surface. Generation is the one XR re-routes;
-  // the rest (onboarding, model catalogue, quota) stay native but must still
-  // present the Antigravity identity — a mismatched one there is answered with
-  // a silent tier downgrade (ineligibleTiers: UNSUPPORTED_CLIENT) rather than
-  // an error, so it cannot be left to whatever the calling client sent.
-  // See src/mitm/antigravityIdeVersion.js.
+  // In decolua/9router, only chat generation endpoints are intercepted for routing.
+  // Setup and account onboarding endpoints pass through to upstream.
   antigravity: [
     ":generateContent",
     ":streamGenerateContent",
-    ":loadCodeAssist",
-    ":onboardUser",
-    ":fetchAvailableModels",
-    ":retrieveUserQuotaSummary",
   ],
   copilot: ["/chat/completions", "/v1/messages", "/responses"],
   // Legacy path form. Kiro IDE 1.0.228+ posts to `/` with x-amz-target instead —
