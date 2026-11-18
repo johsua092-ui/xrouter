@@ -16,7 +16,9 @@
 const assert = require("assert");
 const fs = require("fs");
 
-const src = fs.readFileSync("/root/xrouter/open-sse/utils/proxyFetch.js", "utf8");
+const path = require("path");
+
+const src = fs.readFileSync(path.resolve(__dirname, "../../open-sse/utils/proxyFetch.js"), "utf8");
 
 // Extract the serialization block from createBypassRequest and eval it in isolation.
 const start = src.indexOf("const rawHeaders = options.headers instanceof Headers");

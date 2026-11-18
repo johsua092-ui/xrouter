@@ -659,17 +659,16 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
 
   // Point GUI apps at the MITM Root CA before they connect.
   //
-  // Two runtimes read the trust anchors differently, and Antigravity needs BOTH:
-  //   • NODE_EXTRA_CA_CERTS — Electron/Node. Read at process start, so it must be
-  //     set as a persistent user env var; a restart of the IDE picks it up.
-  //   • SSL_CERT_FILE — Go's crypto/x509. The Antigravity backend that actually
-  //     calls cloudcode-pa.googleapis.com is `language_server.exe`, a pure Go
-  //     binary. Go ignores NODE_EXTRA_CA_CERTS entirely, so without this the
-  //     loadCodeAssist request fails with "x509: certificate signed by unknown
-  //     authority" even though the cert is in the Windows store.
-  // Go reads SSL_CERT_FILE only when it is set in the process environment (it
-  // does not fall back to it if the file is unreadable), so the path must be
-  // correct and the file present — hence the existsSync guard on both.
+  // NOTE: We only set NODE_EXTRA_CA_CERTS for Node/Electron apps.
+  // We MUST NOT set SSL_CERT_FILE:
+  // In Go (e.g. Antigravity's language_server.exe), setting SSL_CERT_FILE tells
+  // crypto/x509 to completely bypass the Windows system root certificate store
+  // (CryptoAPI) and trust ONLY the specified file (rootCA.crt).
+  // Because rootCA.crt contains only the local MITM CA, this completely breaks
+  // all non-intercepted public HTTPS requests (such as https://oauth2.googleapis.com/token)
+  // with "x509: certificate signed by unknown authority".
+  // Without SSL_CERT_FILE, Go on Windows queries Windows CryptoAPI directly, which
+  // already trusts both public root CAs and our rootCA.crt installed in the Windows Root store.
   const rootCAPath = path.join(MITM_DIR, "rootCA.crt");
   if (fs.existsSync(rootCAPath)) {
     if (IS_MAC) {
@@ -677,18 +676,10 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
         if (e) log(`[launchctl] Failed to set NODE_EXTRA_CA_CERTS: ${e.message}`);
         else log(`[launchctl] NODE_EXTRA_CA_CERTS set to ${rootCAPath}`);
       });
-      exec(`launchctl setenv SSL_CERT_FILE "${rootCAPath}"`, { windowsHide: true }, (e) => {
-        if (e) log(`[launchctl] Failed to set SSL_CERT_FILE: ${e.message}`);
-        else log(`[launchctl] SSL_CERT_FILE set to ${rootCAPath}`);
-      });
     } else if (IS_WIN) {
       exec(`setx NODE_EXTRA_CA_CERTS "${rootCAPath}"`, { windowsHide: true }, (e) => {
         if (e) log(`[setx] Failed to set NODE_EXTRA_CA_CERTS: ${e.message}`);
         else log(`[setx] NODE_EXTRA_CA_CERTS set for current user`);
-      });
-      exec(`setx SSL_CERT_FILE "${rootCAPath}"`, { windowsHide: true }, (e) => {
-        if (e) log(`[setx] Failed to set SSL_CERT_FILE: ${e.message}`);
-        else log(`[setx] SSL_CERT_FILE set for current user (Go binaries: language_server.exe, gcloud)`);
       });
     }
   }
