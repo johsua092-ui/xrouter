@@ -271,7 +271,9 @@ export async function GET(request, { params }) {
           }
         : undefined;
       
-      // Providers that don't use PKCE for device code (Grok CLI HAR: plain device_code, no challenge)
+      // Providers that don't use PKCE for device code (Grok CLI HAR: plain device_code, no challenge).
+      // NOTE: minimax-code / minimax-code-global require PKCE S256 challenge, so they are
+      // deliberately omitted here to pass authData.codeChallenge.
       const noPkceDeviceProviders = [
         "github",
         "kiro",
@@ -286,8 +288,6 @@ export async function GET(request, { params }) {
         "muse",
         "glm",
         "zcode",
-        "minimax-code",
-        "minimax-code-global",
         "nous",
       ];
       let deviceData;
