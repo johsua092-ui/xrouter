@@ -369,12 +369,14 @@ export class AntigravityExecutor extends BaseExecutor {
     const rawSessionId = body.request?.sessionId || resolveSessionId({ headers: credentials?.rawHeaders, body, connectionId: credentials?.email || credentials?.connectionId, scope: "antigravity" });
     const sessionId = toNumericSessionId(rawSessionId) || rawSessionId;
 
+    const isClaude = String(model || "").toLowerCase().includes("claude");
+
     // ─── Standard (non-image) request ───
     // Fix contents for Claude models via Antigravity
     const rawContents = (body.request?.contents || []).map(c => {
       let role = c.role;
       // functionResponse must be role "user" for Claude models
-      if (c.parts?.some(p => p.functionResponse)) {
+      if (isClaude && c.parts?.some(p => p.functionResponse)) {
         role = "user";
       }
       // Strip thought-only parts, keep thoughtSignature on functionCall parts (Gemini 3+ requires it)
@@ -452,7 +454,6 @@ export class AntigravityExecutor extends BaseExecutor {
       }
     }
 
-    const isClaude = String(model || "").toLowerCase().includes("claude");
     const generationConfig = { ...(requestWithoutTools.generationConfig || {}) };
     const maxTokensCap = isClaude ? 64000 : 65536;
     if (!generationConfig.maxOutputTokens || generationConfig.maxOutputTokens > maxTokensCap) {
@@ -465,7 +466,9 @@ export class AntigravityExecutor extends BaseExecutor {
       const budgetMap = { low: 1024, medium: 4096, high: 16384 };
       const budget = budgetMap[rawEffort.toLowerCase()] || 4096;
       generationConfig.thinkingConfig = {
-        thinkingBudget: budget
+        ...(generationConfig.thinkingConfig || {}),
+        thinkingBudget: budget,
+        includeThoughts: true
       };
     }
 
@@ -477,6 +480,10 @@ export class AntigravityExecutor extends BaseExecutor {
       }
     }
 
+    const effectiveToolConfig = _originalToolConfig || (tools?.length > 0 ? {
+      functionCallingConfig: { mode: isClaude ? "VALIDATED" : "AUTO" }
+    } : undefined);
+
     const transformedRequest = {
       ...requestWithoutTools,
       generationConfig,
@@ -484,7 +491,7 @@ export class AntigravityExecutor extends BaseExecutor {
       ...(tools && { tools }),
       sessionId,
       safetySettings: undefined,
-      ...(tools?.length > 0 && { toolConfig: { functionCallingConfig: { mode: "VALIDATED" } } })
+      ...(effectiveToolConfig && { toolConfig: effectiveToolConfig })
     };
 
     // Strip blacklisted thinking fields from top-level body (set by thinkingUnified.js at root, not body.request)

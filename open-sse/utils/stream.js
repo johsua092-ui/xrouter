@@ -281,9 +281,32 @@ export function createSSEStream(options = {}) {
                 accumulatedThinking += reasoning;
               }
 
+              // Also accumulate content and usage for Gemini / Antigravity passthrough chunks
+              const agCandidate = parsed.response?.candidates?.[0] || parsed.candidates?.[0];
+              if (agCandidate?.content?.parts) {
+                for (const part of agCandidate.content.parts) {
+                  if (part.text && typeof part.text === "string") {
+                    totalContentLength += part.text.length;
+                    accumulatedContent += part.text;
+                  }
+                  if (part.thought && typeof part.text === "string") {
+                    accumulatedThinking += part.text;
+                  }
+                }
+              }
+
               const extracted = extractUsage(parsed);
               if (extracted) {
                 usage = mergeUsage(usage, extracted);
+              } else {
+                const agUsage = parsed.usageMetadata || parsed.response?.usageMetadata;
+                if (agUsage) {
+                  usage = mergeUsage(usage, {
+                    prompt_tokens: agUsage.promptTokenCount || 0,
+                    completion_tokens: agUsage.candidatesTokenCount || 0,
+                    total_tokens: agUsage.totalTokenCount || 0,
+                  });
+                }
               }
 
               responsesTerminal = isOpenAIResponsesTerminalEvent(currentOpenAIResponsesEvent, parsed);
