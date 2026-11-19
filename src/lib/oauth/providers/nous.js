@@ -77,7 +77,11 @@ const nous = {
 
       if (!response.ok) {
         const error = await response.text().catch(() => "");
-        console.warn(`[oauth] Nous agent key mint failed (${response.status}): ${error}`);
+        if (error.includes("session_key_minting_retired")) {
+          console.info("[oauth] Nous session key minting retired by upstream; using access_token directly");
+        } else {
+          console.warn(`[oauth] Nous agent key mint failed (${response.status}): ${error}`);
+        }
         return { agentKey: null };
       }
 
