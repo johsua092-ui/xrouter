@@ -11,6 +11,7 @@ import { getGeminiThoughtSignatureSync } from "../services/thoughtSignatureStore
 import { cloakUser, outgoing } from "../services/antigravityPromptCloak.js";
 import { executeViaAgyCli, resolveAgyTransport } from "./agyCliExecutor.js";
 import { refusedPromptHint } from "./antigravityUpstreamError.js";
+import { decide429, classify429 } from "../services/antigravity429Engine.js";
 
 function asRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
@@ -48,6 +49,18 @@ function readSystemPromptText(requestOrBody) {
   return text || undefined;
 }
 
+// Hermes Agent and competitor lines that trigger a fake 429 RESOURCE_EXHAUSTED from Google Antigravity (PR #5745)
+const HERMES_TRIGGER_REWRITES = [
+  { from: /^[ \t]*You are Hermes Agent, built by Nous Research\. Be direct:[^\n]*/gm, to: "You are an AI assistant." },
+  { from: /^[ \t]*<!-- End Hermes runtime environment -->[^\n]*(?:\r?\n)?/gm, to: "" },
+  { from: /^[ \t]*# Google model operational directives[^\n]*(?:\r?\n)?/gm, to: "" },
+  { from: /^[ \t]*If a tool, install, or network call fails and blocks the real path[^\n]*(?:\r?\n)?/gm, to: "" },
+  { from: /^[ \t]*When the user asks you to build, run, or verify something, the deliverable is a working artifact[^\n]*(?:\r?\n)?/gm, to: "" },
+  { from: /^[ \t]*For help with Hermes Agent itself[^\n]*(?:\r?\n)?/gm, to: "" },
+  { from: /^[ \t]*Mid-turn, the user can steer you: Hermes delivers their message[^\n]*(?:\r?\n)?/gm, to: "" },
+  { from: /You are a personal assistant running inside OpenClaw\./gi, to: "You are a personal assistant running inside Antigravity." },
+];
+
 /**
  * Full cloak.mjs parity over systemInstruction parts: strips legacy standalone
  * Claude Agent SDK sentence and rewords every TURNED_AWAY signature + REWORDED
@@ -81,6 +94,13 @@ export function normalizeAntigravitySystemInstruction(systemInstruction) {
     if (stripped !== text) {
       changed = true;
       text = stripped;
+    }
+    for (const { from, to } of HERMES_TRIGGER_REWRITES) {
+      const rewrote = typeof from === "string" ? text.replaceAll(from, to) : text.replace(from, to);
+      if (rewrote !== text) {
+        changed = true;
+        text = rewrote;
+      }
     }
     const cloaked = outgoing(text);
     if (cloaked !== text) {
@@ -275,6 +295,10 @@ export class AntigravityExecutor extends BaseExecutor {
         }
         if (resetsAtMs) {
           return { status: response.status, message, resetsAtMs };
+        }
+        const decision = decide429(classify429(rawMsg), null);
+        if (decision.retryAfterMs) {
+          return { status: response.status, message, resetsAtMs: Date.now() + decision.retryAfterMs };
         }
         if (hintSuffix) {
           return { status: response.status, message };
