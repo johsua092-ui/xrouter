@@ -300,9 +300,9 @@ export default function QuotaTable({
                 </div>
 
               {/* Reset time */}
-              <div className="min-w-0 shrink">
-                {countdown !== "-" || resetDisplay ? (
-                  compact ? (
+              {(countdown !== "-" || resetDisplay) && (
+                <div className="min-w-0 shrink">
+                  {compact ? (
                     <div
                       className={`${resetPrimary} text-text-primary font-medium truncate`}
                       title={absoluteLabel ? `${absoluteLabel} (${countdownLabel})` : resetSecondaryText || ""}
@@ -318,15 +318,13 @@ export default function QuotaTable({
                       )}
                       {resetDisplay && (
                         <div className="text-[10px] text-text-muted/70">
-                          {resetWord} at {renderResetCell(resetSecondary)}
+                          {quota.neverExpires ? renderResetCell(resetSecondary) : `${resetWord} at ${renderResetCell(resetSecondary)}`}
                         </div>
                       )}
                     </div>
-                  )
-                ) : (
-                  <div className={`${resetPrimary} text-text-muted italic`}>N/A</div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           );

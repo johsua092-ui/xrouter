@@ -826,6 +826,7 @@ export function parseQuotaData(provider, data) {
               expiresAt: quota.expiresAt || null,
               recurring: quota.recurring,
               absoluteReset: quota.absoluteReset === true,
+              neverExpires: quota.neverExpires === true,
               remainingPercentage: quota.remainingPercentage,
               isCreditBalance: quota.isCreditBalance === true,
               unlimited: quota.unlimited === true,
