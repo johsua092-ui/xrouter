@@ -71,24 +71,36 @@ export async function getNousUsage(accessToken, proxyOptions = null, options = {
     const orgName = billingData?.org?.name || subData?.org?.name || null;
     const plan = orgName ? `Nous Research (${tierName} - ${orgName})` : `Nous Research (${tierName})`;
 
+    const isFreeTier = tierName === "Free";
     const quotas = {};
 
-    // 1. Credit balance
+    // 1. Free tier models indicator
+    if (isFreeTier) {
+      quotas["Free Models"] = {
+        used: 0,
+        total: 0,
+        remainingPercentage: 100,
+        unlimited: true,
+        resetAt: null,
+      };
+    }
+
+    // 2. Credit balance
     const balance = parseFloat(billingData?.balanceUsd || 0);
     quotas["Balance (USD)"] = {
       used: 0,
       total: balance,
-      remainingPercentage: balance > 0 ? 100 : 0,
+      remainingPercentage: 100,
       resetAt: null,
       unlimited: false,
       isCreditBalance: true,
       currency: "USD",
     };
 
-    // 2. Monthly spending cap
+    // 3. Monthly spending cap (show when active spending or paid plan)
     const spent = parseFloat(billingData?.monthlyCap?.spentThisMonthUsd || 0);
     const limit = parseFloat(billingData?.monthlyCap?.limitUsd || 0);
-    if (limit > 0) {
+    if (limit > 0 && (!isFreeTier || spent > 0 || balance > 0)) {
       quotas["Monthly Cap"] = {
         used: spent,
         total: limit,

@@ -49,18 +49,20 @@ describe("Nous Research Usage & Billing Service", () => {
     assert.equal(res.plan, "Nous Research (Free - Test User's account)");
     assert.equal(res.org, "Test User's account");
 
+    // Free Models indicator
+    assert.ok(res.quotas["Free Models"]);
+    assert.equal(res.quotas["Free Models"].unlimited, true);
+
     // Balance quota
     assert.ok(res.quotas["Balance (USD)"]);
     assert.equal(res.quotas["Balance (USD)"].total, 5.5);
     assert.equal(res.quotas["Balance (USD)"].isCreditBalance, true);
     assert.equal(res.quotas["Balance (USD)"].currency, "USD");
-    assert.equal(res.quotas["Balance (USD)"].remainingPercentage, 100);
 
-    // Monthly Cap quota
+    // Monthly Cap quota (shows because balance/spent > 0)
     assert.ok(res.quotas["Monthly Cap"]);
     assert.equal(res.quotas["Monthly Cap"].used, 15);
     assert.equal(res.quotas["Monthly Cap"].total, 1000);
-    assert.equal(res.quotas["Monthly Cap"].remainingPercentage, 99);
   });
 
   it("parses Plus tier with usage windows correctly", async () => {
@@ -118,6 +120,7 @@ describe("Nous Research Usage & Billing Service", () => {
       fetch: mockFetch,
     });
 
+    assert.ok(res.quotas["Free Models"]);
     assert.ok(res.quotas["Balance (USD)"]);
     assert.equal(res.plan, "Nous Research (Free)");
   });

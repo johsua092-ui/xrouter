@@ -168,7 +168,9 @@ export default function QuotaTable({
           const isCreditBalance = quota.isCreditBalance === true;
           const remPercent = typeof quota.remaining === "number" ? quota.remaining : (typeof quota.remainingPercentage === "number" ? quota.remainingPercentage : 100);
           let displayRemaining = `${remPercent}%`;
-          if (quota.totalTokens && quota.totalTokens > 0) {
+          if (isCreditBalance) {
+            displayRemaining = `$${(Number(quota.total) || 0).toFixed(2)}`;
+          } else if (quota.totalTokens && quota.totalTokens > 0) {
             const remTokens = Math.max(0, quota.totalTokens - (quota.usedTokens || 0));
             displayRemaining = `${(remTokens / 1000000).toFixed(1)}M tok (${remPercent}%)`;
           } else if (quota.total >= 1000000) {
