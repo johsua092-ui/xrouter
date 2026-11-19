@@ -103,4 +103,34 @@ describe("AntigravityExecutor Gemini vs Claude toolConfig and functionResponse r
     assert.equal(transformed.request.generationConfig.thinkingConfig?.thinkingBudget, 1024);
     assert.equal(transformed.request.generationConfig.thinkingConfig?.includeThoughts, true);
   });
+
+  it("deduplicates repetitive IDE model output error loop turns to prevent session poisoning", () => {
+    const errorMsg = "Error: model output error: model output must contain either output text or tool calls, these cannot both be empty, please try again";
+    const corruptedContents = [
+      { role: "user", parts: [{ text: "Initial request" }] },
+      { role: "model", parts: [] },
+      { role: "user", parts: [{ text: errorMsg }] },
+      { role: "model", parts: [] },
+      { role: "user", parts: [{ text: errorMsg }] },
+      { role: "model", parts: [] },
+      { role: "user", parts: [{ text: errorMsg }] },
+      { role: "user", parts: [{ text: "tes" }] }
+    ];
+
+    const body = {
+      model: "ag/gemini-3.8-flash-high",
+      request: { contents: corruptedContents }
+    };
+
+    const transformed = executor.transformRequest("gemini-3.8-flash-high", body, true, {});
+    const contents = transformed.request.contents;
+    // Count how many times errorMsg appears across all parts
+    let count = 0;
+    for (const c of contents) {
+      for (const p of c.parts || []) {
+        if (p.text === errorMsg) count++;
+      }
+    }
+    assert.equal(count, 1, "Duplicate error messages should be collapsed into at most 1");
+  });
 });

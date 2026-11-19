@@ -536,11 +536,27 @@ export function normalizeGeminiContents(contents, model = null) {
     if (!c?.role || !Array.isArray(c.parts)) continue;
     const parts = c.parts.filter(p => p && Object.keys(p).length > 0).map(sanitizeFunctionResponsePart);
     if (parts.length === 0) continue;
+
+    // Deduplicate repetitive error loop feedback (e.g. IDE retry loop spamming "model output error")
+    // Prevents corrupted sessions with hundreds of retry errors from poisoning model attention
+    const cleanParts = [];
+    for (const p of parts) {
+      if (p.text && typeof p.text === "string" && (p.text.includes("model output error:") || p.text.includes("model output must contain either output text"))) {
+        const lastInClean = cleanParts.at(-1);
+        const lastInOut = out.at(-1)?.parts?.at(-1);
+        if (lastInClean?.text === p.text || lastInOut?.text === p.text) {
+          continue; // skip duplicate error spam
+        }
+      }
+      cleanParts.push(p);
+    }
+    if (cleanParts.length === 0) continue;
+
     const last = out.at(-1);
     if (last?.role === c.role) {
-      last.parts.push(...parts);
+      last.parts.push(...cleanParts);
       if (frLast) last.parts = moveFunctionResponsesLast(last.parts);
-    } else out.push({ ...c, parts: [...parts] });
+    } else out.push({ ...c, parts: [...cleanParts] });
   }
   if (out.length > 0 && out[0].role !== "user") {
     out.unshift({ role: "user", parts: [{ text: "..." }] });
