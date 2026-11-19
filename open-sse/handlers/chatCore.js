@@ -110,7 +110,13 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     if (semanticCacheMaxEntries > 0) setSemanticCacheMaxEntries(semanticCacheMaxEntries);
   }
 
-  if (semanticCacheEnabled) {
+  // SemanticCache only stores OpenAI-format chat.completion responses.
+  // Never serve OpenAI JSON or OpenAI SSE to clients requesting other formats (Antigravity, Claude, Gemini)
+  // and never cache agent requests that have tools.
+  const hasTools = (body.tools && body.tools.length > 0) || (body.request?.tools && body.request.tools.length > 0);
+  const isCacheableFormat = sourceFormat === FORMATS.OPENAI || sourceFormat === FORMATS.OPENAI_RESPONSES;
+
+  if (semanticCacheEnabled && isCacheableFormat && !hasTools) {
     const cachedResponse = checkSemanticCache(body, `${provider}/${model}`);
     if (cachedResponse) {
       log?.info?.("CACHE", `⚡ Instant semantic cache hit for ${provider}/${model}`);
@@ -736,7 +742,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     }
   }
 
-  const sharedCtx = { provider, model, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, requestedModel, clientRawRequest, onRequestSuccess, pxpipe: pxpipeSummary, reqTag, log, pluginResult, semanticCacheEnabled };
+  const sharedCtx = { provider, model, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, requestedModel, clientRawRequest, onRequestSuccess, pxpipe: pxpipeSummary, reqTag, log, pluginResult, semanticCacheEnabled, sourceFormat };
   const appendLog = (extra) => appendRequestLog({ model: trackedModel, provider, connectionId, ...extra }).catch(() => { })
   const trackDone = () => trackPendingRequest(trackedModel, provider, connectionId, false);
 

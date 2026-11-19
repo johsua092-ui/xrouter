@@ -536,7 +536,9 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
   });
 
   // Cache successful non-streaming response if semantic cache is enabled
-  if (semanticCacheEnabled && !stream && translatedResponse) {
+  const hasTools = (body.tools && body.tools.length > 0) || (body.request?.tools && body.request.tools.length > 0);
+  const isCacheableFormat = sourceFormat === FORMATS.OPENAI || sourceFormat === FORMATS.OPENAI_RESPONSES;
+  if (semanticCacheEnabled && isCacheableFormat && !hasTools && !stream && translatedResponse) {
     try {
       saveToSemanticCache(body, `${provider}/${model}`, translatedResponse);
       if (requestedModel && requestedModel !== `${provider}/${model}`) {

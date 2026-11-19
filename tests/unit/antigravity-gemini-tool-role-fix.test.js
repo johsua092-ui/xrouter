@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { AntigravityExecutor } from "../../open-sse/executors/antigravity.js";
 
 describe("AntigravityExecutor Gemini vs Claude toolConfig and functionResponse role", () => {
@@ -19,8 +20,8 @@ describe("AntigravityExecutor Gemini vs Claude toolConfig and functionResponse r
     const transformed = executor.transformRequest("gemini-3.8-flash-high", geminiBody, true, {});
     const contents = transformed.request.contents;
     const toolMsg = contents.find(c => c.parts?.some(p => p.functionResponse));
-    expect(toolMsg).toBeDefined();
-    expect(toolMsg.role).toBe("tool");
+    assert.ok(toolMsg);
+    assert.equal(toolMsg.role, "tool");
   });
 
   it("Claude models map functionResponse to user role", () => {
@@ -38,8 +39,8 @@ describe("AntigravityExecutor Gemini vs Claude toolConfig and functionResponse r
     const transformed = executor.transformRequest("claude-sonnet-4-6", claudeBody, true, {});
     const contents = transformed.request.contents;
     const toolMsg = contents.find(c => c.parts?.some(p => p.functionResponse));
-    expect(toolMsg).toBeDefined();
-    expect(toolMsg.role).toBe("user");
+    assert.ok(toolMsg);
+    assert.equal(toolMsg.role, "user");
   });
 
   it("Gemini models preserve client toolConfig if provided", () => {
@@ -53,7 +54,7 @@ describe("AntigravityExecutor Gemini vs Claude toolConfig and functionResponse r
     };
 
     const transformed = executor.transformRequest("gemini-3.8-flash-high", geminiBody, true, {});
-    expect(transformed.request.toolConfig).toEqual({
+    assert.deepEqual(transformed.request.toolConfig, {
       functionCallingConfig: { mode: "AUTO", allowedFunctionNames: ["read_file"] }
     });
   });
@@ -68,7 +69,7 @@ describe("AntigravityExecutor Gemini vs Claude toolConfig and functionResponse r
     };
 
     const transformed = executor.transformRequest("gemini-3.8-flash-high", geminiBody, true, {});
-    expect(transformed.request.toolConfig).toEqual({
+    assert.deepEqual(transformed.request.toolConfig, {
       functionCallingConfig: { mode: "AUTO" }
     });
   });
@@ -83,7 +84,7 @@ describe("AntigravityExecutor Gemini vs Claude toolConfig and functionResponse r
     };
 
     const transformed = executor.transformRequest("claude-sonnet-4-6", claudeBody, true, {});
-    expect(transformed.request.toolConfig).toEqual({
+    assert.deepEqual(transformed.request.toolConfig, {
       functionCallingConfig: { mode: "VALIDATED" }
     });
   });
@@ -98,9 +99,8 @@ describe("AntigravityExecutor Gemini vs Claude toolConfig and functionResponse r
     };
 
     const transformed = executor.transformRequest("gemini-3.8-flash-high", geminiBody, true, {});
-    expect(transformed.request.generationConfig.thinkingConfig).toEqual({
-      thinkingBudget: 1024,
-      includeThoughts: true
-    });
+    assert.ok(transformed.request.generationConfig);
+    assert.equal(transformed.request.generationConfig.thinkingConfig?.thinkingBudget, 1024);
+    assert.equal(transformed.request.generationConfig.thinkingConfig?.includeThoughts, true);
   });
 });
