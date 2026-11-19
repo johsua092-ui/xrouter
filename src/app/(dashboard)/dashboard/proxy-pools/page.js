@@ -730,8 +730,13 @@ export default function ProxyPoolsPage() {
   };
 
   const parseProxyLine = (line) => {
-    const trimmed = line.trim();
+    let trimmed = line.trim();
     if (!trimmed) return null;
+
+    // Handle user:pass@host:port without protocol scheme
+    if (trimmed.includes("@") && !trimmed.includes("://")) {
+      trimmed = `http://${trimmed}`;
+    }
 
     if (trimmed.includes("://")) {
       const parsed = new URL(trimmed);
@@ -743,8 +748,28 @@ export default function ProxyPoolsPage() {
     }
 
     const parts = trimmed.split(":");
+    // host:port (2 parts)
+    if (parts.length === 2) {
+      const [host, port] = parts;
+      if (host && port && /^\d+$/.test(port)) {
+        return {
+          proxyUrl: `http://${host}:${port}`,
+          name: `Imported ${host}:${port}`,
+        };
+      }
+    }
+
+    // 4 parts: host:port:user:pass OR user:pass:host:port
     if (parts.length === 4) {
-      const [host, port, username, password] = parts;
+      let host, port, username, password;
+      if (/^\d+$/.test(parts[1])) {
+        [host, port, username, password] = parts;
+      } else if (/^\d+$/.test(parts[3])) {
+        [username, password, host, port] = parts;
+      } else {
+        [host, port, username, password] = parts;
+      }
+
       if (!host || !port || !username || !password) {
         throw new Error("Invalid host:port:user:pass format");
       }
@@ -755,6 +780,10 @@ export default function ProxyPoolsPage() {
         proxyUrl: parsed.toString(),
         name: `Imported ${host}:${port}`,
       };
+    }
+
+    if (parts.length === 3) {
+      throw new Error("Missing port number (format: host:port:user:pass or user:pass@host:port)");
     }
 
     throw new Error("Unsupported format");
@@ -1303,11 +1332,11 @@ export default function ProxyPoolsPage() {
             <textarea
               value={batchImportText}
               onChange={(e) => setBatchImportText(e.target.value)}
-              placeholder={"http://user:pass@127.0.0.1:7897\n127.0.0.1:7897:user:pass"}
+              placeholder={"user:pass@host:port\nhost:port:user:pass\nhttp://user:pass@127.0.0.1:7897\n127.0.0.1:7897"}
               className="w-full min-h-[180px] py-2 px-3 text-sm text-text-main bg-surface dark:bg-surface-2 border border-border rounded-md focus:ring-1 focus:ring-primary/30 focus:border-primary/50 focus:outline-none transition-all"
             />
             <p className="text-xs text-text-muted mt-1">
-              Supported formats: protocol://user:pass@host:port, host:port:user:pass
+              Supported formats: user:pass@host:port, host:port:user:pass, host:port, protocol://user:pass@host:port
             </p>
           </div>
 
