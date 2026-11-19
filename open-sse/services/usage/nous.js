@@ -107,6 +107,7 @@ export async function getNousUsage(accessToken, proxyOptions = null, options = {
         remainingPercentage: Math.max(0, Math.min(100, Math.round(((limit - spent) / limit) * 100))),
         resetAt: null,
         unlimited: false,
+        unit: "USD",
       };
     }
 

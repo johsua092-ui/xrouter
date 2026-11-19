@@ -830,6 +830,7 @@ export function parseQuotaData(provider, data) {
               remainingPercentage: quota.remainingPercentage,
               isCreditBalance: quota.isCreditBalance === true,
               unlimited: quota.unlimited === true,
+              unit: quota.unit,
               currency: quota.currency || (name.includes("(") ? name.slice(name.indexOf("(") + 1, name.indexOf(")")) : "USD"),
             });
           });
