@@ -526,7 +526,9 @@ export async function handleForcedSSEToJson({ providerResponse, sourceFormat, ta
     if (usage && Object.keys(usage).length > 0) parsed.usage = usage;
 
     // Cache successful forced-SSE-to-JSON response if semantic cache is enabled
-    if (semanticCacheEnabled && parsed) {
+    const hasTools = (body.tools && body.tools.length > 0) || (body.request?.tools && body.request.tools.length > 0);
+    const isCacheableFormat = sourceFormat === FORMATS.OPENAI || sourceFormat === FORMATS.OPENAI_RESPONSES;
+    if (semanticCacheEnabled && isCacheableFormat && !hasTools && parsed) {
       try {
         saveToSemanticCache(body, `${provider}/${model}`, parsed);
       } catch {}

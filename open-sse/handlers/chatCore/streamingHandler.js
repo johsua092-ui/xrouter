@@ -140,7 +140,7 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
 /**
  * Build onStreamComplete callback for streaming usage tracking.
  */
-export function buildOnStreamComplete({ provider, model, connectionId, apiKey, requestedModel, requestStartTime, body, stream, finalBody, translatedBody, clientRawRequest, pxpipe, reqTag, log, semanticCacheEnabled }) {
+export function buildOnStreamComplete({ provider, model, connectionId, apiKey, requestedModel, requestStartTime, body, stream, finalBody, translatedBody, clientRawRequest, pxpipe, reqTag, log, semanticCacheEnabled, sourceFormat }) {
   const streamDetailId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
   const onStreamComplete = (contentObj, usage, ttftAt) => {
@@ -183,7 +183,10 @@ export function buildOnStreamComplete({ provider, model, connectionId, apiKey, r
     if (log?.line) log.line(reqTag, "📊", formatDoneLine({ usage, latency }));
 
     // Cache completed streaming response for repeat prompt acceleration
-    if (semanticCacheEnabled && safeContent && safeContent !== "[Empty streaming response]") {
+    // ONLY for OpenAI format without tools
+    const hasTools = (body.tools && body.tools.length > 0) || (body.request?.tools && body.request.tools.length > 0);
+    const isCacheableFormat = sourceFormat === FORMATS.OPENAI || sourceFormat === FORMATS.OPENAI_RESPONSES;
+    if (semanticCacheEnabled && isCacheableFormat && !hasTools && safeContent && safeContent !== "[Empty streaming response]") {
       try {
         const syntheticResponse = {
           id: `chatcmpl-${Date.now()}`,

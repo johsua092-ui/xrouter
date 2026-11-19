@@ -73,6 +73,11 @@ export function getSemanticCacheStats() {
   };
 }
 
+export function clearSemanticCache() {
+  responseCache.clear();
+  resetSemanticCacheStats();
+}
+
 export function resetSemanticCacheStats() {
   stats.hits = 0;
   stats.exactHits = 0;
@@ -145,6 +150,15 @@ function computeSimilarity(normA, tokensA, ngramsA, entryB) {
   return 0.6 * wordSim + 0.4 * charSim;
 }
 
+export function extractMessagesFromBody(body) {
+  if (!body || typeof body !== "object") return [];
+  if (Array.isArray(body.messages)) return body.messages;
+  if (Array.isArray(body.input)) return body.input;
+  if (Array.isArray(body.contents)) return body.contents;
+  if (Array.isArray(body.request?.contents)) return body.request.contents;
+  return [];
+}
+
 /**
  * Extract system instruction text vs active user question text separately.
  * Prevents large shared system prompts from causing false semantic hits on different user queries.
@@ -167,6 +181,11 @@ function extractSeparatedPrompt(messages) {
     } else if (Array.isArray(m.content)) {
       content = m.content
         .map((c) => (typeof c === "string" ? c : c?.text || ""))
+        .filter(Boolean)
+        .join(" ");
+    } else if (Array.isArray(m.parts)) {
+      content = m.parts
+        .map((p) => (typeof p === "string" ? p : p?.text || ""))
         .filter(Boolean)
         .join(" ");
     }
@@ -198,9 +217,17 @@ function hashObject(obj) {
 
 export function checkSemanticCache(body, model) {
   if (!body) return null;
+  // Never cache or match requests with tools (agent requests are stateful and dynamic)
+  if (body.tools?.length > 0 || body.request?.tools?.length > 0) return null;
   if (body.tool_choice && body.tool_choice !== "auto") return null;
 
-  const messages = body.messages || body.input || body.contents || [];
+  const messages = extractMessagesFromBody(body);
+  if (!messages || messages.length === 0) return null;
+
+  const { systemText, userText, fullText } = extractSeparatedPrompt(messages);
+  // Never match if no text was extracted (prevents blank/malformed bodies from colliding)
+  if (!userText && !systemText && !fullText) return null;
+
   const keyData = { model, messages };
   const hashKey = hashObject(keyData);
   if (!hashKey) return null;
@@ -223,8 +250,6 @@ export function checkSemanticCache(body, model) {
   }
 
   // Tier 2: Strict Normalized Prompt Match (Zero false-positives for different prompts)
-  const { systemText, userText } = extractSeparatedPrompt(messages);
-  
   if (userText && userText.length >= 2) {
     const normUser = normalizePrompt(userText);
     const normSystem = normalizePrompt(systemText);
@@ -264,15 +289,21 @@ export function checkSemanticCache(body, model) {
 export function saveToSemanticCache(body, model, responseBody) {
   if (!body || !responseBody) return;
   if (body.stream) return; // Do not cache raw stream requests
+  // Never cache requests with tools
+  if (body.tools?.length > 0 || body.request?.tools?.length > 0) return;
   if (body.tool_choice && body.tool_choice !== "auto") return;
   if (responseBody.error || responseBody.is_error) return;
 
-  const messages = body.messages || body.input || body.contents || [];
+  const messages = extractMessagesFromBody(body);
+  if (!messages || messages.length === 0) return;
+
+  const { systemText, userText, fullText } = extractSeparatedPrompt(messages);
+  if (!userText && !systemText && !fullText) return;
+
   const keyData = { model, messages };
   const hashKey = hashObject(keyData);
   if (!hashKey) return;
 
-  const { systemText, userText, fullText } = extractSeparatedPrompt(messages);
   const normUser = normalizePrompt(userText);
   const normSystem = normalizePrompt(systemText);
   const userTokens = getTokens(normUser);
