@@ -1,5 +1,6 @@
 import dns from "node:dns";
 import { isIP } from "node:net";
+import { TLS_ECDH_CURVE } from "../config/tlsConfig.js";
 
 const LOCAL_DNS_TIMEOUT_MS = 5000;
 
@@ -41,7 +42,8 @@ export async function createProxyDispatcher(options) {
   // This allows aggressive pool rotation (trying 5-8 proxies) before Cloudflare 524 cuts the stream!
   const agentOptions = {
     ...options,
-    connect: { timeout: 3500 },
+    connect: { timeout: 3500, ecdhCurve: TLS_ECDH_CURVE },
+    requestTls: { ecdhCurve: TLS_ECDH_CURVE },
     headersTimeout: 6000,
     maxHeaderSize: 64 * 1024,
   };

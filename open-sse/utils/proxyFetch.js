@@ -2,9 +2,24 @@ import { Readable } from "stream";
 import { MEMORY_CONFIG, ALLOW_INSECURE_TLS_FALLBACK } from "../config/runtimeConfig.js";
 import { dbg } from "./debugLog.js";
 import { createProxyDispatcher } from "./proxyDispatcher.js";
+import { TLS_ECDH_CURVE } from "../config/tlsConfig.js";
 
 const originalFetch = globalThis.fetch;
 const proxyDispatchers = new Map();
+
+let directDispatcher = null;
+export async function getDirectDispatcher() {
+  if (!directDispatcher) {
+    const { Agent } = await import("undici");
+    directDispatcher = new Agent({
+      maxHeaderSize: 64 * 1024,
+      connect: { ecdhCurve: TLS_ECDH_CURVE },
+    });
+  }
+  return directDispatcher;
+}
+export function resetDirectDispatchersForTests() { directDispatcher = null; }
+
 
 // ─── TLS fingerprinting via got-scraping (browser-like JA3) ───────────────
 // Disabled: not in use. Kept commented for future re-enable.
@@ -539,16 +554,6 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
     }
   }
 
-let directDispatcher = null;
-async function getDirectDispatcher() {
-  if (!directDispatcher) {
-    const { Agent } = await import("undici");
-    directDispatcher = new Agent({
-      maxHeaderSize: 64 * 1024,
-    });
-  }
-  return directDispatcher;
-}
 
   // got-scraping disabled — use native fetch with enlarged maxHeaderSize (64KB)
   // to avoid UND_ERR_HEADERS_OVERFLOW from Google / Cloudflare responses with massive Set-Cookie headers.
