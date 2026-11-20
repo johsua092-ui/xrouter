@@ -11,6 +11,7 @@ import {
 } from "../services/auth.js";
 import { parseJsonBody } from "@/shared/utils/parseJsonBody.js";
 import { handleAntigravityQuotaError, clearAntigravityStrikes } from "../services/antigravityQuota.js";
+import { cooldownRegistry } from "../services/cooldownRegistry.js";
 import { getSettings } from "@/lib/localDb";
 import { getClientIp } from "@/lib/auth/loginLimiter";
 import { getModelInfo, getComboModels, parseModel } from "../services/model.js";
@@ -589,6 +590,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         clearAntigravityStrikes(credentials.connectionId, model);
         if (credentials?.connectionId) {
           recordCircuitSuccess(credentials.connectionId);
+          cooldownRegistry.clear(credentials.connectionId);
+          if (model) cooldownRegistry.clear(`${credentials.connectionId}|${model}`);
         }
       }
     });

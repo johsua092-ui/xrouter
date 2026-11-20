@@ -9,6 +9,7 @@
 export const SHORT_COOLDOWN_MS = 15 * 1000;
 export const FULL_QUOTA_COOLDOWN_MS = 5 * 60 * 60 * 1000;
 export const CAPACITY_COOLDOWN_MS = 30 * 1000;
+export const TRANSIENT_429_COOLDOWN_MS = 60 * 1000;
 
 function parseResetAfterMs(message) {
   if (!message || typeof message !== "string") return null;
@@ -23,6 +24,8 @@ function parseResetAfterMs(message) {
 
 /**
  * Classify an Antigravity 429 error text into a structured kind.
+ * Distinguishes explicit account-level quota exhaustion (long cooldown)
+ * from detail-free generic rate-limit / capacity throttles (transient 60s cooldown).
  * @param {string} message
  */
 export function classify429(message) {
@@ -30,8 +33,8 @@ export function classify429(message) {
   const resetAfterMs = parseResetAfterMs(text);
   if (
     /\bQUOTA_EXHAUSTED\b/i.test(text) ||
-    /\bRESOURCE_EXHAUSTED\b/i.test(text) ||
-    /resource has been exhausted/i.test(text) ||
+    /(?:daily|monthly|account|subscription|billing)[\s\S]{0,80}(?:quota|limit|credits?)[\s\S]{0,40}(?:exceeded|exhausted|reached|depleted)\b/i.test(text) ||
+    /\b(insufficient[\s_-]+credits?|credits?[\s_-]+balance[\s_-]+is[\s_-]+too[\s_-]+low|quota[\s_-]+depleted)\b/i.test(text) ||
     /quota\s+will\s+reset/i.test(text)
   ) {
     return { kind: "quota_exhausted", resetAfterMs };
@@ -44,7 +47,11 @@ export function classify429(message) {
   ) {
     return { kind: "capacity", resetAfterMs };
   }
-  if (/too many requests|rate[_ -]?limit/i.test(text)) {
+  if (
+    /\bRESOURCE_EXHAUSTED\b/i.test(text) ||
+    /resource has been exhausted/i.test(text) ||
+    /too many requests|rate[_ -]?limit/i.test(text)
+  ) {
     return { kind: "rate_limit", resetAfterMs };
   }
   return { kind: "unknown", resetAfterMs };
@@ -67,6 +74,9 @@ export function decide429(classified, headerRetryMs = null) {
   }
   if (classified?.kind === "capacity") {
     return { retryAfterMs: CAPACITY_COOLDOWN_MS };
+  }
+  if (classified?.kind === "rate_limit") {
+    return { retryAfterMs: TRANSIENT_429_COOLDOWN_MS };
   }
   return { retryAfterMs: SHORT_COOLDOWN_MS };
 }
