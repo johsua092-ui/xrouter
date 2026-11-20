@@ -168,7 +168,9 @@ export default function QuotaTable({
           const isCreditBalance = quota.isCreditBalance === true;
           const remPercent = typeof quota.remaining === "number" ? quota.remaining : (typeof quota.remainingPercentage === "number" ? quota.remainingPercentage : 100);
           let displayRemaining = `${remPercent}%`;
-          if (quota.totalTokens && quota.totalTokens > 0) {
+          if (isCreditBalance) {
+            displayRemaining = `$${(Number(quota.total) || 0).toFixed(2)}`;
+          } else if (quota.totalTokens && quota.totalTokens > 0) {
             const remTokens = Math.max(0, quota.totalTokens - (quota.usedTokens || 0));
             displayRemaining = `${(remTokens / 1000000).toFixed(1)}M tok (${remPercent}%)`;
           } else if (quota.total >= 1000000) {
@@ -298,9 +300,9 @@ export default function QuotaTable({
                 </div>
 
               {/* Reset time */}
-              <div className="min-w-0 shrink">
-                {countdown !== "-" || resetDisplay ? (
-                  compact ? (
+              {(countdown !== "-" || resetDisplay) && (
+                <div className="min-w-0 shrink">
+                  {compact ? (
                     <div
                       className={`${resetPrimary} text-text-primary font-medium truncate`}
                       title={absoluteLabel ? `${absoluteLabel} (${countdownLabel})` : resetSecondaryText || ""}
@@ -316,15 +318,13 @@ export default function QuotaTable({
                       )}
                       {resetDisplay && (
                         <div className="text-[10px] text-text-muted/70">
-                          {resetWord} at {renderResetCell(resetSecondary)}
+                          {quota.neverExpires ? renderResetCell(resetSecondary) : `${resetWord} at ${renderResetCell(resetSecondary)}`}
                         </div>
                       )}
                     </div>
-                  )
-                ) : (
-                  <div className={`${resetPrimary} text-text-muted italic`}>N/A</div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           );

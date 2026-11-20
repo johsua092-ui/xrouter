@@ -828,7 +828,11 @@ export async function refreshNousToken(refreshToken, log) {
           log?.info?.("TOKEN_REFRESH", "Nous agent key minted successfully");
         } else {
           const error = await agentKeyResponse.text().catch(() => "");
-          log?.warn?.("TOKEN_REFRESH", "Failed to mint Nous agent key, falling back to access_token", { error });
+          if (error.includes("session_key_minting_retired")) {
+            log?.info?.("TOKEN_REFRESH", "Nous session key minting retired by upstream; using access_token directly");
+          } else {
+            log?.warn?.("TOKEN_REFRESH", "Failed to mint Nous agent key, falling back to access_token", { error });
+          }
         }
       } catch (mintErr) {
         log?.warn?.("TOKEN_REFRESH", `Nous agent key mint error: ${mintErr?.message || mintErr}`);

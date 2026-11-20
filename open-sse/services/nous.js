@@ -5,6 +5,8 @@ export const NOUS_PORTAL_BASE_URL = "https://portal.nousresearch.com";
 export const NOUS_DEVICE_CODE_URL = `${NOUS_PORTAL_BASE_URL}/api/oauth/device/code`;
 export const NOUS_TOKEN_URL = `${NOUS_PORTAL_BASE_URL}/api/oauth/token`;
 export const NOUS_AGENT_KEY_URL = `${NOUS_PORTAL_BASE_URL}/api/oauth/agent-key`;
+export const NOUS_BILLING_STATE_URL = `${NOUS_PORTAL_BASE_URL}/api/billing/state`;
+export const NOUS_BILLING_SUBSCRIPTION_URL = `${NOUS_PORTAL_BASE_URL}/api/billing/subscription`;
 export const NOUS_OAUTH_CLIENT_ID = "hermes-cli";
 export const NOUS_OAUTH_SCOPE = "inference:invoke inference:mint_agent_key";
 

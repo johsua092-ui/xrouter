@@ -815,6 +815,28 @@ export function parseQuotaData(provider, data) {
         }
         break;
 
+      case "nous":
+        if (data.quotas) {
+          Object.entries(data.quotas).forEach(([name, quota]) => {
+            normalizedQuotas.push({
+              name,
+              used: quota.used || 0,
+              total: quota.total || 0,
+              resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
+              neverExpires: quota.neverExpires === true,
+              remainingPercentage: quota.remainingPercentage,
+              isCreditBalance: quota.isCreditBalance === true,
+              unlimited: quota.unlimited === true,
+              unit: quota.unit,
+              currency: quota.currency || (name.includes("(") ? name.slice(name.indexOf("(") + 1, name.indexOf(")")) : "USD"),
+            });
+          });
+        }
+        break;
+
       case "cursor":
         // Plan spend is USD (cents from GetCurrentPeriodUsage). Forward
         // remainingPercentage only — do not pass absolute remaining (UI treats it as %).

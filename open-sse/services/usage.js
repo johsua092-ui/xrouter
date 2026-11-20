@@ -25,6 +25,7 @@ import { resolveQoderCredentials } from "./qoderModels.js";
 import { getZcodeUsage } from "./usage/zcode.js";
 import { getGlmUsage, getGlmResetCards, redeemGlmResetCard, getGlmClaimablePlans, claimGlmPlan, getGlmBalance, checkAndClaimZcodeStartPlan, ZCODE_START_PLAN_ID } from "./usage/glm.js";
 import { getCommandCodeUsage } from "./usage/commandcode.js";
+import { getNousUsage } from "./usage/nous.js";
 import {
   getIflowUsage,
   getOllamaUsage,
@@ -84,6 +85,7 @@ const USAGE_HANDLERS = {
   "xiaomi-mimo": (c) => getXiaomiMimoUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
   commandcode: (c) => getCommandCodeUsage(c.apiKey, c.proxyOptions),
   cursor: (c) => getCursorUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
+  nous: (c) => getNousUsage(c.accessToken || c.apiKey, c.proxyOptions, c),
 };
 
 // Qoder intl/CN share one usage path: PATs must be exchanged to a job token
@@ -104,6 +106,7 @@ export async function getUsageForProvider(connection, proxyOptions = null, optio
   const handler = USAGE_HANDLERS[provider];
   if (!handler) return { message: `Usage API not implemented for ${provider}` };
   return await handler({
+    ...connection,
     provider,
     connectionId: connection.id,
     accessToken,
@@ -112,6 +115,7 @@ export async function getUsageForProvider(connection, proxyOptions = null, optio
     providerDataWithProjectId,
     proxyOptions,
     force: options.force === true,
+    ...options,
   });
 }
 

@@ -102,6 +102,9 @@ const nous = {
   serviceKinds: ["llm", "imageToText"],
   modelsFetcher: { url: NOUS_MODELS_URL, type: "nous-free" },
   passthroughModels: true,
+  features: {
+    usage: true,
+  },
 };
 
 export default nous;
