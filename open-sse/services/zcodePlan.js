@@ -126,7 +126,8 @@ export async function refreshZcodeJwt(businessAccessToken, { log = null } = {}) 
   });
   const zcodeJwtToken = String(data?.token || data?.access_token || data?.accessToken || "").trim();
   if (!zcodeJwtToken) return null;
-  return { zcodeJwtToken };
+  const businessToken = String(data?.access_token || data?.accessToken || "").trim();
+  return { zcodeJwtToken, businessToken };
 }
 
 // Personal subscriptions are an array of products; an active entry must both
@@ -370,7 +371,11 @@ export async function resolveZcodeAuth(credentials, { log = null, force = false 
   const requestedPlan = ["start-plan", "individual-coding-plan", "team-coding-plan"].includes(psd.planKind)
     ? psd.planKind
     : "auto";
-  const businessToken = String(credentials?.accessToken || "").trim();
+  const businessToken = String(
+    psd.zaiBusinessToken ||
+    psd.oauthAccessToken ||
+    (credentials?.accessToken && !credentials.accessToken.includes(".") ? credentials.accessToken : "")
+  ).trim();
   const zcodeJwtToken = String(psd.zcodeJwtToken || "").trim();
 
   if (!force) {
@@ -406,7 +411,7 @@ export async function resolveZcodeAuth(credentials, { log = null, force = false 
     // Auto: an active personal coding subscription selects the project-token
     // lane; otherwise the account falls back to its start-plan JWT.
     let individual = false;
-    if (businessToken && !zcodeJwtToken) {
+    if (businessToken) {
       try {
         const subscriptions = await requestJson(`${FAMILY_ORIGIN[family]}/api/biz/subscription/list`, {
           headers: { Authorization: bearer(businessToken), "Content-Type": "application/json" },

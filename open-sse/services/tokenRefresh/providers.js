@@ -856,4 +856,68 @@ export async function refreshNousToken(refreshToken, log) {
   }, log);
 }
 
+export async function refreshGlmToken(refreshToken, credentials, log) {
+  const psd = credentials?.providerSpecificData || {};
+  const family = psd.family === "bigmodel" ? "bigmodel" : "zai";
+  const businessToken =
+    psd.oauthAccessToken ||
+    psd.zaiBusinessToken ||
+    (credentials?.accessToken && !credentials.accessToken.includes(".") ? credentials.accessToken : null) ||
+    refreshToken;
+
+  if (!businessToken) {
+    log?.warn?.("TOKEN_REFRESH", "GLM refresh skipped: missing business/oauth token");
+    return null;
+  }
+
+  const dedupKey = `glm:${credentials?.id || credentials?.connectionId || refreshToken?.slice?.(-16) || "default"}`;
+
+  return dedupRefresh(dedupKey, refreshToken || businessToken, async () => {
+    try {
+      const { refreshZcodeJwt, resolveZcodeAuth } = await import("../zcodePlan.js");
+      const refreshed = await refreshZcodeJwt(businessToken, { log });
+      if (!refreshed?.zcodeJwtToken) {
+        log?.warn?.("TOKEN_REFRESH", "GLM refresh returned no zcodeJwtToken");
+        return null;
+      }
+
+      const nextPsd = {
+        ...psd,
+        zcodeJwtToken: refreshed.zcodeJwtToken,
+        ...(refreshed.businessToken ? { zaiBusinessToken: refreshed.businessToken } : {}),
+      };
+
+      let persist = {};
+      try {
+        const resolved = await resolveZcodeAuth(
+          { ...credentials, providerSpecificData: nextPsd },
+          { log, force: true }
+        );
+        if (resolved?.persist) persist = resolved.persist;
+      } catch (e) {
+        log?.debug?.("TOKEN_REFRESH", `GLM plan resolution during refresh: ${e?.message || e}`);
+      }
+
+      log?.info?.("TOKEN_REFRESH", "Successfully refreshed GLM token");
+
+      return {
+        accessToken: credentials.accessToken,
+        refreshToken: refreshToken || businessToken,
+        expiresIn: 7200,
+        providerSpecificData: {
+          ...nextPsd,
+          ...persist,
+        },
+      };
+    } catch (error) {
+      log?.error?.("TOKEN_REFRESH", `Error refreshing GLM token: ${error.message}`);
+      return null;
+    }
+  }, log);
+}
+
+export async function refreshZcodeToken(refreshToken, credentials, log) {
+  return refreshGlmToken(refreshToken, credentials, log);
+}
+
 

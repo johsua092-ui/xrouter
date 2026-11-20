@@ -19,6 +19,8 @@ import {
   refreshWindsurfToken,
   refreshMiniMaxCodeToken,
   refreshNousToken,
+  refreshGlmToken,
+  refreshZcodeToken,
   classifyOAuthRefreshError,
 } from "./tokenRefresh/providers.js";
 
@@ -41,6 +43,8 @@ export {
   refreshWindsurfToken,
   refreshMiniMaxCodeToken,
   refreshNousToken,
+  refreshGlmToken,
+  refreshZcodeToken,
   classifyOAuthRefreshError,
 };
 
@@ -164,8 +168,8 @@ const REFRESH_HANDLERS = {
   "minimax-code": (c, log) => refreshMiniMaxCodeToken("minimax-code", c.refreshToken, log),
   "minimax-code-global": (c, log) => refreshMiniMaxCodeToken("minimax-code-global", c.refreshToken, log),
   nous: (c, log) => refreshNousToken(c.refreshToken, log),
-  glm: (c, log) => null,
-  zcode: (c, log) => null,
+  glm: (c, log) => refreshGlmToken(c.refreshToken, c, log),
+  zcode: (c, log) => refreshZcodeToken(c.refreshToken, c, log),
   vertex: vertexRefreshHandler,
   "vertex-partner": vertexRefreshHandler
 };
