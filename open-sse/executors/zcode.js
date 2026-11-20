@@ -690,14 +690,22 @@ export class ZCodeExecutor extends DefaultExecutor {
   async refreshCredentials(credentials, log) {
     const psd = credentials?.providerSpecificData || {};
     const family = psd.family === "bigmodel" ? "bigmodel" : "zai";
-    const businessToken = psd.oauthAccessToken || credentials?.accessToken;
+    const businessToken =
+      psd.oauthAccessToken ||
+      psd.zaiBusinessToken ||
+      (credentials?.accessToken && !credentials.accessToken.includes(".") ? credentials.accessToken : null) ||
+      credentials?.refreshToken;
     if (family !== "zai" || !businessToken) return null;
 
     try {
       const refreshed = await refreshZcodeJwt(businessToken, { log });
       if (!refreshed?.zcodeJwtToken) return null;
 
-      const nextPsd = { ...psd, zcodeJwtToken: refreshed.zcodeJwtToken };
+      const nextPsd = {
+        ...psd,
+        zcodeJwtToken: refreshed.zcodeJwtToken,
+        ...(refreshed.businessToken ? { zaiBusinessToken: refreshed.businessToken } : {}),
+      };
       const resolved = await resolveZcodeAuth(
         { ...credentials, providerSpecificData: nextPsd },
         { log, force: true }
@@ -705,6 +713,8 @@ export class ZCodeExecutor extends DefaultExecutor {
 
       return {
         accessToken: credentials.accessToken,
+        refreshToken: credentials.refreshToken,
+        expiresIn: 7200,
         providerSpecificData: { ...nextPsd, ...resolved.persist },
       };
     } catch (error) {

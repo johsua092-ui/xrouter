@@ -219,7 +219,8 @@ const zcode = {
     const sessionSeed = existing.sessionSeed || mintZcodeSessionSeed();
     return {
       accessToken: tokens.access_token,
-      refreshToken: null,
+      refreshToken: tokens._zcodeRefreshToken || tokens.access_token || null,
+      expiresIn: 7200,
       name: displayName,
       displayName,
       email: user.email || null,

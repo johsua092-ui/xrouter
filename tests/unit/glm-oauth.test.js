@@ -157,7 +157,7 @@ describe("glm OAuth flow (ZCode CLI poll protocol)", () => {
     );
   });
 
-  it("mapTokens stores the plan key + account identity (no refresh token)", () => {
+  it("mapTokens stores the plan key + account identity with refresh token", () => {
     const tokens = glmOauthProvider.mapTokens({
       access_token: PLAN_KEY,
       _zcodeJwtToken: "zcode-jwt",
@@ -167,11 +167,13 @@ describe("glm OAuth flow (ZCode CLI poll protocol)", () => {
     });
 
     expect(tokens.accessToken).toBe(PLAN_KEY);
-    expect(tokens.refreshToken).toBeNull();
+    expect(tokens.refreshToken).toBe("zai-refresh-token");
+    expect(tokens.expiresIn).toBe(7200);
     expect(tokens.email).toBe("feavy@example.com");
     expect(tokens.displayName).toBe("Feavy");
     expect(tokens.providerSpecificData).toMatchObject({
       authMethod: "cli_poll",
+      family: "zai",
       username: "Feavy",
       userId: "u-1",
       zcodeJwtToken: "zcode-jwt",

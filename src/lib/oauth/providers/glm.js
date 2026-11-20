@@ -148,7 +148,9 @@ const glm = {
     return {
       ok: true,
       data: {
-        access_token: planApiKey,
+        access_token: planApiKey || zaiAccessToken,
+        _zaiAccessToken: zaiAccessToken,
+        _planApiKey: planApiKey,
         _zcodeJwtToken: data.token || "",
         _zaiBusinessToken: businessToken,
         _zaiRefreshToken:
@@ -160,17 +162,22 @@ const glm = {
   mapTokens: (tokens) => {
     const user = tokens._zcodeUser || {};
     const displayName = user.name || user.email || null;
+    const refreshToken = tokens._zaiRefreshToken || tokens._zaiAccessToken || null;
     return {
       accessToken: tokens.access_token,
-      refreshToken: null,
+      refreshToken,
+      expiresIn: 7200,
       email: user.email || null,
       ...(displayName ? { displayName } : {}),
       providerSpecificData: {
         authMethod: "cli_poll",
+        family: "zai",
         username: user.name || undefined,
         userId: user.user_id || undefined,
+        oauthAccessToken: tokens._zaiAccessToken || undefined,
         zcodeJwtToken: tokens._zcodeJwtToken || undefined,
         zaiBusinessToken: tokens._zaiBusinessToken || undefined,
+        planApiKey: tokens._planApiKey || (tokens.access_token && tokens.access_token.includes(".") ? tokens.access_token : undefined),
         ...(tokens._zaiRefreshToken ? { zaiRefreshToken: tokens._zaiRefreshToken } : {}),
       },
     };
