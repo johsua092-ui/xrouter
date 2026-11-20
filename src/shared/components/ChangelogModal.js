@@ -133,7 +133,7 @@ function mergeBodiesByCategory(bodies) {
 
 function renderVersionCards(md, accent) {
  const sections = splitVersions(md);
- const cardStyle = `margin:0 0 14px;padding:14px 16px;border:1px solid ${accent.border};border-radius:12px;background:${accent.bg};box-sizing:border-box;`;
+ const cardStyle = `margin:0 0 14px;padding:12px 14px;border:1px solid ${accent.border};border-radius:12px;background:${accent.bg};box-sizing:border-box;max-width:100%;min-width:0;overflow-wrap:anywhere;word-break:break-word;`;
  const titleStyle = `margin:0 0 10px;font-size:15px;font-weight:700;color:${accent.color};display:flex;align-items:center;gap:8px;`;
  const subStyle = `margin:16px 0 8px;font-size:13.5px;font-weight:700;color:${accent.color};opacity:.9;`;
  if (!sections.length) {
@@ -243,27 +243,35 @@ export default function ChangelogModal({ isOpen, onClose }) {
   const shown = pickChangelogSource(htmlBySource, activeSource);
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-x-hidden">
       <div
         className="absolute inset-0 bg-black/70"
         onClick={onClose}
       />
       <div
         ref={modalRef}
-        className="relative w-full bg-surface border border-border rounded-[6px] shadow-[var(--shadow-elev)] animate-in fade-in zoom-in-95 duration-200 max-w-3xl flex flex-col max-h-[calc(min(100dvh,100svh)-2rem)] min-h-0"
+        className="relative w-full bg-surface border border-border rounded-[6px] shadow-[var(--shadow-elev)] animate-in fade-in zoom-in-95 duration-200 max-w-3xl flex flex-col max-h-[calc(min(100dvh,100svh)-2rem)] min-h-0 min-w-0 overflow-hidden"
       >
-        <div className="flex items-center justify-between gap-3 p-3 border-b border-border-subtle">
-          <h2 className="text-lg font-semibold text-text-main">Change Log</h2>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 border-b border-border-subtle shrink-0 min-w-0">
+          <div className="flex items-center justify-between w-full sm:w-auto">
+            <h2 className="text-base sm:text-lg font-semibold text-text-main truncate">Change Log</h2>
+            <button
+              onClick={onClose}
+              className="sm:hidden p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-2 transition-all"
+            >
+              <span className="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+          <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-1 sm:pb-0">
             {available.length > 1 && (
-              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-surface-2">
+              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-surface-2 shrink-0">
                 {available.map((source) => (
                   <button
                     key={source.id}
                     type="button"
                     onClick={() => setActiveSource(source.id)}
                     aria-pressed={shown === source.id}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
                       shown === source.id
                         ? "bg-surface text-text-main shadow-[var(--shadow-elev)]"
                         : "text-text-muted hover:text-text-main"
@@ -276,22 +284,22 @@ export default function ChangelogModal({ isOpen, onClose }) {
             )}
             <button
               onClick={onClose}
-              className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-2 dark:hover:bg-surface-2 transition-all"
+              className="hidden sm:inline-flex p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-2 dark:hover:bg-surface-2 transition-all"
             >
               <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1 prose dark:prose-invert max-w-none text-sm">
+        <div className="p-3 sm:p-6 overflow-y-auto overflow-x-hidden flex-1 prose dark:prose-invert max-w-none text-sm min-w-0 break-words">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <span className="material-symbols-outlined text-3xl animate-spin text-primary">progress_activity</span>
             </div>
           ) : error ? (
             <p className="text-danger">{error}</p>
-          ) : htmlBySource[shown] ? (
-            <div dangerouslySetInnerHTML={{ __html: htmlBySource[shown] }} />
+          ) : (htmlBySource[shown] || (shown === "go" && htmlBySource.serenhope)) ? (
+            <div dangerouslySetInnerHTML={{ __html: htmlBySource[shown] || htmlBySource.serenhope }} />
           ) : (
             <p className="text-text-muted">No changelog available.</p>
           )}

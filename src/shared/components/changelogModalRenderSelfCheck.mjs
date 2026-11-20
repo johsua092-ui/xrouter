@@ -136,8 +136,8 @@ const BOTH = { serenhope: "<p>SEREN_BODY</p>", decolua: "<p>DECO_BODY</p>" };
 
 run("the modal renders both contributor tabs when both loaded", () => {
   const tree = renderWith(BOTH, "serenhope");
-  assert.ok(tree.includes("Serenhope"), "fork tab present");
-  assert.ok(tree.includes("Decolua"), "upstream tab present");
+  assert.ok(tree.includes("X Router Go"), "fork tab present");
+  assert.ok(tree.includes("Upstream"), "upstream tab present");
   assert.ok(tree.includes("Change Log"), "title present");
 });
 
@@ -150,7 +150,7 @@ run("only the selected contributor's body is rendered", () => {
 run("the switcher is hidden when only one changelog exists", () => {
   const tree = renderWith({ serenhope: "<p>SEREN_BODY</p>", decolua: "" }, "serenhope");
   assert.ok(tree.includes("SEREN_BODY"), "content still shown");
-  assert.no(tree.includes("Decolua"), "no tab for a source with no content");
+  assert.no(tree.includes("Upstream"), "no tab for a source with no content");
 });
 
 run("a selection pointing at an empty source falls back to what loaded", () => {
@@ -162,7 +162,7 @@ run("a selection pointing at an empty source falls back to what loaded", () => {
 run("with neither changelog the modal says so instead of showing a blank panel", () => {
   const tree = renderWith({ serenhope: "", decolua: "" }, "serenhope");
   assert.ok(tree.includes("No changelog available."), "empty state message");
-  assert.no(tree.includes("Serenhope"), "no tabs");
+  assert.no(tree.includes("X Router Go"), "no tabs");
 });
 
 run("a closed modal renders nothing", () => {
