@@ -1,5 +1,14 @@
 # v0.1.0 (2026-11-20)
 
+### Contributed — Naub (PR #4–#13), consolidated
+
+All Naub PRs are merged into `main`; this entry records them in one place for a clean changelog.
+
+- **OAuth / token refresh** (#13, #9, #10): zcode & glm OAuth token auto-refresh prevents 2-hour session expiry; Nous device-code flow registered in the OAuth modal + API routes; minimax-code device flow passes its PKCE code challenge.
+- **Features** (#12, #11): Nous quota & billing usage with minting-fallback retirement and quota UI cleanup; Antigravity prompt-trigger filter, detail-free 429 resilience, and circuit self-healing.
+- **MITM / transport** (#8, #6, #4): Gemini MITM tooling + batch proxy parser improvements; Antigravity identity rewrite normalized to decolua/9router behavior; `SSL_CERT_FILE` override removed so Go uses the native system CA store.
+- **Providers** (#7, #5): OpenCode folds conversation scope into a stable upstream session; internal Antigravity sandbox mirrors removed so 429s are no longer converted into 403s.
+
 ### Fixed — Kiro client-version gate + AWS OIDC TLS handshake (upstream #5622 / #5613)
 
 - **Kiro identity**: every Kiro / Amazon Q call now identifies as Kiro IDE `1.4.154` (SDK `1.0.0`, `windows`, `10.0.26200`, node `22.21.1`) via one shared `buildKiroIdentityHeaders` builder — inference, model catalog, usage, profile lookups and API-key validation can no longer drift below Kiro's client-version floor and get `This version of Kiro is no longer supported`.
