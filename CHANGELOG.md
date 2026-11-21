@@ -1,5 +1,16 @@
 # v0.1.0 (2026-11-21)
 
+### Features & Hardening — Antigravity Direct HTTP Native Safe Architecture
+
+- **Antigravity Direct HTTP Safe Recipe & Native TLS Impersonation**:
+  - Implemented `open-sse/services/antigravityTlsClient.js` delivering Chrome 133 BoringSSL TLS 1.3 ClientHello with GREASE extension and Google cipher suite via `wreq-js`, matching official desktop Antigravity IDE and `language_server.exe` native fingerprints.
+  - Added connection proxy support and LRU TLS session caching (`MAX_TLS_SESSIONS = 32`) to prevent native memory leaks while providing graceful fail-open resilience to native `fetch`.
+  - Injected official `Client-Metadata` headers (`ideType: "ANTIGRAVITY"`, `ideName: "antigravity"`, `pluginType: "GEMINI"`, `ideVersion: "2.32.1"`), canonical `x-goog-user-project: aicode-consumers`, and `x-request-source: local` into `buildHeaders()` in `open-sse/executors/antigravity.js`.
+  - Enforced canonical `project: "aicode-consumers"`, native `requestId` format, and stripped `requestType: "agent"` on chat path in `transformRequest` to prevent Google edge fake 429 RESOURCE_EXHAUSTED.
+  - Implemented proactive quota monitoring engine `open-sse/services/antigravityQuotaMonitor.js` querying `v1internal:retrieveUserQuotaSummary` with 120s TTL caching; automatically skips connections with remaining quota `<= 2%` before hitting Google rate limits to protect accounts from abuse flags.
+  - Fixed leftover internal staging domain `daily-cloudcode-pa.googleapis.com` to production `cloudcode-pa.googleapis.com` in `src/lib/usage/antigravityTier.js`.
+  - Added comprehensive test suite `tests/unit/antigravity-direct-http-safe-recipe.test.mjs` (4/4 PASS).
+
 ### Bug Fixes — False "Cross-origin request blocked" Behind Tunnels / Reverse Proxies
 
 - **Fixed the origin gate rejecting legitimate dashboard POSTs whenever X Router sits behind a proxy that rewrites `Host`** (abc-tunnel, cloudflared, ngrok, nginx `proxy_set_header Host`), in `src/middleware.js`.

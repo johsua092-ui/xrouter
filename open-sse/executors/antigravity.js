@@ -12,6 +12,9 @@ import { cloakUser, outgoing } from "../services/antigravityPromptCloak.js";
 import { executeViaAgyCli, resolveAgyTransport } from "./agyCliExecutor.js";
 import { refusedPromptHint } from "./antigravityUpstreamError.js";
 import { decide429, classify429 } from "../services/antigravity429Engine.js";
+import { ANTIGRAVITY_IDE_VERSION, ANTIGRAVITY_IDE_USER_AGENT } from "../providers/shared.js";
+import { antigravityTlsFetch } from "../services/antigravityTlsClient.js";
+import { isAntigravityQuotaDrained } from "../services/antigravityQuotaMonitor.js";
 
 function asRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
@@ -357,10 +360,25 @@ export class AntigravityExecutor extends BaseExecutor {
   // sessionId comes from transformRequest output; base.execute runs transformRequest before
   // buildHeaders, so we read it from instance state cached there (fallback: explicit arg).
   buildHeaders(credentials, stream = true, sessionId = null) {
+    const isLegacyFakePid = typeof credentials?.projectId === "string" &&
+      (/^(useful|bright|swift|calm|bold)-(fuze|wave|spark|flow|core)-[a-f0-9]+$/i.test(credentials.projectId) ||
+       /^cloudaicompanion-proj-[a-f0-9]+$/i.test(credentials.projectId));
+    const projectId = (!isLegacyFakePid && credentials?.projectId) || "aicode-consumers";
+
     return {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${credentials.accessToken}`,
-      "User-Agent": this.config.headers?.["User-Agent"] || ANTIGRAVITY_HEADERS["User-Agent"],
+      "Accept": stream ? "text/event-stream" : "application/json",
+      "Authorization": `Bearer ${credentials?.accessToken || ""}`,
+      "User-Agent": this.config.headers?.["User-Agent"] || ANTIGRAVITY_HEADERS["User-Agent"] || ANTIGRAVITY_IDE_USER_AGENT,
+      "Client-Metadata": JSON.stringify({
+        ideType: "ANTIGRAVITY",
+        ideName: "antigravity",
+        platform: "PLATFORM_UNSPECIFIED",
+        pluginType: "GEMINI",
+        ideVersion: ANTIGRAVITY_IDE_VERSION,
+      }),
+      "x-goog-user-project": projectId,
+      "x-request-source": "local",
     };
   }
 
@@ -596,7 +614,48 @@ export class AntigravityExecutor extends BaseExecutor {
         transport: "agy-cli",
       };
     }
-    return super.execute(input);
+
+    // Direct HTTP path — Safe Recipe: Proactive Quota Pre-check (skip depleted accounts before 429)
+    const connectionId = input.credentials?.connectionId || input.credentials?.email || "default";
+    if (input.credentials?.accessToken) {
+      try {
+        const { isDrained, resetTime } = await isAntigravityQuotaDrained(
+          input.credentials.accessToken,
+          input.model,
+          input.proxyOptions,
+          connectionId
+        );
+        if (isDrained) {
+          const cooldownMs = resetTime ? Math.max(30000, new Date(resetTime).getTime() - Date.now()) : 120000;
+          markConnectionQuotaExhausted(connectionId, cooldownMs, input.model);
+          const errBody = JSON.stringify({
+            error: {
+              message: `Google Antigravity quota depleted for model ${input.model} (remaining <= 2%). Skipping connection proactively to protect account.`,
+              code: "QUOTA_EXHAUSTED",
+              type: "rate_limit_error"
+            }
+          });
+          return {
+            response: new Response(errBody, {
+              status: 429,
+              headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(cooldownMs / 1000)) }
+            }),
+            url: this.buildUrl(input.model, input.stream, 0, input.credentials),
+            headers: {},
+            transformedBody: input.body,
+          };
+        }
+      } catch (_) {
+        // Fail-open: proceed if quota check experiences transient network issue
+      }
+    }
+
+    // Direct HTTP path — Safe Recipe: BoringSSL TLS Impersonation via wreq-js
+    return super.execute({
+      ...input,
+      directFetch: antigravityTlsFetch,
+      directFetchProxy: true,
+    });
   }
 
   async refreshCredentials(credentials, log, proxyOptions = null) {
