@@ -7,14 +7,26 @@ import { SSE_CONTENT_TYPE_EVENT_STREAM, SSE_CONTENT_TYPE_JSON, SSE_DATA_PREFIX, 
 import { chatChunkSse, sseChunk } from "../utils/sse.js";
 import { MODEL_FALLBACK } from "../translator/schema/defaults.js";
 import { OPENAI_FINISH } from "../translator/schema/finishReasons.js";
+import { PROVIDERS } from "../config/providers.js";
+import { FORMATS } from "../translator/formats.js";
 
 /** Content type the upstream actually sent, lowercased ("" when absent). */
 export function contentTypeOf(response) {
   return String(response?.headers?.get("content-type") || "").toLowerCase();
 }
 
-export function isEventStreamResponse(response) {
-  return contentTypeOf(response).includes(SSE_CONTENT_TYPE_EVENT_STREAM);
+export function isEventStreamResponse(response, provider = null) {
+  const ct = contentTypeOf(response);
+  if (ct.includes(SSE_CONTENT_TYPE_EVENT_STREAM)) return true;
+  if (provider) {
+    const provConfig = PROVIDERS[provider];
+    const isResponses = provConfig?.format === FORMATS.OPENAI_RESPONSES;
+    const isForced = provConfig?.forceStream === true || provConfig?.transport?.forceStream === true;
+    if ((isResponses || isForced) && !ct.includes(SSE_CONTENT_TYPE_JSON) && !ct.includes("application/llm")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function isJsonResponse(response) {

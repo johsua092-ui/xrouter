@@ -747,17 +747,13 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   const trackDone = () => trackPendingRequest(trackedModel, provider, connectionId, false);
 
   // If client requested stream, but provider returned a JSON body
-  if (clientRequestedStreaming && !isEventStreamResponse(providerResponse)) {
+  if (clientRequestedStreaming && !isEventStreamResponse(providerResponse, provider)) {
     const mismatchedBody = await readJsonBody(providerResponse);
     if (mismatchedBody === null) {
-      // Nothing readable came back and the client never asked for a stream, so it
-      // gets a clean gateway error instead of a response with no body to parse.
-      if (!clientRequestedStreaming) {
-        appendLog({ status: `FAILED ${HTTP_STATUS.BAD_GATEWAY}` });
-        streamController.handleComplete();
-        return createErrorResult(HTTP_STATUS.BAD_GATEWAY, `Invalid JSON response from ${provider}`);
-      }
-    } else if (clientRequestedStreaming && isChatCompletionBody(mismatchedBody)) {
+      appendLog({ status: `FAILED ${HTTP_STATUS.BAD_GATEWAY}` });
+      streamController.handleComplete();
+      return createErrorResult(HTTP_STATUS.BAD_GATEWAY, `Invalid JSON response from ${provider}`);
+    } else if (isChatCompletionBody(mismatchedBody)) {
       // Auto-parse text-based tool calls if present in the completion before replaying chunks
       if (Array.isArray(translatedBody?.tools) && translatedBody.tools.length > 0 && mismatchedBody.choices?.[0]) {
         const choice = mismatchedBody.choices[0];
