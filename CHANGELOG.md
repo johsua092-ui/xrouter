@@ -1,5 +1,16 @@
 # v0.1.0 (2026-11-21)
 
+### Bug Fixes — False "Cross-origin request blocked" Behind Tunnels / Reverse Proxies
+
+- **Fixed the origin gate rejecting legitimate dashboard POSTs whenever X Router sits behind a proxy that rewrites `Host`** (abc-tunnel, cloudflared, ngrok, nginx `proxy_set_header Host`), in `src/middleware.js`.
+  - Symptom: connecting the Muse (Meta Model API) provider failed instantly with `Connection Failed — Cross-origin request blocked`; the same 403 hit every mutating `/api/*` call (OAuth poll/exchange, provider save, key rotation, settings).
+  - Cause: the gate derived "our own host" only from `x-forwarded-host` / `host` and compared it to the browser `Origin`. A tunnel terminates TLS and forwards to the loopback port, so `Host` arrives as `127.0.0.1:<port>` while `Origin` is the public hostname — a permanent mismatch.
+  - Fix: `Sec-Fetch-Site: same-origin | same-site | none` is now accepted as browser-attested same-site proof before any host comparison. Browsers forbid scripts from forging `Sec-Fetch-*`, so a cross-site page still cannot pass; `cross-site` remains hard-blocked, including when an attacker scripts a self-consistent `Origin`.
+  - Hardened the fallback path for clients that send no `Sec-Fetch-Site`: the allowlist now also matches the first entry of a comma-separated `x-forwarded-host` chain and the hostname of the configured public origin (`BASE_URL`, `PUBLIC_BASE_URL`, `NEXT_PUBLIC_BASE_URL`, `APP_URL`, `SITE_URL`, `NEXTAUTH_URL`), with malformed values ignored instead of throwing.
+  - Non-browser callers (no `Origin`, no `Sec-Fetch-Site`) and `/api/auth/*` keep passing untouched; `/v1/*` stays out of the matcher so API-key CORS consumers are unaffected.
+- **Added regression suite** `tests/unit/middleware-origin-gate.test.js` (10 cases): tunnel host-mismatch allowed, cross-site blocked with spoofed and unspoofed origins, env allowlist, forwarded-host chain, no-header non-browser client, read-only requests, and auth-endpoint exemption. 10/10 PASS.
+- **Parity:** the same gate is mirrored in `go-migration/src/middleware.js` so the Go port does not reintroduce the bug.
+
 ### Features & Fixes — Venice.ai Free Provider & Antigravity Safe Architecture Protections
 
 - **Venice.ai provider integration**:
