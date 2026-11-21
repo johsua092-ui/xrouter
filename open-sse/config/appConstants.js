@@ -1,6 +1,6 @@
 import { platform, arch, hostname } from "os";
 import { PROVIDERS, PROVIDER_OAUTH } from "./providers.js";
-import { ANTIGRAVITY_IDE_USER_AGENT } from "../providers/shared.js";
+import { ANTIGRAVITY_IDE_USER_AGENT, ANTIGRAVITY_IDE_VERSION } from "../providers/shared.js";
 import { createRequire } from "module";
 
 // Nous Portal requires attribution for some API-key models. Use a neutral
@@ -169,18 +169,23 @@ export const LOAD_CODE_ASSIST_HEADERS = {
 export const ANTIGRAVITY_LOAD_CODE_ASSIST_HEADERS = {
   "Content-Type": "application/json",
   "Accept": "*/*",
-  "User-Agent": "antigravity/1.107.0 windows/amd64",
+  "User-Agent": ANTIGRAVITY_IDE_USER_AGENT,
   "Client-Metadata": JSON.stringify({
     ideType: "ANTIGRAVITY",
+    ideName: "antigravity",
     platform: "PLATFORM_UNSPECIFIED",
     pluginType: "GEMINI",
+    ideVersion: ANTIGRAVITY_IDE_VERSION,
   }),
+  "x-request-source": "local",
 };
 
 export const LOAD_CODE_ASSIST_METADATA = {
   ideType: "ANTIGRAVITY",
+  ideName: "antigravity",
   platform: "PLATFORM_UNSPECIFIED",
   pluginType: "GEMINI",
+  ideVersion: ANTIGRAVITY_IDE_VERSION,
 };
 
 // System prompts

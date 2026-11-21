@@ -250,16 +250,43 @@ export class AntigravityExecutor extends BaseExecutor {
     super("antigravity", PROVIDERS.antigravity);
   }
 
-  // Parse Antigravity quota error to extract precise resetsAtMs from ErrorInfo/RetryInfo
-  // 403 (e.g. Google UberProxy HTML block page) is account/edge-level and
-  // identical across all Antigravity mirror hosts - cycling the 3 sandbox
-  // mirrors only adds ~90s of pointless retries. Veto fallback on 403.
+  // 403 fallback handling (Antigravity-Shield parity):
+  // If daily staging endpoint (urlIndex 0) returns 403, failover to production endpoint (urlIndex 1).
+  // Only veto retries if it's an IP-level UberProxy block or all baseUrls have been attempted.
   shouldRetry(status, urlIndex) {
+    if (status === 403 && urlIndex === 0 && urlIndex + 1 < this.getFallbackCount()) {
+      return true;
+    }
     if (status === 403) return false;
     return status === HTTP_STATUS.RATE_LIMITED && urlIndex + 1 < this.getFallbackCount();
   }
 
   parseError(response, bodyText) {
+    if (response.status === 403 && bodyText) {
+      if (/RESOURCE_EXHAUSTED|quota|rate\s*limit|exceeded/i.test(bodyText)) {
+        return {
+          status: 403,
+          message: "Google Antigravity quota exceeded for this account. Cooling down.",
+          code: "QUOTA_EXHAUSTED",
+          resetsAtMs: Date.now() + 120000,
+        };
+      }
+      if (typeof bodyText === "string" && (bodyText.includes("UberProxy") || bodyText.includes("&Uuml;berProxy") || bodyText.includes("berProxy: Error 403"))) {
+        return {
+          status: 403,
+          message: "Google edge blocked this account/IP (UberProxy 403). Wait, switch egress IP/proxy, or re-auth the account.",
+          code: "UPSTREAM_BLOCKED",
+        };
+      }
+      if (/permission|caller does not have permission|not found|unsupported_client/i.test(bodyText)) {
+        return {
+          status: 403,
+          message: "Google Antigravity permission or project error (403). Project ID may need re-provisioning.",
+          code: "PERMISSION_DENIED",
+        };
+      }
+    }
+
     if ((response.status === 429 || response.status === 409) && bodyText) {
       try {
         const json = JSON.parse(bodyText);
@@ -337,7 +364,9 @@ export class AntigravityExecutor extends BaseExecutor {
   }
 
   transformRequest(model, body, stream, credentials) {
-    const projectId = credentials?.projectId || this.generateProjectId();
+    const isLegacyFakePid = typeof credentials?.projectId === "string" &&
+      /^(useful|bright|swift|calm|bold)-(fuze|wave|spark|flow|core)-[a-f0-9]+$/i.test(credentials.projectId);
+    const projectId = (!isLegacyFakePid && credentials?.projectId) || this.generateProjectId(credentials);
 
     // OpenAI clients may include stream_options even for non-streaming calls.
     // Google generateContent rejects that combination before processing the request.
@@ -600,10 +629,10 @@ export class AntigravityExecutor extends BaseExecutor {
     }
   }
 
-  generateProjectId() {
-    const adj = ["useful", "bright", "swift", "calm", "bold"][Math.floor(Math.random() * 5)];
-    const noun = ["fuze", "wave", "spark", "flow", "core"][Math.floor(Math.random() * 5)];
-    return `${adj}-${noun}-${crypto.randomUUID().slice(0, 5)}`;
+  generateProjectId(credentials = null) {
+    const seed = credentials?.connectionId || credentials?.email || "default";
+    const hash = crypto.createHash("sha256").update(String(seed)).digest("hex").slice(0, 16);
+    return `cloudaicompanion-proj-${hash}`;
   }
 
   generateSessionId() {
