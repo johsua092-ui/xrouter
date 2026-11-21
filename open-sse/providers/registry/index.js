@@ -144,6 +144,7 @@ import p149 from "./dothoosh.js";
 import p154 from "./zcode.js";
 import p155 from "./ovh.js";
 import p156 from "./freepi.js";
+import p157 from "./venice.js";
 
 export default [
   p0,
@@ -292,4 +293,5 @@ export default [
   p154,
   p155,
   p156,
+  p157,
 ];

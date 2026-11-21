@@ -1,5 +1,19 @@
 # v0.1.0 (2026-11-21)
 
+### Features & Fixes — Venice.ai Free Provider & Antigravity Safe Architecture Protections
+
+- **Venice.ai provider integration**:
+  - Integrated `venice` as a dedicated free no-auth provider (`open-sse/providers/registry/venice.js`, `open-sse/executors/venice.js`, `src/sse/services/auth.js`, `src/app/api/models/test/ping.js`, `src/app/api/providers/[id]/models/route.js`, `src/shared/utils/providerIcon.js`).
+  - Added support for 6 free un-authenticated models (`deepseek-v4-1-flash-uncensored`, `olafangensan-glm-4.7-flash-heretic`, `venice-uncensored-1-2`, `qwen3-coder-480b-a35b-instruct-turbo`, `nvidia-nemotron-3-nano-30b-a3b`, `nvidia-nemotron-3-ultra-550b-a55b`).
+  - Integrated client attestation token minting via `wreq-js` Chrome 133 TLS impersonation, automatic proxy rotation from local proxy pool or user proxy file (`VENICE_PROXY_FILE`), and NDJSON-to-SSE stream conversion.
+- **Antigravity Shield safe architecture & anti-ban protections**:
+  - Pinned all Antigravity endpoints to official production `https://cloudcode-pa.googleapis.com` in `open-sse/providers/shared.js`, `open-sse/providers/registry/antigravity.js`, and `open-sse/services/projectId.js`, completely eliminating access to Google internal staging domains (`daily-cloudcode-pa.googleapis.com`) that triggered edge security bans.
+  - Standardized project ID fallback to Google's official consumer identifier `aicode-consumers` in `open-sse/executors/antigravity.js` and `open-sse/services/projectId.js`, replacing non-existent synthetic project hashes (`cloudaicompanion-proj-[hash]`).
+  - Removed aggressive `:onboardUser` polling loops on HTTP 403 errors in `src/sse/handlers/chat.js` and capped retry limits to prevent rapid-fire API ban triggers.
+  - Sanitized `Client-Metadata` headers and request metadata to match official Antigravity IDE specs, stripping anomalous duplicate snake_case/camelCase keys.
+  - Added explicit `TOS_VIOLATION` detection in `AntigravityExecutor.parseError` with actionable appeal guidance and official link (`https://forms.gle/hGzM9MEUv2azZsrb9`).
+  - Restored clean native `node:test` suite in `tests/unit/antigravity-shield-protections.test.js` (10/10 PASS).
+
 ### Features & Fixes — FreePI Provider, Nous OAuth Test & Circuit Breaker Model Isolation
 
 - **FreePI provider & dynamic free badge**:

@@ -384,6 +384,11 @@ const PROVIDER_MODELS_CONFIG = {
       models: getStaticProviderModels("ovh"),
     }),
   },
+  venice: {
+    customResolver: async () => ({
+      models: getStaticProviderModels("venice"),
+    }),
+  },
   zed: {
     customResolver: async (connection) => {
       try {

@@ -93,7 +93,7 @@ export const ANTHROPIC_COMPAT_BASE = "https://api.anthropic.com/v1";
 // Keep this static even when X Router runs on Linux: the provider profile is
 // intentionally matching the IDE client, not the server host.
 export const ANTIGRAVITY_IDE_VERSION = "2.32.1";
-export const ANTIGRAVITY_IDE_BASE_URL = "https://daily-cloudcode-pa.googleapis.com";
+export const ANTIGRAVITY_IDE_BASE_URL = "https://cloudcode-pa.googleapis.com";
 // Produk Antigravity desktop adalah Electron app `2.32.1` (hub) di atas language
 // server `44.9.1` (lihat version + resources/bin/language_server di tarball resmi).
 // LS memaksa `--override_ide_version`/`--override_user_agent_name antigravity`,
