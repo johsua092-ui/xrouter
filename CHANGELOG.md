@@ -11,6 +11,10 @@
 - **Per-model circuit breaker & error isolation**:
   - Fixed false global account lockouts in `src/sse/services/auth.js`: model-specific errors (HTTP 400 unsupported model on plan, HTTP 404/406, or HTTP 429 per-model rate limit) now quarantine only the requested model (`modelLock_${model}` and per-model cooldown) without tripping the global account circuit breaker or setting `testStatus: "unavailable"` on the connection in database.
   - Succeeded requests immediately heal transient circuit breaker entries via `recordCircuitSuccess(connectionId)`.
+- **Fix ReadableStream locked error on streaming requests**:
+  - Enhanced `isEventStreamResponse` in `open-sse/transformer/jsonToStreamConverter.js` to recognize Responses-API and forceStream providers whose upstream frames omit explicit `text/event-stream` content-type.
+  - Fixed `open-sse/handlers/chatCore.js` to avoid reading and draining the response body when the upstream is an active stream, and ensured any unparseable JSON error returns cleanly rather than falling through to `handleStreamingResponse` with a locked body.
+  - Ensured explicit `content-type: text/event-stream` on re-assembled SSE bodies in `open-sse/executors/codex.js`.
 
 # v0.1.0 (2026-11-20)
 

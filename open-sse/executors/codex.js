@@ -297,10 +297,14 @@ export class CodexExecutor extends BaseExecutor {
       if (!peek.matched) {
         // Replace body with re-assembled stream (prefix bytes already read + rest)
         if (peek.replacementBody) {
+          const headers = new Headers(result.response.headers);
+          if (!headers.get("content-type")?.includes("text/event-stream")) {
+            headers.set("content-type", "text/event-stream");
+          }
           result.response = new Response(peek.replacementBody, {
             status: result.response.status,
             statusText: result.response.statusText,
-            headers: result.response.headers,
+            headers,
           });
         }
         return result;
