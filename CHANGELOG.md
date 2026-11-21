@@ -1,3 +1,17 @@
+# v0.1.0 (2026-11-21)
+
+### Features & Fixes — FreePI Provider, Nous OAuth Test & Circuit Breaker Model Isolation
+
+- **FreePI provider & dynamic free badge**:
+  - Integrated `freepi` as a dedicated free provider (`open-sse/providers/registry/freepi.js`, `open-sse/executors/freepi.js`, `src/lib/oauth/providers/freepi.js`, `open-sse/services/usage/freepi.js`).
+  - Added dynamic `FREE` badge reflection for live model status and set usage limits to unlimited.
+- **Nous provider connection test**:
+  - Registered `nous` in `OAUTH_TEST_CONFIG` (`src/app/api/providers/[id]/test/testUtils.js`) with custom token validation and refresh handler.
+  - Updated validation probe model from retired `poolside/laguna-xs-2.1:free` to active `upstage/solar-mini4:free` with multi-model fallback.
+- **Per-model circuit breaker & error isolation**:
+  - Fixed false global account lockouts in `src/sse/services/auth.js`: model-specific errors (HTTP 400 unsupported model on plan, HTTP 404/406, or HTTP 429 per-model rate limit) now quarantine only the requested model (`modelLock_${model}` and per-model cooldown) without tripping the global account circuit breaker or setting `testStatus: "unavailable"` on the connection in database.
+  - Succeeded requests immediately heal transient circuit breaker entries via `recordCircuitSuccess(connectionId)`.
+
 # v0.1.0 (2026-11-20)
 
 ### Contributed — Naub (PR #4–#13), consolidated

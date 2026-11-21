@@ -33,6 +33,7 @@ import zcode from "./zcode.js";
 import minimaxCode from "./minimax-code.js";
 import minimaxCodeGlobal from "./minimax-code-global.js";
 import nous from "./nous.js";
+import freepi from "./freepi.js";
 
 // Provider configurations
 const PROVIDERS = {
@@ -65,6 +66,7 @@ const PROVIDERS = {
   "minimax-code": minimaxCode,
   "minimax-code-global": minimaxCodeGlobal,
   nous,
+  freepi,
 };
 
 export { PROVIDERS };
@@ -183,8 +185,10 @@ export async function pollForToken(providerName, deviceCode, codeVerifier, extra
   const result = await provider.pollToken(provider.config, deviceCode, codeVerifier, extraData);
 
   if (result.ok) {
+    const accessToken = result.data.access_token || result.data.accessToken || result.data.token;
     // For device code flows, success is only when we have an access token
-    if (result.data.access_token) {
+    if (accessToken) {
+      if (!result.data.access_token) result.data.access_token = accessToken;
       // Call postExchange to get additional data (copilotToken, userInfo, etc.)
       let extra = null;
       if (provider.postExchange) {

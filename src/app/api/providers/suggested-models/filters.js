@@ -41,6 +41,12 @@ export function isFreeOpencodeModel(m) {
 // Built-in fallback suggestions per filter type, used when the live upstream
 // catalogue is unreachable. Single-sourced from the provider registry.
 export const FALLBACK_SUGGESTIONS = {
+  "freepi": [
+    { id: "particle", name: "Particle-1", isFree: true },
+    { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", isFree: true },
+    { id: "glm-5.3-flash", name: "GLM 5.3 Flash", isFree: true },
+    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", isFree: true },
+  ],
   "opencode-free": (opencodeRegistry.models || [])
     .filter((m) => typeof m?.id === "string" && m.id)
     .map((m) => ({ id: m.id, name: m.name || m.id, isFree: isFreeOpencodeModel(m) }))
@@ -153,6 +159,16 @@ export const FILTERS = {
       isFree: m.isFree !== undefined ? m.isFree : true,
     }));
   },
+
+  "freepi": (models) =>
+    (Array.isArray(models) ? models : [])
+      .filter((m) => typeof m?.id === "string" && m.id.trim() !== "")
+      .map((m) => ({
+        id: m.id,
+        name: m.display_name || m.name || m.id,
+        isFree: Boolean(m.free),
+      }))
+      .sort((a, b) => Number(b.isFree) - Number(a.isFree) || String(a.id).localeCompare(String(b.id))),
 };
 
 // ---------------------------------------------------------------------------

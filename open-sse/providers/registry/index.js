@@ -143,6 +143,7 @@ import p147 from "./minimax-code-global.js";
 import p149 from "./dothoosh.js";
 import p154 from "./zcode.js";
 import p155 from "./ovh.js";
+import p156 from "./freepi.js";
 
 export default [
   p0,
@@ -290,4 +291,5 @@ export default [
   p149,
   p154,
   p155,
+  p156,
 ];

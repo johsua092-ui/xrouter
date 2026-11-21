@@ -6,10 +6,12 @@ import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/sha
 import { getDefaultModel } from "open-sse/config/providerModels.js";
 import { resolveOllamaLocalHost, PROVIDERS } from "open-sse/config/providers.js";
 import {
+  NOUS_VALIDATION_MODEL,
   createNousApiKeyProbe,
   getNousApiKeyValidationError,
   isNousApiKeyAccepted,
 } from "open-sse/services/nous.js";
+import { refreshNousToken } from "open-sse/services/tokenRefresh.js";
 import { CODEX_CLI_VERSION } from "open-sse/config/appConstants.js";
 import {
   refreshProviderCredentials,
@@ -208,6 +210,107 @@ const OAUTH_TEST_CONFIG = {
       }
     },
   },
+  freepi: {
+    url: "https://api.freepi.ai/me/stats",
+    method: "GET",
+    authHeader: "Authorization",
+    authPrefix: "Bearer ",
+    refreshable: false,
+  },
+  nous: {
+    refreshable: true,
+    customTest: async (connection, effectiveProxy) => {
+      let token = connection.apiKey || connection.accessToken;
+      let refreshed = false;
+      let newTokens = null;
+
+      const tokenExpired = isTokenExpired(connection);
+      if (tokenExpired && connection.refreshToken) {
+        const tokens = await refreshOAuthToken(connection);
+        if (tokens) {
+          token = tokens.apiKey || tokens.accessToken;
+          refreshed = true;
+          newTokens = tokens;
+        } else {
+          return { valid: false, error: "Token expired and refresh failed", refreshed: false };
+        }
+      }
+
+      if (!token) {
+        return { valid: false, error: "No access token or credentials found", refreshed: false };
+      }
+
+      const candidateModels = [
+        NOUS_VALIDATION_MODEL,
+        "stepfun/step-3.7-flash:free",
+        "tencent/hy4-flash:free",
+        "qwen/qwen4-max:free",
+        "meituan/longcat-2.5:free",
+      ];
+
+      let res = null;
+      for (const candidate of candidateModels) {
+        const probe = createNousApiKeyProbe(token, candidate);
+        try {
+          res = await fetchWithConnectionProxy(
+            probe.url,
+            {
+              ...probe.options,
+              signal: AbortSignal.timeout(10000),
+            },
+            effectiveProxy
+          );
+          if (res && res.status === 404) {
+            continue;
+          }
+          break;
+        } catch (err) {
+          return { valid: false, error: err.message || "Connection failed", refreshed, newTokens };
+        }
+      }
+
+      if (res && (res.status === 401 || res.status === 403) && !refreshed && connection.refreshToken) {
+        const tokens = await refreshOAuthToken(connection);
+        if (tokens?.accessToken || tokens?.apiKey) {
+          const freshToken = tokens.apiKey || tokens.accessToken;
+          for (const candidate of candidateModels) {
+            const retryProbe = createNousApiKeyProbe(freshToken, candidate);
+            try {
+              const retryRes = await fetchWithConnectionProxy(
+                retryProbe.url,
+                {
+                  ...retryProbe.options,
+                  signal: AbortSignal.timeout(10000),
+                },
+                effectiveProxy
+              );
+              if (retryRes && retryRes.status === 404) {
+                continue;
+              }
+              const valid = isNousApiKeyAccepted(retryRes.status);
+              return {
+                valid,
+                error: valid ? null : getNousApiKeyValidationError(retryRes.status),
+                refreshed: true,
+                newTokens: tokens,
+              };
+            } catch (retryErr) {
+              return { valid: false, error: retryErr.message || "Retry connection failed", refreshed: true, newTokens: tokens };
+            }
+          }
+        }
+        return { valid: false, error: "Token invalid or revoked", refreshed: false };
+      }
+
+      const valid = res ? isNousApiKeyAccepted(res.status) : false;
+      return {
+        valid,
+        error: valid ? null : getNousApiKeyValidationError(res?.status || 500),
+        refreshed,
+        newTokens,
+      };
+    },
+  },
 };
 
 /**
@@ -323,6 +426,21 @@ async function refreshOAuthToken(connection) {
 
     if (provider === "codex" || provider === "grok-cli" || provider === "xai") {
       return await refreshProviderCredentials(provider, connection, console);
+    }
+
+    if (provider === "nous") {
+      const refreshed = await refreshNousToken(refreshToken, console);
+      if (!refreshed) return null;
+      return {
+        accessToken: refreshed.accessToken,
+        expiresIn: refreshed.expiresIn || 3600,
+        refreshToken: refreshed.refreshToken || refreshToken,
+        apiKey: refreshed.apiKey || refreshed.accessToken,
+        providerSpecificData: {
+          ...(connection.providerSpecificData || {}),
+          ...(refreshed.providerSpecificData || {}),
+        },
+      };
     }
 
     if (provider === "claude") {
@@ -1133,6 +1251,7 @@ export async function testSingleConnection(id) {
 
   if (result.refreshed && result.newTokens) {
     if (result.newTokens.accessToken) updateData.accessToken = result.newTokens.accessToken;
+    if (result.newTokens.apiKey) updateData.apiKey = result.newTokens.apiKey;
     if (result.newTokens.refreshToken) updateData.refreshToken = result.newTokens.refreshToken;
     if (result.newTokens.idToken) updateData.idToken = result.newTokens.idToken;
     if (result.newTokens.lastRefreshAt) updateData.lastRefreshAt = result.newTokens.lastRefreshAt;

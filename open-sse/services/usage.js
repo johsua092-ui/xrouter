@@ -26,6 +26,7 @@ import { getZcodeUsage } from "./usage/zcode.js";
 import { getGlmUsage, getGlmResetCards, redeemGlmResetCard, getGlmClaimablePlans, claimGlmPlan, getGlmBalance, checkAndClaimZcodeStartPlan, ZCODE_START_PLAN_ID } from "./usage/glm.js";
 import { getCommandCodeUsage } from "./usage/commandcode.js";
 import { getNousUsage } from "./usage/nous.js";
+import { getFreePiUsage } from "./usage/freepi.js";
 import {
   getIflowUsage,
   getOllamaUsage,
@@ -86,6 +87,7 @@ const USAGE_HANDLERS = {
   commandcode: (c) => getCommandCodeUsage(c.apiKey, c.proxyOptions),
   cursor: (c) => getCursorUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
   nous: (c) => getNousUsage(c.accessToken || c.apiKey, c.proxyOptions, c),
+  freepi: (c) => getFreePiUsage(c.accessToken || c.apiKey, c.proxyOptions),
 };
 
 // Qoder intl/CN share one usage path: PATs must be exchanged to a job token

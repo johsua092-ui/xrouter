@@ -93,11 +93,11 @@ export default function QuotaProgressBar({
         <span
           className={cn(
             "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-            colors.bgLight,
-            colors.text
+            unlimited ? "bg-green-500/10 text-green-600 dark:text-green-400" : colors.bgLight,
+            unlimited ? "" : colors.text
           )}
         >
-          {remaining}%
+          {unlimited ? "Unlimited" : `${remaining}%`}
         </span>
       </div>
 
@@ -119,7 +119,7 @@ export default function QuotaProgressBar({
       {/* Usage details and countdown */}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-text-muted">
         <span className="tabular-nums">
-          {used.toLocaleString()} / {total.toLocaleString()} requests
+          {unlimited ? `${used.toLocaleString()} used · Unlimited` : `${used.toLocaleString()} / ${total.toLocaleString()} requests`}
         </span>
         {countdown !== "-" && (
           <span className="font-medium text-text-main">

@@ -25,7 +25,14 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
           {testStatus === "ok" ? "check_circle" : testStatus === "error" ? "cancel" : "smart_toy"}
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0">
-          <code className="max-w-[70vw] truncate rounded bg-sidebar px-1 py-0.5 font-mono text-[10.5px] text-text-muted sm:max-w-[300px]">{displayModel}</code>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <code className="max-w-[70vw] truncate rounded bg-sidebar px-1 py-0.5 font-mono text-[10.5px] text-text-muted sm:max-w-[300px]">{displayModel}</code>
+            {isFree && (
+              <span className="shrink-0 text-[9px] font-bold text-success bg-success-bg px-1.5 py-0.5 rounded leading-none">
+                FREE
+              </span>
+            )}
+          </div>
           <span className="flex min-w-0 items-center text-[8px] gap-1 pl-0.5">
             {model.name && <span className="truncate text-[8px] italic text-text-muted/70">{model.name}</span>}
             <CapacityBadges caps={caps} colorOverride="text-text-muted/70" size={9} />

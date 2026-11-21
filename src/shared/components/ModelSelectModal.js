@@ -180,9 +180,10 @@ export default function ModelSelectModal({
   const [freeCatalogModels, setFreeCatalogModels] = useState({});
   useEffect(() => {
     if (!isOpen) return undefined;
-    const targets = NO_AUTH_PROVIDER_IDS
-      .map((id) => [id, FREE_PROVIDERS[id]?.modelsFetcher])
-      .filter(([, fetcher]) => fetcher);
+    const targets = [
+      ...NO_AUTH_PROVIDER_IDS.map((id) => [id, FREE_PROVIDERS[id]?.modelsFetcher]),
+      ...Object.entries(OAUTH_PROVIDERS).filter(([, p]) => p?.modelsFetcher).map(([id, p]) => [id, p.modelsFetcher]),
+    ].filter(([, fetcher]) => fetcher);
     if (targets.length === 0) return undefined;
     let cancelled = false;
     Promise.all(
@@ -383,11 +384,20 @@ export default function ModelSelectModal({
           const seen = new Set([...aliasModels, ...registeredLlms].map((m) => m.value));
           const hardcoded = getModelsByProviderId(providerId)
             .filter((m) => !getModelKind(m) || getModelKind(m) === "llm")
-            .map((m) => ({ id: m.id, name: m.name, value: `${alias}/${m.id}`, kind: getModelKind(m) }))
+            .map((m) => ({ id: m.id, name: m.name, value: `${alias}/${m.id}`, kind: getModelKind(m), isFree: m.isFree }))
             .filter((m) => !seen.has(m.value));
-          const liveFreeRows = (freeCatalogModels[providerId] || [])
+          const liveCatalog = freeCatalogModels[providerId];
+          if (Array.isArray(liveCatalog) && liveCatalog.length > 0) {
+            for (const h of hardcoded) {
+              const live = liveCatalog.find((lm) => lm.id === h.id);
+              if (live !== undefined && typeof live.isFree === "boolean") {
+                h.isFree = live.isFree;
+              }
+            }
+          }
+          const liveFreeRows = (liveCatalog || [])
             .filter((m) => m?.id && m?.isFree === true && !getModelKind(m))
-            .map((m) => ({ id: m.id, name: m.name || m.id, value: `${alias}/${m.id}` }))
+            .map((m) => ({ id: m.id, name: m.name || m.id, value: `${alias}/${m.id}`, isFree: true }))
             .filter((m) => !seen.has(m.value) && !hardcoded.some((h) => h.value === m.value));
           hardcoded.push(...liveFreeRows);
           combined = [...registeredLlms, ...aliasModels.filter((m) => !registeredLlms.some((registered) => registered.value === m.value)), ...hardcoded];
@@ -1085,6 +1095,11 @@ export default function ModelSelectModal({
                           </div>
 
                           <div className="flex items-center gap-1 shrink-0">
+                            {model.isFree && (
+                              <span className="text-[9px] font-bold text-success bg-success-bg px-1.5 py-0.5 rounded leading-none">
+                                FREE
+                              </span>
+                            )}
                             {model.isCustom && (
                               <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-surface-3 border border-border-subtle text-text-muted">
                                 custom

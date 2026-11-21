@@ -23,6 +23,9 @@ const ICON_ALIASES = {
   "arena-ai": "arena-ai",
   arena: "arena-ai",
   lmsys: "arena-ai",
+  freepi: "freepi.svg",
+  fp: "freepi.svg",
+  "free-pi": "freepi.svg",
 };
 
 const TYPE_PREFIX_ALIASES = {
