@@ -5,6 +5,9 @@
 - **FreePI provider & dynamic free badge**:
   - Integrated `freepi` as a dedicated free provider (`open-sse/providers/registry/freepi.js`, `open-sse/executors/freepi.js`, `src/lib/oauth/providers/freepi.js`, `open-sse/services/usage/freepi.js`).
   - Added dynamic `FREE` badge reflection for live model status and set usage limits to unlimited.
+  - Added auto-retry mechanism in `FreePiExecutor` (`open-sse/executors/freepi.js`) for transient 429 concurrent limit (`one request at a time`) with 2.1s delay.
+  - Enforced strict conversation affinity in `src/sse/services/conversationAffinity.js` and prevented mid-conversation account rotation/fallback in `src/sse/handlers/chat.js` to stop FreePI `belongs to another free-pi account` rejections.
+  - Registered request-scoped error rules for FreePI model credit requirements and conversation ownership in `open-sse/config/errorConfig.js`.
 - **Nous provider connection test**:
   - Registered `nous` in `OAUTH_TEST_CONFIG` (`src/app/api/providers/[id]/test/testUtils.js`) with custom token validation and refresh handler.
   - Updated validation probe model from retired `poolside/laguna-xs-2.1:free` to active `upstage/solar-mini4:free` with multi-model fallback.

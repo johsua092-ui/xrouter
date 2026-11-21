@@ -115,7 +115,29 @@ export class FreePiExecutor extends DefaultExecutor {
       }
     }
 
-    const result = await super.execute(params);
+    let result = await super.execute(params);
+
+    // If upstream returns 429 concurrent ("one request at a time"), wait 2.1s and retry automatically (up to 2 times)
+    if (result?.response?.status === 429 && token) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const cloned = result.response.clone();
+          const text = await cloned.text();
+          if (text.includes("concurrent") || text.includes("one request at a time")) {
+            log?.info?.("FREEPI", `Detected concurrent lock (429: one request at a time). Waiting 2.1s before retry (${attempt}/2)...`);
+            await new Promise((r) => setTimeout(r, 2100));
+            result = await super.execute(params);
+            if (result?.response?.ok || result?.response?.status !== 429) {
+              break;
+            }
+          } else {
+            break;
+          }
+        } catch {
+          break;
+        }
+      }
+    }
 
     // If upstream returns 403 ads_required, automatically unblock and retry once
     if (result?.response?.status === 403 && token) {
@@ -127,6 +149,9 @@ export class FreePiExecutor extends DefaultExecutor {
           await fireAdCycle(token, sessionId, turnId, proxyOptions);
           // Retry completion request
           return await super.execute(params);
+        }
+        if (text.includes("belongs to another free-pi account")) {
+          log?.warn?.("FREEPI", "Rejected: Conversation belongs to another FreePI account. New conversation required.");
         }
       } catch {
         // Fall through to original result
