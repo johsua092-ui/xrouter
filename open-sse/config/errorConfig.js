@@ -81,6 +81,9 @@ export const ERROR_RULES = [
   { provider: "opencode", text: "AI_APICallError", backoff: true },
 
   // --- Text-based rules (checked first, order = priority) ---
+  // FreePI specific rules: model refusal & conversation ownership are request-scoped, not fatal to the account
+  { provider: "freepi", text: "belongs to another free-pi account", cooldownMs: 0, lock: false },
+  { provider: "freepi", text: "model_requires_credits", cooldownMs: 0, lock: false },
   { provider: "codex", text: "model is not supported when using codex with a chatgpt account", cooldownMs: MAX_RATE_LIMIT_COOLDOWN_MS },
   // Intl gateway blocks affect the account/IP, so let the connection back off.
   { provider: "codebuddy-intl", text: "request illegal", backoff: true },

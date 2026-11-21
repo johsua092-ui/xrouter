@@ -616,6 +616,14 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       : (await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, resetsAtMs)).shouldFallback;
 
     if (shouldFallback) {
+      // FreePI strictly prohibits account rotation mid-conversation.
+      // Do not fall back to another account if this is an existing conversation thread.
+      const isFreepi = provider === "freepi" || provider === "fp";
+      if (isFreepi && conversationKey) {
+        log.warn("FREEPI", `Prevented account rotation mid-conversation for ${credentials.connectionName || credentials.connectionId?.slice(0, 8)}`);
+        return result.response;
+      }
+
       log.warn("FALLBACK", `⇄ ACC:${credentials.connectionName} UNAVAILABLE (${result.status}) → NEXT ACCOUNT`);
       excludeConnectionIds.add(credentials.connectionId);
       if (conversationKey) clearAffinity(provider, conversationKey);
