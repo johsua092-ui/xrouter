@@ -250,19 +250,20 @@ export class AntigravityExecutor extends BaseExecutor {
     super("antigravity", PROVIDERS.antigravity);
   }
 
-  // 403 fallback handling (Antigravity-Shield parity):
-  // If daily staging endpoint (urlIndex 0) returns 403, failover to production endpoint (urlIndex 1).
-  // Only veto retries if it's an IP-level UberProxy block or all baseUrls have been attempted.
   shouldRetry(status, urlIndex) {
-    if (status === 403 && urlIndex === 0 && urlIndex + 1 < this.getFallbackCount()) {
-      return true;
-    }
     if (status === 403) return false;
     return status === HTTP_STATUS.RATE_LIMITED && urlIndex + 1 < this.getFallbackCount();
   }
 
   parseError(response, bodyText) {
     if (response.status === 403 && bodyText) {
+      if (/TOS_VIOLATION|Terms of Service|disabled in this account/i.test(bodyText)) {
+        return {
+          status: 403,
+          message: "Google account suspended for Terms of Service violation. Submit an appeal at https://forms.gle/hGzM9MEUv2azZsrb9 or connect a different account.",
+          code: "TOS_VIOLATION",
+        };
+      }
       if (/RESOURCE_EXHAUSTED|quota|rate\s*limit|exceeded/i.test(bodyText)) {
         return {
           status: 403,
@@ -365,7 +366,8 @@ export class AntigravityExecutor extends BaseExecutor {
 
   transformRequest(model, body, stream, credentials) {
     const isLegacyFakePid = typeof credentials?.projectId === "string" &&
-      /^(useful|bright|swift|calm|bold)-(fuze|wave|spark|flow|core)-[a-f0-9]+$/i.test(credentials.projectId);
+      (/^(useful|bright|swift|calm|bold)-(fuze|wave|spark|flow|core)-[a-f0-9]+$/i.test(credentials.projectId) ||
+       /^cloudaicompanion-proj-[a-f0-9]+$/i.test(credentials.projectId));
     const projectId = (!isLegacyFakePid && credentials?.projectId) || this.generateProjectId(credentials);
 
     // OpenAI clients may include stream_options even for non-streaming calls.
@@ -630,9 +632,7 @@ export class AntigravityExecutor extends BaseExecutor {
   }
 
   generateProjectId(credentials = null) {
-    const seed = credentials?.connectionId || credentials?.email || "default";
-    const hash = crypto.createHash("sha256").update(String(seed)).digest("hex").slice(0, 16);
-    return `cloudaicompanion-proj-${hash}`;
+    return "aicode-consumers";
   }
 
   generateSessionId() {

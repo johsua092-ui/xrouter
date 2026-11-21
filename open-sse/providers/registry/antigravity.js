@@ -21,7 +21,6 @@ export default {
   transport: {
     baseUrls: [
       ANTIGRAVITY_IDE_BASE_URL,
-      "https://cloudcode-pa.googleapis.com",
     ],
     format: "antigravity",
     // Argon high-reasoning prefill can exceed the global 360s budget on large contexts.

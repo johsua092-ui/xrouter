@@ -110,14 +110,14 @@ export async function getProjectIdForConnection(connectionId, accessToken, provi
                 projectIdCache.set(connectionId, {projectId, fetchedAt: Date.now()});
                 return projectId;
             }
-            // Canonical Antigravity fallback project format (Antigravity-Shield parity)
-            const fallbackPid = `cloudaicompanion-proj-${crypto.createHash("sha256").update(connectionId || "default").digest("hex").slice(0, 16)}`;
+            // Canonical Google Cloud Code consumer project fallback
+            const fallbackPid = "aicode-consumers";
             projectIdCache.set(connectionId, {projectId: fallbackPid, fetchedAt: Date.now()});
-            console.warn("[ProjectId] provisioned canonical project ID for connection", connectionId.slice(0, 8), fallbackPid);
+            console.log("[ProjectId] using canonical consumer project ID for connection", connectionId.slice(0, 8), fallbackPid);
             return fallbackPid;
         } catch (error) {
             console.warn(`[ProjectId] Error provisioning project ID on Google server: ${error.message}`);
-            const fallbackPid = `cloudaicompanion-proj-${crypto.createHash("sha256").update(connectionId || "default").digest("hex").slice(0, 16)}`;
+            const fallbackPid = "aicode-consumers";
             return fallbackPid;
         } finally {
             pendingFetches.delete(connectionId);
@@ -173,16 +173,6 @@ async function fetchProjectId(accessToken, signal, provider, connectionId = "") 
     const headers = {
         ...baseHeaders,
         "Authorization": `Bearer ${accessToken}`,
-        ...(provider === "antigravity" ? {
-            "Client-Metadata": JSON.stringify({
-                ideType: "ANTIGRAVITY",
-                ideName: "antigravity",
-                platform: "PLATFORM_UNSPECIFIED",
-                pluginType: "GEMINI",
-                ideVersion: ANTIGRAVITY_IDE_VERSION,
-                machineId: device.machineId,
-            }),
-        } : {}),
     };
     const response = await fetch(endpoints.loadCodeAssist, {
         method: "POST",
@@ -249,40 +239,21 @@ async function onboardUser(accessToken, tierID, externalSignal, endpoints, provi
 
     const reqBody = {
         tierId: tierID || "free-tier",
-        tier_id: tierID || "free-tier",
         metadata: {
-            ideType: "ANTIGRAVITY",
-            ide_type: "ANTIGRAVITY",
-            ideName: "antigravity",
-            ide_name: "antigravity",
-            ideVersion: ANTIGRAVITY_IDE_VERSION,
-            ide_version: ANTIGRAVITY_IDE_VERSION,
-            machineId: device.machineId,
-            machine_id: device.machineId,
             ...LOAD_CODE_ASSIST_METADATA,
+            machineId: device.machineId,
         }
     };
     const baseHeaders = provider === "antigravity" ? ANTIGRAVITY_LOAD_CODE_ASSIST_HEADERS : LOAD_CODE_ASSIST_HEADERS;
     const headers = {
         ...baseHeaders,
         "Authorization": `Bearer ${accessToken}`,
-        ...(provider === "antigravity" ? {
-            "Client-Metadata": JSON.stringify({
-                ideType: "ANTIGRAVITY",
-                ideName: "antigravity",
-                platform: "PLATFORM_UNSPECIFIED",
-                pluginType: "GEMINI",
-                ideVersion: ANTIGRAVITY_IDE_VERSION,
-                machineId: device.machineId,
-            }),
-        } : {}),
     };
-    const MAX_ATTEMPTS = Number(process.env.ONBOARD_MAX_ATTEMPTS) || 6;
+    const MAX_ATTEMPTS = Number(process.env.ONBOARD_MAX_ATTEMPTS) || 3;
     const BASE_RETRY_DELAY_MS = 2_000;
 
     const targetUrls = [
-        "https://daily-cloudcode-pa.googleapis.com/v1internal:onboardUser",
-        "https://cloudcode-pa.googleapis.com/v1internal:onboardUser",
+        endpoints?.onboardUser || "https://cloudcode-pa.googleapis.com/v1internal:onboardUser",
     ];
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {

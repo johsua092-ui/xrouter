@@ -175,7 +175,8 @@ export async function pingModelByKind(model, kind, baseUrl = `http://127.0.0.1:$
     String(model).startsWith("opencode/") ||
     String(model).startsWith("oc/") ||
     String(model).startsWith("opencode-zen/") ||
-    String(model).startsWith("ovh/");
+    String(model).startsWith("ovh/") ||
+    String(model).startsWith("venice/");
   const res = await fetch(`${baseUrl}/api/v1/chat/completions`, {
     method: "POST",
     headers,

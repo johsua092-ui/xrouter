@@ -26,6 +26,8 @@ const ICON_ALIASES = {
   freepi: "freepi.svg",
   fp: "freepi.svg",
   "free-pi": "freepi.svg",
+  venice: "venice",
+  "venice-ai": "venice",
 };
 
 const TYPE_PREFIX_ALIASES = {

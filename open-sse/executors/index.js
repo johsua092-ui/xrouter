@@ -32,6 +32,7 @@ import { ZCodeExecutor } from "./zcode.js";
 import { MinimaxCodeExecutor } from "./minimax-code.js";
 import { AdcodeExecutor } from "./adcode.js";
 import { FreePiExecutor } from "./freepi.js";
+import { VeniceExecutor } from "./venice.js";
 
 const executors = {
   antigravity: new AntigravityExecutor(),
@@ -86,6 +87,9 @@ const executors = {
   adc: new AdcodeExecutor(),
   freepi: new FreePiExecutor(),
   fp: new FreePiExecutor(),
+  venice: new VeniceExecutor(),
+  "venice-ai": new VeniceExecutor(),
+  veniceai: new VeniceExecutor(),
 };
 
 const defaultCache = new Map();
@@ -131,3 +135,4 @@ export { DevinCliExecutor } from "./devin-cli.js";
 export { ZCodeExecutor } from "./zcode.js";
 export { AdcodeExecutor } from "./adcode.js";
 export { FreePiExecutor } from "./freepi.js";
+export { VeniceExecutor } from "./venice.js";
