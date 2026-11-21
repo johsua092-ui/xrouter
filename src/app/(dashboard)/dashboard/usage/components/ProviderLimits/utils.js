@@ -966,6 +966,29 @@ export function parseQuotaData(provider, data) {
         }
         break;
 
+      case "freepi":
+      case "fp":
+        if (data.quotas) {
+          Object.entries(data.quotas).forEach(([name, quota]) => {
+            normalizedQuotas.push({
+              name,
+              used: quota.used || 0,
+              total: quota.total || 0,
+              resetAt: quota.resetAt || null,
+              expiresAt: quota.expiresAt || null,
+              recurring: quota.recurring,
+              absoluteReset: quota.absoluteReset === true,
+              neverExpires: quota.neverExpires === true,
+              remainingPercentage: quota.remainingPercentage,
+              isCreditBalance: quota.isCreditBalance === true,
+              unlimited: quota.unlimited === true,
+              unit: quota.unit,
+              currency: quota.currency,
+            });
+          });
+        }
+        break;
+
       default:
         // Generic fallback for unknown providers
         if (data.quotas) {
@@ -978,6 +1001,12 @@ export function parseQuotaData(provider, data) {
               expiresAt: quota.expiresAt || null,
               recurring: quota.recurring,
               absoluteReset: quota.absoluteReset === true,
+              neverExpires: quota.neverExpires === true,
+              remainingPercentage: quota.remainingPercentage,
+              isCreditBalance: quota.isCreditBalance === true,
+              unlimited: quota.unlimited === true,
+              unit: quota.unit,
+              currency: quota.currency,
             });
           });
         }

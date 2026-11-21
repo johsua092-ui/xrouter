@@ -529,7 +529,7 @@ export async function POST(request, { params }) {
       // no longer be exchanged" AFTER a successful browser login — the OAuth
       // device code is single-use, so the failed attempt burned it. They now
       // fall through to the PKCE branch below, which forwards codeVerifier.
-      const noPkceProviders = ["github", "kimi", "kimi-coding", "kilocode", "codebuddy-cn", "codebuddy-intl", "glm", "zcode", "grok-cli", "muse", "nous"];
+      const noPkceProviders = ["github", "kimi", "kimi-coding", "kilocode", "codebuddy-cn", "codebuddy-intl", "glm", "zcode", "grok-cli", "muse", "nous", "freepi"];
       let result;
       if (noPkceProviders.includes(provider)) {
         // kimi needs extraData._kimiDeviceId for stable X-Msh-Device-Id (CLIProxyAPI parity)

@@ -494,39 +494,46 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
     }
   }
 
-  // Do NOT trip circuit breaker on per-model rate limits (e.g. Tagflow/ADCode "upstream-rate-limit" or single-model 429)
-  // Circuit breaker should only trip when an account itself is dead/failing globally (5xx/connection failure/exhausted)
-  const isPerModelRateLimit = status === 429 && (
-    (typeof reason === "string" && (
-      reason.includes("upstream-rate-limit") ||
-      reason.includes("FreeUsageLimitError") ||
-      reason.includes("rate limit") ||
-      reason.includes("Model is unavailable")
-    )) ||
-    model
-  );
+  // Determine if this error is strictly scoped to a specific model or affects the whole account.
+  // Model-scoped errors include:
+  // - Any rate limit (429) or model quota/capacity failure when a model is specified
+  // - Any plan restriction (400, 404, 406, "model is not supported", "model_not_found") when a model is specified
+  // Account-wide failures include:
+  // - 401 / 403 (dead or revoked authentication)
+  // - 402 / out of credits (insufficient balance across the whole account)
+  // - Global rate limits without a model or with githubResetAtMs (account-level lock)
+  const isModelScoped = Boolean(model) && !githubResetAtMs && !isDeadAuth && !isOutOfCredits;
 
-  // Trip circuit breaker on actual connection/server-level errors (not per-model rate limits)
+  // Trip circuit breaker on actual connection/server-level errors (not per-model rate limits or model restrictions)
   if (shouldFallback && connectionId && connectionId !== "noauth") {
-    if (isPerModelRateLimit) {
-      // Use VoidLLM-style lightweight Cooldown Registry for 429 rate limit backoff (per model + per connection)
-      const cdDuration = cooldownMs || (githubResetAtMs ? Math.max(1000, githubResetAtMs - Date.now()) : 30000);
-      cooldownRegistry.mark(connectionId, cdDuration, reason);
-      if (model) cooldownRegistry.mark(`${connectionId}|${model}`, cdDuration, reason);
-      log.info("COOLDOWN", `⏳ Connection ${connName} [${model || provider}] placed in cooldown for ${Math.round(cdDuration / 1000)}s`);
+    const cdDuration = cooldownMs || (githubResetAtMs ? Math.max(1000, githubResetAtMs - Date.now()) : 30000);
+    if (isModelScoped) {
+      // Cooldown ONLY this model on this connection; do NOT trip circuit breaker on the whole account
+      cooldownRegistry.mark(`${connectionId}|${model}`, cdDuration, reason);
+      log.info("COOLDOWN", `⏳ Connection ${connName} model [${model}] placed in cooldown for ${Math.round(cdDuration / 1000)}s`);
     } else {
+      // Trip circuit breaker on actual account/connection-level errors
+      cooldownRegistry.mark(connectionId, cdDuration, reason);
       tripCircuitBreaker(connectionId, { status, error: reason, provider, model });
+      log.info("COOLDOWN", `⏳ Connection ${connName} [${provider}] placed in account cooldown for ${Math.round(cdDuration / 1000)}s`);
     }
   }
 
-  await updateProviderConnection(connectionId, {
+  const updatePayload = {
     ...lockUpdate,
-    testStatus: "unavailable",
     lastError: reason,
     errorCode: status,
     lastErrorAt: new Date().toISOString(),
     backoffLevel: newBackoffLevel ?? backoffLevel
-  });
+  };
+
+  // Only mark the entire connection testStatus as "unavailable" if it is an account-level failure.
+  // If only a specific model is locked, keep the account testStatus intact (e.g. "active") so other models remain usable.
+  if (!isModelScoped) {
+    updatePayload.testStatus = "unavailable";
+  }
+
+  await updateProviderConnection(connectionId, updatePayload);
 
   const lockKey = Object.keys(lockUpdate)[0];
   log.warn("AUTH", `${connName} locked ${lockKey} for ${Math.round(cooldownMs / 1000)}s [${status}]`);
@@ -549,6 +556,7 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
  */
 export async function clearAccountError(connectionId, currentConnection, model = null) {
   if (!connectionId || connectionId === "noauth") return;
+  recordCircuitSuccess(connectionId);
   const conn = currentConnection._connection || currentConnection;
   const now = Date.now();
   const allLockKeys = Object.keys(conn).filter(k => k.startsWith("modelLock_"));

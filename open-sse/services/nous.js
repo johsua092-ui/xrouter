@@ -14,7 +14,7 @@ export const NOUS_OAUTH_SCOPE = "inference:invoke inference:mint_agent_key";
 // validating a Portal key or OAuth token never consumes paid credits. Only
 // successful inference proves the Bearer credential was accepted; Nous can
 // return 4xx responses before authentication (e.g. 402 when Authorization is absent).
-export const NOUS_VALIDATION_MODEL = "poolside/laguna-xs-2.1:free";
+export const NOUS_VALIDATION_MODEL = "upstage/solar-mini4:free";
 
 const asPositiveInteger = (value) => {
   const parsed = Number(value);
@@ -96,7 +96,7 @@ export function normalizeNousFreeModels(payload) {
  * tests. Nous exposes /models publicly, so only an authenticated inference
  * request can prove that a Portal API key or OAuth token is accepted.
  */
-export function createNousApiKeyProbe(apiKey) {
+export function createNousApiKeyProbe(apiKey, model = NOUS_VALIDATION_MODEL) {
   return {
     url: NOUS_CHAT_COMPLETIONS_URL,
     options: {
@@ -106,7 +106,7 @@ export function createNousApiKeyProbe(apiKey) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: NOUS_VALIDATION_MODEL,
+        model,
         messages: [{ role: "user", content: "ping" }],
         max_tokens: 1,
         stream: false,

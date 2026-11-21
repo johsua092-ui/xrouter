@@ -31,6 +31,7 @@ import { DevinCliExecutor } from "./devin-cli.js";
 import { ZCodeExecutor } from "./zcode.js";
 import { MinimaxCodeExecutor } from "./minimax-code.js";
 import { AdcodeExecutor } from "./adcode.js";
+import { FreePiExecutor } from "./freepi.js";
 
 const executors = {
   antigravity: new AntigravityExecutor(),
@@ -83,6 +84,8 @@ const executors = {
   "glm-cn": new ZCodeExecutor("glm-cn"),
   adcode: new AdcodeExecutor(),
   adc: new AdcodeExecutor(),
+  freepi: new FreePiExecutor(),
+  fp: new FreePiExecutor(),
 };
 
 const defaultCache = new Map();
@@ -127,3 +130,4 @@ export { default as WindsurfExecutor } from "./windsurf.js";
 export { DevinCliExecutor } from "./devin-cli.js";
 export { ZCodeExecutor } from "./zcode.js";
 export { AdcodeExecutor } from "./adcode.js";
+export { FreePiExecutor } from "./freepi.js";
