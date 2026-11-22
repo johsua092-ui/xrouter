@@ -12,6 +12,9 @@ type Config struct {
 	InitialPassword string
 	PublicBaseUrl   string
 	Version         string
+	// AdminToken guards the management API. When empty, those routes accept
+	// loopback callers only.
+	AdminToken string
 }
 
 func Load() *Config {
@@ -54,5 +57,6 @@ func Load() *Config {
 		InitialPassword: initialPassword,
 		PublicBaseUrl:   publicBaseUrl,
 		Version:         "0.0.1",
+		AdminToken:      os.Getenv("XROUTER_ADMIN_TOKEN"),
 	}
 }

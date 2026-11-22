@@ -97,9 +97,8 @@ func (d *DB) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_kv_scope ON kv(scope);
 
 	CREATE TABLE IF NOT EXISTS settings (
-		id INTEGER PRIMARY KEY,
-		data TEXT NOT NULL,
-		updatedAt TEXT NOT NULL
+		id INTEGER PRIMARY KEY CHECK (id = 1),
+		data TEXT NOT NULL
 	);
 
 	CREATE TABLE IF NOT EXISTS providerConnections (
@@ -132,10 +131,110 @@ func (d *DB) initSchema() error {
 		id TEXT PRIMARY KEY,
 		key TEXT UNIQUE NOT NULL,
 		name TEXT,
+		machineId TEXT,
 		isActive INTEGER DEFAULT 1,
-		permissions TEXT,
+		createdAt TEXT NOT NULL,
+		tokenLimit INTEGER DEFAULT 0,
+		usedTokens INTEGER DEFAULT 0,
+		resetInterval TEXT DEFAULT 'never',
+		lastResetAt TEXT,
+		allowedModels TEXT DEFAULT '*',
+		rpmLimit INTEGER DEFAULT 0,
+		tpmLimit INTEGER DEFAULT 0,
+		ipWhitelist TEXT DEFAULT '',
+		expiresAt TEXT,
+		systemPrompt TEXT DEFAULT '',
+		permissions TEXT DEFAULT '',
+		createdBy TEXT DEFAULT ''
+	);
+
+	CREATE TABLE IF NOT EXISTS apiKeyAcls (
+		apiKeyId TEXT PRIMARY KEY,
+		deniedModels TEXT DEFAULT '',
+		allowedProviders TEXT DEFAULT '',
+		notes TEXT DEFAULT '',
+		updatedAt TEXT
+	);
+
+	CREATE TABLE IF NOT EXISTS combos (
+		id TEXT PRIMARY KEY,
+		name TEXT UNIQUE NOT NULL,
+		kind TEXT,
+		models TEXT NOT NULL,
+		contextWindow INTEGER DEFAULT 0,
 		createdAt TEXT NOT NULL,
 		updatedAt TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS settingsHistory (
+		id TEXT PRIMARY KEY,
+		at TEXT NOT NULL,
+		actor TEXT,
+		reason TEXT,
+		snapshot TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS usageHistory (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp TEXT NOT NULL,
+		provider TEXT,
+		model TEXT,
+		connectionId TEXT,
+		apiKey TEXT,
+		endpoint TEXT,
+		promptTokens INTEGER DEFAULT 0,
+		completionTokens INTEGER DEFAULT 0,
+		cost REAL DEFAULT 0,
+		status TEXT,
+		tokens TEXT,
+		meta TEXT
+	);
+	CREATE INDEX IF NOT EXISTS idx_usage_ts ON usageHistory(timestamp);
+
+	CREATE TABLE IF NOT EXISTS usageDaily (
+		dateKey TEXT PRIMARY KEY,
+		data TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS requestDetails (
+		id TEXT PRIMARY KEY,
+		timestamp TEXT NOT NULL,
+		provider TEXT,
+		model TEXT,
+		connectionId TEXT,
+		status TEXT,
+		data TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS vouchers (
+		id TEXT PRIMARY KEY,
+		code TEXT UNIQUE NOT NULL,
+		name TEXT,
+		description TEXT DEFAULT '',
+		tokenLimit INTEGER DEFAULT 100000,
+		allowedModels TEXT DEFAULT '*',
+		rpmLimit INTEGER DEFAULT 0,
+		tpmLimit INTEGER DEFAULT 0,
+		expiresInDays INTEGER DEFAULT 30,
+		maxUses INTEGER DEFAULT 1,
+		usedCount INTEGER DEFAULT 0,
+		isBansos INTEGER DEFAULT 0,
+		isActive INTEGER DEFAULT 1,
+		createdAt TEXT NOT NULL,
+		updatedAt TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS notifications (
+		id TEXT PRIMARY KEY,
+		kind TEXT NOT NULL,
+		severity TEXT,
+		title TEXT NOT NULL,
+		body TEXT,
+		link TEXT,
+		dedupeKey TEXT,
+		createdAt TEXT NOT NULL,
+		readAt TEXT,
+		clearedAt TEXT
 	);
 
 	CREATE TABLE IF NOT EXISTS teams (

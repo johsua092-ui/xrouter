@@ -1,3 +1,51 @@
+# v0.1.0 (2026-11-22) — wave 12: management plane
+
+### Added — wave 12: the dashboard API
+
+The Go core now serves the management API the dashboard talks to, against the same
+SQLite file the Node service writes (`apiKeys`, `apiKeyAcls`, `combos`, `settings`,
+`settingsHistory`, `usageHistory`, `usageDaily`, `vouchers`, `notifications`, `kv`).
+
+- **Keys** — `GET/POST /api/keys`, `POST /api/keys/bulk`, `GET/PATCH/DELETE
+  /api/keys/{id}`, `POST /api/keys/{id}/rotate`, `POST /api/keys/{id}/reset`,
+  `GET/PUT /api/keys/{id}/acl`. Duplicate names answer `409`, exactly like the Node
+  route, because the dashboard relies on that status to show its inline error.
+- **Combos** — `GET/POST /api/combos`, `GET/PATCH/DELETE /api/combos/{id}`; model
+  chains stay JSON text in the column so they round-trip byte for byte.
+- **Usage** — `stats`, `history`, `providers`, `models`, `api-keys`, `chart`,
+  `errors`. Aggregation is SQL over `usageHistory`; the chart reads the
+  pre-aggregated `usageDaily` buckets instead of scanning history.
+- **Settings** — `GET/PATCH /api/settings` with deep merge (a partial PATCH cannot
+  blank a sibling branch), `GET /api/settings/history`, `POST
+  /api/settings/rollback`. Every save pushes the previous blob onto
+  `settingsHistory` first, so a bad write is always revertible.
+- **Vouchers, notifications** — list/create/delete, mark read, clear.
+- **Model overrides** — `/api/models/alias`, `/api/models/custom`,
+  `/api/models/disabled` using the same kv scopes the Node repos use
+  (`modelAliases`, `customModels`, `disabledModels`), with read-merge-write on the
+  disabled list so two tabs cannot clobber each other.
+- `GET /api/version`.
+
+### Security — management plane
+
+- Every management route sits behind `requireAdmin`: a bearer token from
+  `XROUTER_ADMIN_TOKEN`, and when that is unset the routes accept **loopback only**
+  and answer `403` to anything else. The Node dashboard gates these behind a JWT
+  session cookie; the Go core has no session store yet, so the token is the honest
+  equivalent — never an open key endpoint on a public interface.
+- No query string is ever concatenated into SQL: periods are converted to
+  timestamps by a whitelist, and grouping columns come from a fixed map.
+
+### Changed — schema
+
+- `initSchema` now creates the Node-compatible shapes for `apiKeys`, `settings`,
+  `apiKeyAcls`, `combos`, `settingsHistory`, `usageHistory`, `usageDaily`,
+  `requestDetails`, `vouchers` and `notifications`. On the shared database these are
+  no-ops (`IF NOT EXISTS`); on a fresh Go-only install they produce the same columns
+  the Node migrations do, so either service can take over the file.
+
+---
+
 # v0.1.0 (2026-11-22) — wave 11: media plane
 
 ### Added — wave 11: embeddings, images, speech, search, fetch and video

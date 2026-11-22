@@ -171,6 +171,56 @@ func (g *Gateway) registerRoutes() {
 	// Diagnostic & Proxy Test Utility
 	g.mux.Get("/api/test-proxy", g.handleTestProxy)
 
+	// Management plane. Every route is behind requireAdmin because these read
+	// credentials and mutate the shared database.
+	g.mux.Get("/api/version", g.requireAdmin(g.handleVersion))
+
+	g.mux.Route("/api/keys", func(r chi.Router) {
+		r.Get("/", g.requireAdmin(g.handleKeysList))
+		r.Post("/", g.requireAdmin(g.handleKeysList))
+		r.Post("/bulk", g.requireAdmin(g.handleKeysBulk))
+		r.Get("/{id}", g.requireAdmin(g.handleKeyByID))
+		r.Patch("/{id}", g.requireAdmin(g.handleKeyByID))
+		r.Delete("/{id}", g.requireAdmin(g.handleKeyByID))
+		r.Post("/{id}/rotate", g.requireAdmin(g.handleKeyByID))
+		r.Post("/{id}/reset", g.requireAdmin(g.handleKeyByID))
+		r.Get("/{id}/acl", g.requireAdmin(g.handleKeyByID))
+		r.Put("/{id}/acl", g.requireAdmin(g.handleKeyByID))
+	})
+
+	g.mux.Route("/api/combos", func(r chi.Router) {
+		r.Get("/", g.requireAdmin(g.handleCombos))
+		r.Post("/", g.requireAdmin(g.handleCombos))
+		r.Get("/{id}", g.requireAdmin(g.handleComboByID))
+		r.Patch("/{id}", g.requireAdmin(g.handleComboByID))
+		r.Delete("/{id}", g.requireAdmin(g.handleComboByID))
+	})
+
+	g.mux.Get("/api/usage/*", g.requireAdmin(g.handleUsage))
+
+	g.mux.Get("/api/settings", g.requireAdmin(g.handleSettings))
+	g.mux.Patch("/api/settings", g.requireAdmin(g.handleSettings))
+	g.mux.Get("/api/settings/history", g.requireAdmin(g.handleSettings))
+	g.mux.Post("/api/settings/rollback", g.requireAdmin(g.handleSettings))
+
+	g.mux.Get("/api/vouchers", g.requireAdmin(g.handleVouchers))
+	g.mux.Post("/api/vouchers", g.requireAdmin(g.handleVouchers))
+	g.mux.Delete("/api/vouchers/*", g.requireAdmin(g.handleVouchers))
+
+	g.mux.Get("/api/notifications", g.requireAdmin(g.handleNotifications))
+	g.mux.Post("/api/notifications", g.requireAdmin(g.handleNotifications))
+	g.mux.Delete("/api/notifications", g.requireAdmin(g.handleNotifications))
+
+	g.mux.Get("/api/models/alias", g.requireAdmin(g.handleModelAliases))
+	g.mux.Put("/api/models/alias", g.requireAdmin(g.handleModelAliases))
+	g.mux.Delete("/api/models/alias", g.requireAdmin(g.handleModelAliases))
+	g.mux.Get("/api/models/custom", g.requireAdmin(g.handleCustomModels))
+	g.mux.Post("/api/models/custom", g.requireAdmin(g.handleCustomModels))
+	g.mux.Delete("/api/models/custom", g.requireAdmin(g.handleCustomModels))
+	g.mux.Get("/api/models/disabled", g.requireAdmin(g.handleDisabledModels))
+	g.mux.Post("/api/models/disabled", g.requireAdmin(g.handleDisabledModels))
+	g.mux.Delete("/api/models/disabled", g.requireAdmin(g.handleDisabledModels))
+
 	// Connection & Telegram Bot Controller
 	g.mux.Route("/api/connection", func(r chi.Router) {
 		r.Get("/", g.handleGetConnection)
