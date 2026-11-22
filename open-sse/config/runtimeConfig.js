@@ -137,6 +137,22 @@ export const OPENCODE_TRANSPORT_CONFIG = {
   failureBackoffMs: envMs("OPENCODE_TRANSPORT_BACKOFF_MS", 5 * 60 * 1000),
 };
 
+// Guard rails for the OAuth refresh path.
+// - noRefreshTokenCooldownMs: how long a connection with no usable refreshToken is
+//   skipped before we look at it again (it cannot ever succeed until the account is
+//   re-imported, but a short TTL keeps a fresh import from waiting a full cycle).
+// - failureCooldownMs: backoff after a refresh attempt produced nothing usable, so a
+//   dead account is not retried on every request or every scheduler tick.
+// - maxPerTick: hard cap on how many connections one background tick may refresh, so a
+//   mass-expiry event cannot turn into an unbounded refresh storm.
+// - maxCooldownEntries: bound on the cooldown map so it cannot grow without limit.
+export const REFRESH_GUARD_CONFIG = {
+  noRefreshTokenCooldownMs: envMs("REFRESH_NO_TOKEN_COOLDOWN_MS", 10 * 60 * 1000),
+  failureCooldownMs: envMs("REFRESH_FAILURE_COOLDOWN_MS", 30 * 1000),
+  maxPerTick: envMs("BG_REFRESH_MAX_PER_TICK", 25),
+  maxCooldownEntries: envMs("REFRESH_MAX_COOLDOWN_ENTRIES", 1000),
+};
+
 // Requests containing these texts will bypass provider
 export const SKIP_PATTERNS = [
   "Please write a 5-10 word title for the following conversation:"

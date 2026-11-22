@@ -4,11 +4,17 @@ import {
   refreshTokenByProvider,
 } from "./tokenRefresh.js";
 import { PROVIDER_OAUTH } from "../providers/index.js";
+import { REFRESH_GUARD_CONFIG } from "../config/runtimeConfig.js";
 
 // Single source: codex.oauth.maxRefreshAgeMs (8 days) — proactive refresh window
 export const CODEX_MAX_REFRESH_AGE_MS = PROVIDER_OAUTH["codex"]?.maxRefreshAgeMs;
 
 const refreshLocks = new Map();
+const refreshCooldowns = new Map();
+
+// Providers whose refresh flow does not consume a refreshToken (service-account JSON
+// or a locally-held credential). Everything else needs a real refreshToken to work.
+const REFRESH_WITHOUT_REFRESH_TOKEN = new Set(["vertex", "vertex-partner", "zed"]);
 
 function parseTimeMs(value) {
   if (value === undefined || value === null || value === "") return null;
@@ -131,6 +137,92 @@ function getRefreshLockKey(provider, credentials) {
   return `${provider}:${stableId}`;
 }
 
+/**
+ * Can this connection actually be refreshed?
+ *
+ * A connection with an expired (or missing) `expiresAt` but no `refreshToken` used to
+ * fall through to the refresh path anyway: the attempt could never succeed, but it ran
+ * on every request and on every scheduler tick, with no spacing and no cap. Checking
+ * here keeps empty connections out of the refresh pipeline entirely.
+ *
+ * @param {string} provider
+ * @param {object} credentials
+ * @returns {boolean}
+ */
+export function canRefreshCredentials(provider, credentials) {
+  if (!credentials) return false;
+  if (REFRESH_WITHOUT_REFRESH_TOKEN.has(provider)) return true;
+  const token = credentials.refreshToken;
+  return typeof token === "string" && token.trim() !== "";
+}
+
+function pruneExpiredCooldowns(nowMs) {
+  for (const [key, entry] of refreshCooldowns) {
+    if (entry.until <= nowMs) refreshCooldowns.delete(key);
+  }
+}
+
+/**
+ * Remaining cooldown for this connection, in ms (0 when not cooling down).
+ * @param {string} provider
+ * @param {object} credentials
+ * @param {number} [nowMs]
+ * @returns {number}
+ */
+export function getRefreshCooldown(provider, credentials, nowMs = Date.now()) {
+  if (!credentials) return 0;
+  const key = getRefreshLockKey(provider, credentials);
+  const entry = refreshCooldowns.get(key);
+  if (!entry) return 0;
+  const remaining = entry.until - nowMs;
+  if (remaining <= 0) {
+    refreshCooldowns.delete(key);
+    return 0;
+  }
+  return remaining;
+}
+
+/**
+ * Put a connection on refresh cooldown.
+ * @param {string} provider
+ * @param {object} credentials
+ * @param {"no_refresh_token"|"refresh_failed"} reason
+ * @param {number} [nowMs]
+ * @returns {number} applied cooldown in ms
+ */
+export function markRefreshCooldown(provider, credentials, reason = "refresh_failed", nowMs = Date.now()) {
+  if (!credentials) return 0;
+  const key = getRefreshLockKey(provider, credentials);
+  const ttl =
+    reason === "no_refresh_token"
+      ? REFRESH_GUARD_CONFIG.noRefreshTokenCooldownMs
+      : REFRESH_GUARD_CONFIG.failureCooldownMs;
+
+  if (refreshCooldowns.size >= REFRESH_GUARD_CONFIG.maxCooldownEntries) {
+    pruneExpiredCooldowns(nowMs);
+    // Still full: drop the oldest entry so the map stays bounded.
+    while (refreshCooldowns.size >= REFRESH_GUARD_CONFIG.maxCooldownEntries) {
+      const oldest = refreshCooldowns.keys().next().value;
+      if (oldest === undefined) break;
+      refreshCooldowns.delete(oldest);
+    }
+  }
+
+  refreshCooldowns.set(key, { until: nowMs + ttl, reason });
+  return ttl;
+}
+
+/** Clear cooldown after a successful refresh. */
+export function clearRefreshCooldown(provider, credentials) {
+  if (!credentials) return;
+  refreshCooldowns.delete(getRefreshLockKey(provider, credentials));
+}
+
+/** Test hook: drop all cooldown state. */
+export function resetRefreshCooldowns() {
+  refreshCooldowns.clear();
+}
+
 export async function withCredentialRefreshLock(provider, credentials, refreshFn) {
   const key = getRefreshLockKey(provider, credentials);
   const existing = refreshLocks.get(key);
@@ -148,6 +240,13 @@ export async function withCredentialRefreshLock(provider, credentials, refreshFn
 
 export async function refreshProviderCredentials(provider, credentials, log) {
   if (!credentials) return null;
+  if (!canRefreshCredentials(provider, credentials)) {
+    log?.debug?.("TOKEN_REFRESH", "Refresh skipped: connection has no refreshToken", {
+      provider,
+      connectionId: credentials.connectionId || credentials.id || null,
+    });
+    return null;
+  }
 
   return withCredentialRefreshLock(provider, credentials, async () => {
     const refreshed = await refreshTokenByProvider(provider, credentials, log);

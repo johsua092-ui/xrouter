@@ -3,7 +3,8 @@
 
 import * as log from "../utils/logger.js";
 import { getRefreshLeadMs } from "open-sse/services/tokenRefresh.js";
-import { getCredentialExpiryMs } from "open-sse/services/oauthCredentialManager.js";
+import { getCredentialExpiryMs, getRefreshCooldown } from "open-sse/services/oauthCredentialManager.js";
+import { REFRESH_GUARD_CONFIG } from "open-sse/config/runtimeConfig.js";
 
 /** Refresh when expiry is within 30 minutes (or the provider on-request lead, whichever larger). */
 export const BACKGROUND_REFRESH_LEAD_MS = 30 * 60 * 1000;
@@ -96,9 +97,29 @@ export async function runBackgroundTokenRefreshTick(deps = {}) {
     const sleep = deps.sleep || ((ms) => new Promise((res) => setTimeout(res, ms)));
 
     const connections = await load();
-    const due = selectConnectionsNeedingRefresh(connections, Date.now());
+    const nowMs = Date.now();
+    const dueAll = selectConnectionsNeedingRefresh(connections, nowMs).filter(
+      // Connections on refresh cooldown (no refreshToken, or a failed attempt) are not
+      // retried until the cooldown expires.
+      (conn) => getRefreshCooldown(conn.provider, conn, nowMs) === 0
+    );
 
-    if (due.length === 0) return;
+    if (dueAll.length === 0) return;
+
+    // Hard cap per tick: a mass-expiry event must not turn into an unbounded series of
+    // sequential upstream refreshes that starves the request path. The remainder is
+    // picked up by the next tick.
+    const maxPerTick = Math.max(1, Number(REFRESH_GUARD_CONFIG.maxPerTick) || 1);
+    const due = dueAll.slice(0, maxPerTick);
+
+    if (dueAll.length > due.length) {
+      log.info("BG_TOKEN_REFRESH", "Refresh batch capped; remainder deferred to next tick", {
+        due: dueAll.length,
+        refreshing: due.length,
+        deferred: dueAll.length - due.length,
+        maxPerTick,
+      });
+    }
 
     const baseSensitiveDelay = Number(process.env.BG_REFRESH_GOOGLE_DELAY_MS) || 12_000;
     const baseNormalDelay = Number(process.env.BG_REFRESH_DELAY_MS) || 1_500;

@@ -32,6 +32,17 @@
 
 # v0.1.0 (2026-11-21)
 
+### Bug Fixes — Refresh Storm From Connections Without a `refreshToken`
+
+- **An OAuth connection with an empty/missing `refreshToken` entered the refresh pipeline anyway, on every request and every scheduler tick**, in `src/sse/services/tokenRefresh.js` and `open-sse/services/oauthCredentialManager.js`. Such a connection can never refresh successfully, so each attempt burned an upstream call path, a lock, and a log line while the token stayed dead — and with many empty connections the loop had no spacing or batch cap, which is where the intermittent X Router slowness came from.
+  - `canRefreshCredentials(provider, credentials)` is now the single gate. It requires a non-empty string `refreshToken`, with an explicit allowlist for providers whose refresh flow does not use one (`vertex`, `vertex-partner`, `zed`).
+  - `checkAndRefreshToken()` consults the gate **before** `shouldRefreshCredentials()` and skips without touching upstream. `force: true` no longer bypasses an active cooldown, so background sweeps cannot hammer a dead connection either.
+  - `refreshProviderCredentials()` returns `null` up front for non-refreshable credentials, protecting every other caller (models catalog, usage probes, provider probes).
+- **Added a per-connection refresh cooldown** (`markRefreshCooldown` / `getRefreshCooldown` / `clearRefreshCooldown`): a connection that cannot refresh is parked for `REFRESH_NO_TOKEN_COOLDOWN_MS` (default 10 min) and a connection whose refresh failed is parked for `REFRESH_FAIL_COOLDOWN_MS` (default 30 s). A successful refresh clears the entry. The map is bounded by `REFRESH_MAX_COOLDOWN_ENTRIES` (500) with expired-first pruning.
+- **Bounded the background sweep**: `backgroundTokenRefresh` now filters out connections on cooldown and processes at most `REFRESH_MAX_PER_TICK` (default 25) per tick, deferring the rest to the next tick instead of firing a full burst after downtime.
+- Tunables live in `REFRESH_GUARD_CONFIG` (`open-sse/config/runtimeConfig.js`) — no magic numbers at the call sites.
+- **Added regression suite** `tests/unit/refresh-guard.test.js` (13 cases): empty/missing token rejected, allowlisted providers pass, cooldown hit/expiry/clear, `force` cannot bypass cooldown, scheduler skips empty connections entirely and honours the per-tick cap. 13/13 PASS. Full `unit/` delta measured in a clean worktree: **317 failed / 2853 passed** with the patch vs **317 failed / 2840 passed** at HEAD — no new failures, 13 new passes.
+
 ### Bug Fixes — False "Cross-origin request blocked" Behind Tunnels / Reverse Proxies
 
 - **Fixed the origin gate rejecting legitimate dashboard POSTs whenever X Router sits behind a proxy that rewrites `Host`** (abc-tunnel, cloudflared, ngrok, nginx `proxy_set_header Host`), in `src/middleware.js`.
