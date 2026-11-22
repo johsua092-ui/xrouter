@@ -27,7 +27,9 @@ func newManagementGateway(t *testing.T) *Gateway {
 	return &Gateway{
 		catalog: catalog.MustLoad(),
 		db:      db,
-		cfg:     &config.Config{Version: "test", Port: "0"},
+		// DataDir holds the generated JWT secret; a fresh one per test keeps
+		// sessions isolated.
+		cfg: &config.Config{Version: "test", Port: "0", DataDir: t.TempDir()},
 	}
 }
 

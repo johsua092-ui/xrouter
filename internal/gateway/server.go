@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/johsua092-ui/xrouter/internal/auth"
 	"github.com/johsua092-ui/xrouter/internal/catalog"
 	"github.com/johsua092-ui/xrouter/internal/config"
 	"github.com/johsua092-ui/xrouter/internal/connection"
@@ -30,6 +31,7 @@ type Gateway struct {
 	translators *translate.Registry
 	upstream    *providers.Transport
 	catalog     *catalog.Catalog
+	sessions    *auth.Manager
 }
 
 func New(cfg *config.Config, db *database.DB) *Gateway {
@@ -96,6 +98,7 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 		translators: translators,
 		upstream:    providers.NewTransport(nil),
 		catalog:     catalog.MustLoad(),
+		sessions:    auth.NewManager(cfg.DataDir),
 	}
 
 	// API routes first, then the dashboard. Order matters: mountDashboard
@@ -110,7 +113,12 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 func (g *Gateway) registerRoutes() {
 	// Health & System
 	g.mux.Get("/api/health", g.handleHealth)
+	// Dashboard session: cookie-compatible with the Node dashboard.
+	g.mux.Post("/api/auth/login", g.handleAuthLogin)
+	g.mux.Post("/api/auth/logout", g.handleAuthLogout)
 	g.mux.Get("/api/auth/status", g.handleAuthStatus)
+	g.mux.Post("/api/auth/reset-password", g.handleAuthResetPassword)
+	g.mux.Post("/api/auth/change-password", g.handleAuthChangePassword)
 
 	// Adapter coverage: how many providers have a real Go port vs the fallback.
 	// Makes Phase 2 progress observable instead of assumed.
@@ -221,6 +229,30 @@ func (g *Gateway) registerRoutes() {
 	g.mux.Post("/api/models/disabled", g.requireAdmin(g.handleDisabledModels))
 	g.mux.Delete("/api/models/disabled", g.requireAdmin(g.handleDisabledModels))
 
+	// Providers: connection inventory (credentials masked on the way out).
+	g.mux.Route("/api/providers", func(r chi.Router) {
+		r.Get("/", g.requireAdmin(g.handleProviders))
+		r.Post("/", g.requireAdmin(g.handleProviders))
+		r.Post("/bulk", g.requireAdmin(g.handleProvidersBulk))
+		r.Route("/{id}", func(sr chi.Router) {
+			sr.Get("/", g.requireAdmin(g.handleProviderByID))
+			sr.Put("/", g.requireAdmin(g.handleProviderByID))
+			sr.Delete("/", g.requireAdmin(g.handleProviderByID))
+			sr.Get("/models", g.requireAdmin(g.handleProviderModels))
+		})
+	})
+
+	// Proxy pools: HTTP/cloud egress pools the dashboard manages.
+	g.mux.Route("/api/proxy-pools", func(r chi.Router) {
+		r.Get("/", g.requireAdmin(g.handleProxyPools))
+		r.Post("/", g.requireAdmin(g.handleProxyPools))
+		r.Route("/{id}", func(sr chi.Router) {
+			sr.Get("/", g.requireAdmin(g.handleProxyPoolByID))
+			sr.Put("/", g.requireAdmin(g.handleProxyPoolByID))
+			sr.Delete("/", g.requireAdmin(g.handleProxyPoolByID))
+		})
+	})
+
 	// Connection & Telegram Bot Controller
 	g.mux.Route("/api/connection", func(r chi.Router) {
 		r.Get("/", g.handleGetConnection)
@@ -330,16 +362,6 @@ func (g *Gateway) handleTestProxy(w http.ResponseWriter, r *http.Request) {
 		"proxy":       proxyRaw,
 		"duration_ms": duration,
 		"body":        string(bodyBytes),
-	})
-}
-
-func (g *Gateway) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"authenticated": true,
-		"role":          "admin",
-		"requireLogin":  false,
-		"displayName":   "Admin (Go Core)",
-		"homePath":      "/dashboard",
 	})
 }
 

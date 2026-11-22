@@ -1,3 +1,36 @@
+# v0.1.0 (2026-11-22) — wave 13: dashboard session + provider inventory
+
+### Added — wave 13
+- `internal/auth`: HS256 dashboard sessions that are byte-compatible with the Node
+  dashboard. Same `auth_token` cookie, same claim set (`authenticated`, `jti`,
+  `iat`, `exp`), same secret source (`JWT_SECRET` or `<DATA_DIR>/jwt-secret`), same
+  `revoked-sessions.json`. A session minted by either runtime validates in the
+  other, and a logout in either kills it for both.
+- `/api/auth/login` (password or API key), `/api/auth/logout` (revokes the jti, not
+  just the cookie), `/api/auth/status`, `/api/auth/reset-password`,
+  `/api/auth/change-password`. Password checks use bcrypt against the hash the
+  dashboard already stores, with the `INITIAL_PASSWORD` fallback on a fresh install.
+- Management authorisation now accepts a verified dashboard session, the operator
+  token, or loopback on an unconfigured install — one decision point
+  (`adminAuthorised`) behind every management route.
+- `/api/providers`: list with per-provider counts, create, get, update, delete,
+  bulk import with per-row errors, and `/{id}/models` from the generated catalogue.
+  Credentials are masked on the way out and a masked placeholder echoed back on
+  update never overwrites the stored secret.
+- `/api/proxy-pools`: list/create/get/update/delete. Proxy URLs are stored in the
+  Node-shaped `data` blob and masked (`***`) when returned.
+- `proxyPools` schema now matches the Node migration (data blob); a table created by
+  an earlier Go build is migrated in place, preserving rows.
+
+### Tests
+- `internal/auth`: sign/verify round trip, tampered payload rejection, expiry,
+  revocation visible to a second manager (cross-runtime logout), secret persistence,
+  bcrypt + INITIAL_PASSWORD + default-password fallback.
+- `internal/gateway`: login issues a working HttpOnly cookie that opens `/api/keys`,
+  wrong password sets no cookie, API-key login claims `role=apikey`, logout revokes
+  server-side, provider CRUD never leaks or clobbers secrets, bulk reports per-row
+  failures, catalogue-backed model list, proxy-pool lifecycle + masking.
+
 # v0.1.0 (2026-11-22) — wave 12: management plane
 
 ### Added — wave 12: the dashboard API

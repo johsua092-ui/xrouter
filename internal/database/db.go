@@ -116,13 +116,13 @@ func (d *DB) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_pc_provider ON providerConnections(provider);
 	CREATE INDEX IF NOT EXISTS idx_pc_provider_active ON providerConnections(provider, isActive);
 
+	-- Node-shaped: the pool's own fields live in the data JSON blob, matching the
+	-- table the dashboard's migrations create.
 	CREATE TABLE IF NOT EXISTS proxyPools (
 		id TEXT PRIMARY KEY,
-		name TEXT,
-		url TEXT NOT NULL,
 		isActive INTEGER DEFAULT 1,
 		testStatus TEXT,
-		latencyMs INTEGER,
+		data TEXT NOT NULL,
 		createdAt TEXT NOT NULL,
 		updatedAt TEXT NOT NULL
 	);
@@ -254,8 +254,79 @@ func (d *DB) initSchema() error {
 		updatedAt TEXT NOT NULL
 	);
 	`
-	_, err := d.sqlDB.Exec(schema)
+	if _, err := d.sqlDB.Exec(schema); err != nil {
+		return err
+	}
+	return d.migrateProxyPoolsToDataSource()
+}
+
+// migrateProxyPoolsToDataSource upgrades a proxyPools table created by an earlier
+// Go build (name/url/latencyMs columns) to the Node shape (a data JSON blob), so a
+// database that was ever opened by the old binary keeps working. It is a no-op on
+// the Node schema and on fresh databases.
+func (d *DB) migrateProxyPoolsToDataSource() error {
+	columns, err := d.tableColumns("proxyPools")
+	if err != nil || len(columns) == 0 {
+		return err
+	}
+	if _, hasData := columns["data"]; hasData {
+		return nil
+	}
+
+	rows, err := d.queryMaps(`SELECT * FROM proxyPools`)
+	if err != nil {
+		return err
+	}
+
+	if _, err := d.sqlDB.Exec(`ALTER TABLE proxyPools RENAME TO proxyPools_legacy`); err != nil {
+		return err
+	}
+	if _, err := d.sqlDB.Exec(`CREATE TABLE proxyPools (
+		id TEXT PRIMARY KEY,
+		isActive INTEGER DEFAULT 1,
+		testStatus TEXT,
+		data TEXT NOT NULL,
+		createdAt TEXT NOT NULL,
+		updatedAt TEXT NOT NULL
+	)`); err != nil {
+		return err
+	}
+
+	for _, row := range rows {
+		payload := map[string]any{
+			"name":        asStr(row["name"]),
+			"proxyUrl":    asStr(row["url"]),
+			"noProxy":     "",
+			"strictProxy": false,
+			"type":        "http",
+			"latencyMs":   asInt64(row["latencyMs"]),
+		}
+		encoded, marshalErr := json.Marshal(payload)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		if _, err := d.sqlDB.Exec(`INSERT OR REPLACE INTO proxyPools
+			(id,isActive,testStatus,data,createdAt,updatedAt) VALUES (?,?,?,?,?,?)`,
+			asStr(row["id"]), asInt64(row["isActive"]), asStr(row["testStatus"]),
+			string(encoded), asStr(row["createdAt"]), asStr(row["updatedAt"])); err != nil {
+			return err
+		}
+	}
+	_, err = d.sqlDB.Exec(`DROP TABLE proxyPools_legacy`)
 	return err
+}
+
+// tableColumns reports the column set of a table, keyed by name.
+func (d *DB) tableColumns(table string) (map[string]struct{}, error) {
+	rows, err := d.queryMaps(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		out[asStr(row["name"])] = struct{}{}
+	}
+	return out, nil
 }
 
 func (d *DB) GetActiveConnections(provider string) ([]ProviderConnection, error) {

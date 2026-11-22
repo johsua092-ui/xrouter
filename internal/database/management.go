@@ -69,6 +69,24 @@ func (d *DB) queryMaps(query string, args ...any) ([]map[string]any, error) {
 	return out, rows.Err()
 }
 
+// ExecQueryMaps runs a read query and returns column→value rows. Exported for the
+// connection/proxy-pool plane, which addresses the same tables directly.
+func (d *DB) ExecQueryMaps(query string, args ...any) ([]map[string]any, error) {
+	return d.queryMaps(query, args...)
+}
+
+// ExecQueryMap returns the first row, or (nil, nil) when the query matched nothing.
+func (d *DB) ExecQueryMap(query string, args ...any) (map[string]any, error) {
+	rows, err := d.queryMaps(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return rows[0], nil
+}
+
 // ExecRaw runs a parameterised write against the shared database. It exists for
 // the few management paths that need a delete or update without a typed helper.
 func (d *DB) ExecRaw(query string, args ...any) (sql.Result, error) {
@@ -80,6 +98,26 @@ func (d *DB) exec(query string, args ...any) (sql.Result, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.sqlDB.Exec(query, args...)
+}
+
+// FindAPIKeyBySecret looks a key up by its secret value, which is how "sign in
+// with an API key" resolves a caller. (nil, nil) means unknown.
+func (d *DB) FindAPIKeyBySecret(secret string) (*APIKey, error) {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		return nil, nil
+	}
+	rows, err := d.queryMaps(`SELECT id,key,name,machineId,isActive,createdAt,tokenLimit,usedTokens,
+		resetInterval,lastResetAt,allowedModels,rpmLimit,tpmLimit,ipWhitelist,expiresAt,systemPrompt,
+		permissions,createdBy FROM apiKeys WHERE key = ? LIMIT 1`, secret)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	keys := keysFromRows(rows)
+	return &keys[0], nil
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +179,11 @@ func (d *DB) ListAPIKeys() ([]APIKey, error) {
 		return nil, err
 	}
 
+	return keysFromRows(rows), nil
+}
+
+// keysFromRows maps apiKeys rows onto the APIKey struct.
+func keysFromRows(rows []map[string]any) []APIKey {
 	keys := make([]APIKey, 0, len(rows))
 	for _, row := range rows {
 		keys = append(keys, APIKey{
@@ -164,7 +207,7 @@ func (d *DB) ListAPIKeys() ([]APIKey, error) {
 			CreatedBy:     asStr(row["createdBy"]),
 		})
 	}
-	return keys, nil
+	return keys
 }
 
 // FindAPIKey looks a key up by id or by the secret itself, because the dashboard

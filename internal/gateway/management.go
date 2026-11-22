@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,34 +22,23 @@ import (
 // on a public interface.
 
 // requireAdmin wraps a management handler with the credential check.
+//
+// Accepted callers, in order: a verified dashboard session cookie (what the
+// browser sends after /api/auth/login), the operator token from
+// XROUTER_ADMIN_TOKEN, or an unconfigured install reached over loopback.
 func (g *Gateway) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if g.cfg.AdminToken != "" {
-			supplied := strings.TrimSpace(r.Header.Get("X-Admin-Token"))
-			if supplied == "" {
-				supplied = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-				supplied = strings.TrimSpace(supplied)
-			}
-			if supplied != g.cfg.AdminToken {
-				jsonResponse(w, http.StatusUnauthorized, map[string]any{"error": "invalid admin token"})
-				return
-			}
+		if g.adminAuthorised(r) {
 			next(w, r)
 			return
 		}
-
-		host, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			host = r.RemoteAddr
-		}
-		ip := net.ParseIP(host)
-		if ip == nil || !ip.IsLoopback() {
-			jsonResponse(w, http.StatusForbidden, map[string]any{
-				"error": "management API is loopback-only until an admin token is configured",
-			})
+		if g.cfg.AdminToken != "" && g.sessionFromRequest(r) == nil {
+			jsonResponse(w, http.StatusUnauthorized, map[string]any{"error": "invalid admin token"})
 			return
 		}
-		next(w, r)
+		jsonResponse(w, http.StatusForbidden, map[string]any{
+			"error": "management API is loopback-only until an admin token is configured",
+		})
 	}
 }
 
