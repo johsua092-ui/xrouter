@@ -12,23 +12,6 @@ import { cloakUser, outgoing } from "../services/antigravityPromptCloak.js";
 import { executeViaAgyCli, resolveAgyTransport } from "./agyCliExecutor.js";
 import { refusedPromptHint } from "./antigravityUpstreamError.js";
 import { decide429, classify429 } from "../services/antigravity429Engine.js";
-import {
-  ANTIGRAVITY_PROMPT_REJECTED_MESSAGE,
-  isAntigravityPromptRejection,
-  moveSystemInstructionToContents,
-  readBodyOnce,
-} from "./antigravityPromptGuard.js";
-
-// Re-exported so tests and callers have one entry point for the whole guard.
-export {
-  ANTIGRAVITY_PROMPT_REJECTED_MESSAGE,
-  isAntigravityPromptRejection,
-  moveSystemInstructionToContents,
-  readBodyOnce,
-};
-import { ANTIGRAVITY_IDE_VERSION, ANTIGRAVITY_IDE_USER_AGENT } from "../providers/shared.js";
-import { antigravityTlsFetch } from "../services/antigravityTlsClient.js";
-import { isAntigravityQuotaDrained } from "../services/antigravityQuotaMonitor.js";
 
 function asRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
@@ -305,13 +288,6 @@ export class AntigravityExecutor extends BaseExecutor {
       }
     }
 
-    // Request-scoped rejection (bare 429, no quota detail): report it as a client-visible 400 so no
-    // account cooldown is armed and combos advance to their next model instead of hammering a
-    // healthy account with the same refused prompt.
-    if (isAntigravityPromptRejection(response.status, bodyText)) {
-      return { status: HTTP_STATUS.BAD_REQUEST, message: ANTIGRAVITY_PROMPT_REJECTED_MESSAGE };
-    }
-
     if ((response.status === 429 || response.status === 409) && bodyText) {
       try {
         const json = JSON.parse(bodyText);
@@ -381,25 +357,10 @@ export class AntigravityExecutor extends BaseExecutor {
   // sessionId comes from transformRequest output; base.execute runs transformRequest before
   // buildHeaders, so we read it from instance state cached there (fallback: explicit arg).
   buildHeaders(credentials, stream = true, sessionId = null) {
-    const isLegacyFakePid = typeof credentials?.projectId === "string" &&
-      (/^(useful|bright|swift|calm|bold)-(fuze|wave|spark|flow|core)-[a-f0-9]+$/i.test(credentials.projectId) ||
-       /^cloudaicompanion-proj-[a-f0-9]+$/i.test(credentials.projectId));
-    const projectId = (!isLegacyFakePid && credentials?.projectId) || "aicode-consumers";
-
     return {
       "Content-Type": "application/json",
-      "Accept": stream ? "text/event-stream" : "application/json",
-      "Authorization": `Bearer ${credentials?.accessToken || ""}`,
-      "User-Agent": this.config.headers?.["User-Agent"] || ANTIGRAVITY_HEADERS["User-Agent"] || ANTIGRAVITY_IDE_USER_AGENT,
-      "Client-Metadata": JSON.stringify({
-        ideType: "ANTIGRAVITY",
-        ideName: "antigravity",
-        platform: "PLATFORM_UNSPECIFIED",
-        pluginType: "GEMINI",
-        ideVersion: ANTIGRAVITY_IDE_VERSION,
-      }),
-      "x-goog-user-project": projectId,
-      "x-request-source": "local",
+      "Authorization": `Bearer ${credentials.accessToken}`,
+      "User-Agent": this.config.headers?.["User-Agent"] || ANTIGRAVITY_HEADERS["User-Agent"],
     };
   }
 
@@ -635,69 +596,7 @@ export class AntigravityExecutor extends BaseExecutor {
         transport: "agy-cli",
       };
     }
-
-    // Direct HTTP path — Safe Recipe: Proactive Quota Pre-check (skip depleted accounts before 429)
-    const connectionId = input.credentials?.connectionId || input.credentials?.email || "default";
-    if (input.credentials?.accessToken) {
-      try {
-        const { isDrained, resetTime } = await isAntigravityQuotaDrained(
-          input.credentials.accessToken,
-          input.model,
-          input.proxyOptions,
-          connectionId
-        );
-        if (isDrained) {
-          const cooldownMs = resetTime ? Math.max(30000, new Date(resetTime).getTime() - Date.now()) : 120000;
-          markConnectionQuotaExhausted(connectionId, cooldownMs, input.model);
-          const errBody = JSON.stringify({
-            error: {
-              message: `Google Antigravity quota depleted for model ${input.model} (remaining <= 2%). Skipping connection proactively to protect account.`,
-              code: "QUOTA_EXHAUSTED",
-              type: "rate_limit_error"
-            }
-          });
-          return {
-            response: new Response(errBody, {
-              status: 429,
-              headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(cooldownMs / 1000)) }
-            }),
-            url: this.buildUrl(input.model, input.stream, 0, input.credentials),
-            headers: {},
-            transformedBody: input.body,
-          };
-        }
-      } catch (_) {
-        // Fail-open: proceed if quota check experiences transient network issue
-      }
-    }
-
-    // Direct HTTP path — Safe Recipe: BoringSSL TLS Impersonation via wreq-js
-    const dispatch = (payload) => super.execute({
-      ...payload,
-      directFetch: antigravityTlsFetch,
-      directFetchProxy: true,
-    });
-
-    let result = await dispatch(input);
-
-    // A prompt rejection means systemInstruction carries text Google fingerprints that
-    // ANTIGRAVITY_PROMPT_REWRITES does not cover yet. Antigravity only inspects
-    // systemInstruction, so retry once with that text moved into the first user turn: a new
-    // fingerprint then costs one extra round trip instead of failing every request. Image
-    // requests never send systemInstruction, so there is nothing to move for them.
-    if (result?.response?.status === HTTP_STATUS.RATE_LIMITED && !isImageModel(input.model)) {
-      const moved = moveSystemInstructionToContents(input.body);
-      if (moved && isAntigravityPromptRejection(result.response.status, await readBodyOnce(result.response))) {
-        (input.log?.warn || input.log?.info || (() => {})).call(
-          input.log,
-          "ANTIGRAVITY",
-          "System prompt rejected (fingerprinted third-party text not in ANTIGRAVITY_PROMPT_REWRITES); retrying with it in the first user turn"
-        );
-        result = await dispatch({ ...input, body: moved });
-      }
-    }
-
-    return result;
+    return super.execute(input);
   }
 
   async refreshCredentials(credentials, log, proxyOptions = null) {
@@ -823,9 +722,6 @@ export class AntigravityExecutor extends BaseExecutor {
       retryMs = this.parseRetryFromErrorMessage(errorMessage);
     }
     if (retryMs) return retryMs <= MAX_RETRY_AFTER_MS ? retryMs : false;
-
-    // The same body is refused the same way every time — retries only add backoff delay.
-    if (isAntigravityPromptRejection(response.status, bodyText)) return false;
 
     if (!this.isTransientAntigravityError(response.status, errorMessage)) return false;
 
