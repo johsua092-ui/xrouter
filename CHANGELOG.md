@@ -1,3 +1,29 @@
+# v0.1.0 (2026-11-22) — wave 19: the providers that were on the wrong contract
+
+### Added — wave 19
+- **azure** — real deployment route (`/openai/deployments/{deployment}/chat/completions?api-version=`),
+  key in `api-key` instead of `Authorization`, `OpenAI-Organization` passthrough. The
+  generic adapter was pointed at a bare Azure host, which rejects every call.
+- **ollama-local** — native `/api/chat` instead of the `/v1` shim, host resolved from the
+  connection, then `OLLAMA_HOST`, then loopback.
+- **kimchi** — body sanitiser: drops the Anthropic-only top-level fields the translator
+  leaves behind (`anthropic_version`, `thinking`, `top_k`, `stop_sequences`,
+  `mcp_servers`, `client_metadata`), folds a top-level `system` into the first message,
+  and strips `cache_control` / `signature` from content parts.
+- **github** — Copilot contract: GitHub token exchanged for a short-lived Copilot token
+  at `api.github.com/copilot_internal/v2/token` (cached to two minutes before expiry),
+  plus the VS Code extension identity headers the endpoint requires. Missing token now
+  fails honestly instead of sending an empty bearer.
+- **freepi** — ad-slot heartbeat before each completion; upstream pauses an account with
+  `403 ads_required` when the client stops pulling banners, so the pulse is protocol.
+- New optional `Preflighter` hook on the transport for adapters that must touch a second
+  endpoint before the completion. Fire-and-forget by contract.
+- `TestCatalogProvidersResolve` now asserts the catalogue resolves: 146 providers, none
+  on the unnamed fallback.
+- `wave19_test.go` covers the contracts: Azure deployment URL and `api-key` header,
+  Ollama native route, kimchi field stripping + system folding, Copilot endpoint and
+  identity headers, and the honest failure with no token.
+
 # v0.1.0 (2026-11-22) — wave 18: federation login, remaining writers
 
 ### Added — wave 18

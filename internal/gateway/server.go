@@ -88,6 +88,11 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 	providers.RegisterWave9Image(registry)
 	providers.RegisterWave9WebCookie(registry)
 	providers.RegisterWave9Misc(registry)
+	// Wave 19 — providers whose upstream contract is neither OpenAI-compat nor
+	// covered by the web-cookie set: Azure deployments, resident Ollama, Cloud
+	// Code Assist envelope, kimchi's OpenAI-gateway sanitising, freepi's ad
+	// heartbeat.
+	providers.RegisterWave19(registry)
 
 	// Translator registry. Every request and response converter self-registers
 	// from its own file's init(), so this only needs to hand out the shared set.

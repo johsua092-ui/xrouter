@@ -92,6 +92,15 @@ type BodyRewriter interface {
 	RewriteBody(req Request, cred Credential, body []byte) ([]byte, error)
 }
 
+// Preflighter is implemented by adapters that must touch a second upstream
+// endpoint before the completion. freepi is the only one today: its server
+// pauses the account unless the client keeps pulling banner slots, so the
+// heartbeat is protocol, not telemetry. Preflight is fire-and-forget — an
+// adapter must never block the completion on it.
+type Preflighter interface {
+	Preflight(ctx context.Context, req Request, cred Credential)
+}
+
 // Transport performs the HTTP call. Shared by every adapter so there is exactly
 // one place where timeouts, proxying and SSE-streaming behaviour are defined.
 type Transport struct {
@@ -126,6 +135,9 @@ func DefaultHTTPTransport() *http.Transport {
 // Do executes the adapter's request. Returns a Response whose Body is the caller's
 // responsibility to close (which the streaming path does via defer).
 func (t *Transport) Do(ctx context.Context, a Adapter, req Request, cred Credential) (*Response, error) {
+	if preflight, ok := a.(Preflighter); ok {
+		preflight.Preflight(ctx, req, cred)
+	}
 	endpoint, err := a.Endpoint(req, cred)
 	if err != nil {
 		return nil, fmt.Errorf("%s: endpoint: %w", a.Name(), err)
