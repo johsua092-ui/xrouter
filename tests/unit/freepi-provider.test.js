@@ -96,8 +96,36 @@ test("FreePI Provider Integration Tests", async (t) => {
   assert.equal(headers["x-client-version"], "0.6.25");
   assert.ok(headers["x-session-id"], "headers must include x-session-id");
   assert.ok(headers["x-turn-id"], "headers must include x-turn-id");
+  assert.equal(headers["x-ad-context"], "none", "headers must include x-ad-context: none");
 
-  // 11. Provider Icon validation
+  // 11. FreePI Launch Handshake and Stream Queue validation
+  const { launchSessionHandshake, acquireFreePiQueueLock } = await import("../../open-sse/executors/freepi.js");
+  assert.equal(typeof launchSessionHandshake, "function", "launchSessionHandshake must be an exported function");
+  assert.equal(typeof acquireFreePiQueueLock, "function", "acquireFreePiQueueLock must be an exported function");
+
+  // Empty token handshake returns false safely without throwing
+  const emptyHandshake = await launchSessionHandshake("");
+  assert.equal(emptyHandshake, false);
+
+  // Test concurrency lock and serial release
+  const testToken = `test-token-${Date.now()}`;
+  let release1 = await acquireFreePiQueueLock(testToken);
+  assert.equal(typeof release1, "function");
+
+  let queueOrder = [];
+  // While lock 1 is held, request 2 should be waiting
+  const promise2 = acquireFreePiQueueLock(testToken).then(async (rel2) => {
+    queueOrder.push("req2");
+    await rel2();
+  });
+
+  queueOrder.push("req1");
+  await release1();
+  await promise2;
+
+  assert.deepEqual(queueOrder, ["req1", "req2"], "Stream queue must process requests in serial FIFO order");
+
+  // 12. Provider Icon validation
   const { getProviderIconSrc } = await import("../../src/shared/utils/providerIcon.js");
   assert.equal(getProviderIconSrc("freepi"), "/providers/freepi.svg");
   assert.equal(getProviderIconSrc("fp"), "/providers/freepi.svg");

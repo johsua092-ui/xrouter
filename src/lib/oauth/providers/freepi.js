@@ -102,6 +102,13 @@ const freepi = {
   postExchange: async (tokenData) => {
     const token = tokenData.access_token || tokenData.token;
     if (!token) return {};
+
+    // Eagerly execute official Session Launch Handshake so the account is warm & ad-satisfied immediately
+    try {
+      const { launchSessionHandshake } = await import("../../../../open-sse/executors/freepi.js");
+      launchSessionHandshake(token, tokenData.session_id).catch(() => {});
+    } catch {}
+
     try {
       const res = await fetch(`${FREEPI_API_BASE}/me/stats`, {
         headers: { Authorization: `Bearer ${token}` },
