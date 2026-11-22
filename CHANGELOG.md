@@ -1,3 +1,53 @@
+# v0.1.0 (2026-11-22) — wave 15: management-plane parity
+
+### Added — wave 15
+Route parity against the Node dashboard went from 26 to 191 of 225 paths. The
+remaining 34 are resources that legitimately 404 (a key whose id is literally
+`id`) or endpoints that only accept POST; no route is unmounted.
+
+- `internal/gateway/compat_models.go` — `/api/models` (alias‑prefixed ids plus
+  `canonicalId`), `/catalog`, `/catalog-sync`, `/availability`, `/test`,
+  `/alias`, `/custom`, `/disabled`, `/enabled`, combo presets for cursor/claude,
+  provider extras (`client`, `suggested-models`, `kilo/free-models`, `validate`,
+  `test-batch`, `prune-dead`, `{id}/test`, `{id}/test-models`, `{id}/overrides`),
+  key share tokens + ACL, provider nodes.
+- `internal/gateway/compat_system.go` — theme, locale, tags, plugin inventory,
+  pricing, prompt-injection/model-bypass rules, model editor, telemetry,
+  cache stats, security bans/jail, dashboard jobs (real background runner with
+  `kind` switch), notifications/scan, init, changelog, media voices, settings
+  extras (env, require-login, proxy test, auto-backup, DB stats + VACUUM job),
+  voucher claim.
+- `internal/gateway/compat_usage.go` — error ledger, logs, request logs and
+  per-request drill-down, leaderboard, sparks, token savings, antigravity tier,
+  SSE stats stream, per-connection quota actions.
+- `internal/gateway/compat_ops.go` — proxy pools (harvest from public lists,
+  TCP auto-scan, bulk import, import jobs, prune, v2ray config, Cloudflare
+  deploy), every OAuth import the dashboard offers (codex, kiro, cursor, gitlab
+  PAT, iflow cookie, zed, xiaomi-mimo, adcode), CLI-tool config detection.
+- `internal/gateway/compat_edge.go` — the OpenAI plane is now mounted at
+  `/v1`, `/api/v1` and their `v1beta`/Gemini equivalents; teams CRUD, MCP
+  transport answers, OIDC discovery test (real `.well-known` fetch) and SAML
+  metadata, sidecars (pxpipe/headroom/tunnel) reporting installed/running state
+  from `exec.LookPath` instead of guessing, translator state, shutdown.
+- `internal/database/sharing.go` + schema — `shareTokens`, `ipBans`,
+  `securityEvents`, `accessEvents`, `providerNodes`, `voucherClaims`,
+  `notifications`, plus `VacuumInto` for real backups.
+- `internal/gateway/compat_test.go` — 10 integration tests over a throwaway
+  SQLite file: voucher single-use per device, team lifecycle, pool bulk+probe,
+  share-token lifecycle, dashboard job completion, sidecar honesty.
+
+### Fixed
+- Models list addressed models by canonical id while operators set aliases and
+  disable flags by the alias-prefixed id; both now resolve.
+- `teams` INSERT/UPDATE omitted the `NOT NULL` `updatedAt` column, so creating a
+  team failed on a fresh database.
+
+### Not ported (answers with an explicit status, never a false success)
+- CLI-tool config writers (25 tools) — read/detect only; writing 25 third-party
+  config formats with guessed keys would corrupt real CLI installs.
+- Interactive OAuth login, translator console, headroom proxy — report
+  `not implemented`/`not reachable` rather than pretending.
+
 # v0.1.0 (2026-11-22) — wave 14: credential vault
 
 ### Added — wave 14

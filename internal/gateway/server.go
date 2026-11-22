@@ -32,7 +32,11 @@ type Gateway struct {
 	upstream    *providers.Transport
 	catalog     *catalog.Catalog
 	sessions    *auth.Manager
+	startedAt   time.Time
 }
+
+// startedAt is stamped once in New so telemetry and /api/init can report uptime.
+func (g *Gateway) Uptime() int64 { return int64(time.Since(g.startedAt).Seconds()) }
 
 func New(cfg *config.Config, db *database.DB) *Gateway {
 	mux := chi.NewRouter()
@@ -99,6 +103,7 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 		upstream:    providers.NewTransport(nil),
 		catalog:     catalog.MustLoad(),
 		sessions:    auth.NewManager(cfg.DataDir),
+		startedAt:   time.Now(),
 	}
 
 	// API routes first, then the dashboard. Order matters: mountDashboard
@@ -125,56 +130,18 @@ func (g *Gateway) registerRoutes() {
 	g.mux.Get("/api/system/adapters", g.handleAdapterCoverage)
 
 	// AI Gateway V1 Endpoints
-	g.mux.Route("/v1", func(r chi.Router) {
-		// Model discovery. `/` and `/models` are the same catalogue in the shape
-		// OpenAI clients expect; `/models/info` adds endpoint + capability
-		// metadata; the catch-all answers kind filters and single-model lookups.
-		r.Get("/", g.handleModels)
-		r.Get("/models", g.handleModels)
-		// One catch-all, not a static+wildcard pair: chi's regexp parameter
-		// does not cross a slash, so a provider-prefixed model id
-		// ("/models/{provider}/{model}") has to be matched by a true wildcard.
-		// `/info` is dispatched inside the handler.
-		r.Get("/models/*", g.handleModelByPath)
-
-		r.Post("/chat/completions", g.handleChatCompletions)
-		// The Claude Messages endpoint. A Claude Code client posts here, so the
-		// path must exist for the translate-in path to be reachable at all —
-		// without it a Claude client 404s before translation is ever considered.
-		r.Post("/messages", g.handleChatCompletions)
-		// Token counting is answered locally: it is a pre-flight budget call with
-		// no upstream equivalent.
-		r.Post("/messages/count_tokens", g.handleCountTokens)
-		// The Responses API shares the chat pipeline; the dialect is chosen by
-		// the path, and `compact` only differs in how the client trims history.
-		r.Post("/responses", g.handleChatCompletions)
-		r.Post("/responses/compact", g.handleChatCompletions)
-		// Ollama-compatible chat: same pipeline, line-delimited JSON on the way
-		// out instead of SSE.
-		r.Post("/api/chat", g.handleOllamaChat)
-		// Decision models take a native payload and have no chat translation.
-		r.Post("/systemone", g.handleSystemone)
-
-		// Media plane. Each endpoint is dispatched from the provider's catalogue
-		// descriptor rather than a per-provider switch, so a provider that ships
-		// a descriptor is callable here without a Go change.
-		r.Post("/embeddings", g.handleEmbeddings)
-		r.Post("/images/generations", g.handleImages)
-		r.Post("/audio/speech", g.handleSpeech)
-		r.Post("/audio/transcriptions", g.handleTranscriptions)
-		r.Get("/audio/voices", g.handleVoices)
-		r.Post("/search", g.handleSearch)
-		r.Post("/web/fetch", g.handleFetch)
-		r.Post("/videos/generations", g.handleVideoGeneration)
-		r.Post("/videos/edits", g.handleVideoGeneration)
-		r.Post("/videos/extensions", g.handleVideoGeneration)
-		r.Get("/videos/{id}", g.handleVideoStatus)
-	})
+	// OpenAI-compatible plane. Mounted at every prefix clients actually use.
+	for _, prefix := range []string{"/v1", "/api/v1"} {
+		p := prefix
+		g.mux.Route(p, func(r chi.Router) { g.mountOpenAI(p, r) })
+	}
 
 	// Gemini-native surface. The model lives in the URL here, so the catch-all
 	// has to fold it back into the body before the chat path runs.
-	g.mux.Get("/v1beta/models", g.handleGeminiModels)
-	g.mux.Post("/v1beta/models/*", g.handleGeminiModelAction)
+	for _, prefix := range []string{"/v1beta", "/api/v1beta"} {
+		g.mux.Get(prefix+"/models", g.handleGeminiModels)
+		g.mux.Post(prefix+"/models/*", g.handleGeminiModelAction)
+	}
 
 	// Diagnostic & Proxy Test Utility
 	g.mux.Get("/api/test-proxy", g.handleTestProxy)
@@ -182,6 +149,102 @@ func (g *Gateway) registerRoutes() {
 	// Management plane. Every route is behind requireAdmin because these read
 	// credentials and mutate the shared database.
 	g.mux.Get("/api/version", g.requireAdmin(g.handleVersion))
+	g.mux.Get("/api/version/update", g.requireAdmin(g.handleVersionExtras))
+	g.mux.Post("/api/version/shutdown", g.requireAdmin(g.handleVersionExtras))
+	g.mux.Post("/api/shutdown", g.requireAdmin(g.handleVersionExtras))
+
+	// Teams & MCP plugin transports.
+	g.mux.Get("/api/teams", g.requireAdmin(g.handleTeams))
+	g.mux.Post("/api/teams", g.requireAdmin(g.handleTeams))
+	g.mux.Get("/api/teams/{id}", g.requireAdmin(g.handleTeams))
+	g.mux.Patch("/api/teams/{id}", g.requireAdmin(g.handleTeams))
+	g.mux.Delete("/api/teams/{id}", g.requireAdmin(g.handleTeams))
+	g.mux.Post("/api/mcp/{plugin}/message", g.handleMCP)
+	g.mux.Get("/api/mcp/{plugin}/sse", g.handleMCP)
+
+	// Federation + runtime sidecars.
+	g.mux.Post("/api/auth/oidc/test", g.handleAuthFederation)
+	g.mux.Get("/api/auth/oidc/start", g.handleAuthFederation)
+	g.mux.Get("/api/auth/oidc/callback", g.handleAuthFederation)
+	g.mux.Get("/api/auth/saml/metadata", g.handleAuthFederation)
+	g.mux.Get("/api/auth/saml/start", g.handleAuthFederation)
+	g.mux.Post("/api/auth/saml/acs", g.handleAuthFederation)
+	g.mux.Post("/api/auth/saml/test", g.handleAuthFederation)
+	for _, sidecar := range []string{"pxpipe", "headroom", "tunnel"} {
+		name := sidecar
+		g.mux.Get("/api/"+name+"/*", g.requireAdmin(g.handleSidecar))
+		g.mux.Post("/api/"+name+"/*", g.requireAdmin(g.handleSidecar))
+	}
+	g.mux.Get("/api/translator/load", g.requireAdmin(g.handleTranslator))
+	g.mux.Post("/api/translator/save", g.requireAdmin(g.handleTranslator))
+	g.mux.Get("/api/translator/console-logs", g.requireAdmin(g.handleTranslator))
+	g.mux.Get("/api/translator/console-logs/stream", g.requireAdmin(g.handleTranslator))
+	g.mux.Post("/api/translator/translate", g.requireAdmin(g.handleTranslator))
+	g.mux.Post("/api/translator/send", g.requireAdmin(g.handleTranslator))
+
+	// Dashboard singletons and side panels.
+	g.mux.Get("/api/theme", g.requireAdmin(g.handleTheme))
+	g.mux.Post("/api/theme", g.requireAdmin(g.handleTheme))
+	g.mux.Get("/api/locale", g.handleLocale)
+	g.mux.Post("/api/locale", g.handleLocale)
+	g.mux.Get("/api/tags", g.requireAdmin(g.handleTags))
+	g.mux.Post("/api/tags", g.requireAdmin(g.handleTags))
+	g.mux.Delete("/api/tags", g.requireAdmin(g.handleTags))
+	g.mux.Get("/api/plugins", g.requireAdmin(g.handlePlugins))
+	g.mux.Post("/api/plugins", g.requireAdmin(g.handlePlugins))
+	g.mux.Put("/api/plugins", g.requireAdmin(g.handlePlugins))
+	g.mux.Get("/api/pricing", g.requireAdmin(g.handlePricing))
+	g.mux.Post("/api/pricing", g.requireAdmin(g.handlePricing))
+	g.mux.Put("/api/pricing", g.requireAdmin(g.handlePricing))
+	g.mux.Delete("/api/pricing", g.requireAdmin(g.handlePricing))
+	g.mux.Get("/api/prompt-injection", g.requireAdmin(g.handlePromptInjection))
+	g.mux.Post("/api/prompt-injection", g.requireAdmin(g.handlePromptInjection))
+	g.mux.Patch("/api/prompt-injection", g.requireAdmin(g.handlePromptInjection))
+	g.mux.Put("/api/prompt-injection", g.requireAdmin(g.handlePromptInjection))
+	g.mux.Delete("/api/prompt-injection", g.requireAdmin(g.handlePromptInjection))
+	g.mux.Get("/api/model-bypass", g.requireAdmin(g.handlePromptInjection))
+	g.mux.Post("/api/model-bypass", g.requireAdmin(g.handlePromptInjection))
+	g.mux.Patch("/api/model-bypass", g.requireAdmin(g.handlePromptInjection))
+	g.mux.Put("/api/model-bypass", g.requireAdmin(g.handlePromptInjection))
+	g.mux.Delete("/api/model-bypass", g.requireAdmin(g.handlePromptInjection))
+	g.mux.Get("/api/model-editor", g.requireAdmin(g.handleModelEditor))
+	g.mux.Post("/api/model-editor", g.requireAdmin(g.handleModelEditor))
+	g.mux.Put("/api/model-editor", g.requireAdmin(g.handleModelEditor))
+	g.mux.Delete("/api/model-editor", g.requireAdmin(g.handleModelEditor))
+	g.mux.Get("/api/telemetry/latency", g.requireAdmin(g.handleTelemetry))
+	g.mux.Get("/api/token-saver/cache-stats", g.requireAdmin(g.handleCacheStats))
+	g.mux.Get("/api/security/bans", g.requireAdmin(g.handleSecurity))
+	g.mux.Post("/api/security/bans", g.requireAdmin(g.handleSecurity))
+	g.mux.Delete("/api/security/bans", g.requireAdmin(g.handleSecurity))
+	g.mux.Get("/api/security/jail", g.requireAdmin(g.handleSecurity))
+	g.mux.Post("/api/security/jail", g.requireAdmin(g.handleSecurity))
+	g.mux.Get("/api/dashboard-jobs", g.requireAdmin(g.handleDashboardJobs))
+	g.mux.Post("/api/dashboard-jobs", g.requireAdmin(g.handleDashboardJobs))
+	g.mux.Get("/api/dashboard-jobs/{id}", g.requireAdmin(g.handleDashboardJobs))
+	g.mux.Delete("/api/dashboard-jobs/{id}", g.requireAdmin(g.handleDashboardJobs))
+	g.mux.Post("/api/notifications/scan", g.requireAdmin(g.handleNotificationsScan))
+	g.mux.Get("/api/init", g.handleInit)
+	g.mux.Post("/api/init", g.handleInit)
+	g.mux.Get("/api/changelog", g.handleChangelog)
+	g.mux.Get("/api/media-providers/tts/voices", g.requireAdmin(g.handleMediaProviders))
+	g.mux.Get("/api/media-providers/tts/elevenlabs/voices", g.requireAdmin(g.handleMediaProviders))
+	g.mux.Get("/api/media-providers/tts/minimax/voices", g.requireAdmin(g.handleMediaProviders))
+	g.mux.Get("/api/media-providers/tts/deepgram/voices", g.requireAdmin(g.handleMediaProviders))
+	g.mux.Get("/api/media-providers/tts/inworld/voices", g.requireAdmin(g.handleMediaProviders))
+	g.mux.Get("/api/settings/env", g.requireAdmin(g.handleSettingsExtras))
+	g.mux.Get("/api/settings/require-login", g.requireAdmin(g.handleSettingsExtras))
+	g.mux.Post("/api/settings/require-login", g.requireAdmin(g.handleSettingsExtras))
+	g.mux.Post("/api/settings/proxy-test", g.requireAdmin(g.handleSettingsExtras))
+	g.mux.Get("/api/settings/auto-backup", g.requireAdmin(g.handleSettingsExtras))
+	g.mux.Post("/api/settings/auto-backup", g.requireAdmin(g.handleSettingsExtras))
+	g.mux.Get("/api/settings/database", g.requireAdmin(g.handleSettingsExtras))
+	g.mux.Get("/api/settings/database/jobs", g.requireAdmin(g.handleSettingsExtras))
+	g.mux.Post("/api/settings/database/jobs", g.requireAdmin(g.handleSettingsExtras))
+	g.mux.Get("/api/settings/database/jobs/{jobId}", g.requireAdmin(g.handleSettingsExtras))
+	g.mux.Post("/api/vouchers/claim", g.handleVoucherExtras)
+	g.mux.Get("/api/vouchers/*", g.requireAdmin(g.handleVoucherExtras))
+	g.mux.Patch("/api/vouchers/*", g.requireAdmin(g.handleVoucherExtras))
+	g.mux.Put("/api/vouchers/*", g.requireAdmin(g.handleVoucherExtras))
 
 	g.mux.Route("/api/keys", func(r chi.Router) {
 		r.Get("/", g.requireAdmin(g.handleKeysList))
@@ -194,17 +257,68 @@ func (g *Gateway) registerRoutes() {
 		r.Post("/{id}/reset", g.requireAdmin(g.handleKeyByID))
 		r.Get("/{id}/acl", g.requireAdmin(g.handleKeyByID))
 		r.Put("/{id}/acl", g.requireAdmin(g.handleKeyByID))
+		r.Post("/{id}/acl", g.requireAdmin(g.handleKeysExtras))
+		r.Delete("/{id}/acl", g.requireAdmin(g.handleKeysExtras))
+		r.Get("/{id}/share", g.requireAdmin(g.handleKeysExtras))
+		r.Post("/{id}/share", g.requireAdmin(g.handleKeysExtras))
+		r.Delete("/{id}/share", g.requireAdmin(g.handleKeysExtras))
 	})
 
 	g.mux.Route("/api/combos", func(r chi.Router) {
 		r.Get("/", g.requireAdmin(g.handleCombos))
 		r.Post("/", g.requireAdmin(g.handleCombos))
+		r.Get("/presets", g.requireAdmin(g.handleComboPresets))
+		r.Post("/presets", g.requireAdmin(g.handleComboPresets))
 		r.Get("/{id}", g.requireAdmin(g.handleComboByID))
 		r.Patch("/{id}", g.requireAdmin(g.handleComboByID))
 		r.Delete("/{id}", g.requireAdmin(g.handleComboByID))
 	})
 
 	g.mux.Get("/api/usage/*", g.requireAdmin(g.handleUsage))
+
+	// Usage drill-down views the stats page polls (detail, sparks, live stream).
+	g.mux.Get("/api/usage/available-models", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Get("/api/usage/errors", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Get("/api/usage/logs", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Get("/api/usage/request-logs", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Get("/api/usage/request-details", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Get("/api/usage/request-details/{id}", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Get("/api/usage/leaderboard", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Get("/api/usage/sparks", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Get("/api/usage/token-savings", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Get("/api/usage/antigravity-tier", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Get("/api/usage/stream", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Post("/api/usage/{connectionId}/claude-reset", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Post("/api/usage/{connectionId}/codex-reset-credits", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Post("/api/usage/{connectionId}/glm-claim", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Post("/api/usage/{connectionId}/glm-reset-cards", g.requireAdmin(g.handleUsageExtras))
+	g.mux.Post("/api/usage/{connectionId}/zcode-bridge", g.requireAdmin(g.handleUsageExtras))
+
+	// Proxy pool harvesting, scanning and relay deploys.
+	g.mux.Post("/api/proxy-pools/harvest", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Post("/api/proxy-pools/auto-scan", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Post("/api/proxy-pools/bulk", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Post("/api/proxy-pools/prune-dead", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Get("/api/proxy-pools/import-jobs", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Post("/api/proxy-pools/import-jobs", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Get("/api/proxy-pools/v2ray", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Post("/api/proxy-pools/v2ray", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Delete("/api/proxy-pools/v2ray", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Post("/api/proxy-pools/cloudflare-deploy", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Post("/api/proxy-pools/vercel-deploy", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Post("/api/proxy-pools/netlify-deploy", g.requireAdmin(g.handleProxyPoolsExtras))
+	g.mux.Post("/api/proxy-pools/deno-deploy", g.requireAdmin(g.handleProxyPoolsExtras))
+
+	// Credential import + OAuth surface.
+	g.mux.Post("/api/oauth/*", g.requireAdmin(g.handleOAuth))
+	g.mux.Get("/api/oauth/*", g.requireAdmin(g.handleOAuth))
+
+	// CLI tool config detection.
+	g.mux.Get("/api/cli-tools/all-statuses", g.requireAdmin(g.handleCLITools))
+	g.mux.Get("/api/cli-tools/*", g.requireAdmin(g.handleCLITools))
+	g.mux.Post("/api/cli-tools/*", g.requireAdmin(g.handleCLITools))
+	g.mux.Put("/api/cli-tools/*", g.requireAdmin(g.handleCLITools))
+	g.mux.Delete("/api/cli-tools/*", g.requireAdmin(g.handleCLITools))
 
 	g.mux.Get("/api/settings", g.requireAdmin(g.handleSettings))
 	g.mux.Patch("/api/settings", g.requireAdmin(g.handleSettings))
@@ -229,16 +343,46 @@ func (g *Gateway) registerRoutes() {
 	g.mux.Post("/api/models/disabled", g.requireAdmin(g.handleDisabledModels))
 	g.mux.Delete("/api/models/disabled", g.requireAdmin(g.handleDisabledModels))
 
+	// Model catalogue views used by the picker and the "test" buttons.
+	g.mux.Get("/api/models", g.requireAdmin(g.handleModelsCompat))
+	g.mux.Put("/api/models", g.requireAdmin(g.handleModelsCompat))
+	g.mux.Get("/api/models/catalog", g.requireAdmin(g.handleModelsCompat))
+	g.mux.Post("/api/models/catalog-sync", g.requireAdmin(g.handleModelsCompat))
+	g.mux.Get("/api/models/availability", g.requireAdmin(g.handleModelsCompat))
+	g.mux.Post("/api/models/availability", g.requireAdmin(g.handleModelsCompat))
+	g.mux.Post("/api/models/test", g.requireAdmin(g.handleModelsCompat))
+
+	// Custom provider nodes: OpenAI-compatible endpoints added at runtime.
+	g.mux.Get("/api/provider-nodes", g.requireAdmin(g.handleProviderNodes))
+	g.mux.Post("/api/provider-nodes", g.requireAdmin(g.handleProviderNodes))
+	g.mux.Post("/api/provider-nodes/validate", g.requireAdmin(g.handleProviderNodes))
+	g.mux.Get("/api/provider-nodes/{id}", g.requireAdmin(g.handleProviderNodes))
+	g.mux.Patch("/api/provider-nodes/{id}", g.requireAdmin(g.handleProviderNodes))
+	g.mux.Put("/api/provider-nodes/{id}", g.requireAdmin(g.handleProviderNodes))
+	g.mux.Delete("/api/provider-nodes/{id}", g.requireAdmin(g.handleProviderNodes))
+
 	// Providers: connection inventory (credentials masked on the way out).
 	g.mux.Route("/api/providers", func(r chi.Router) {
 		r.Get("/", g.requireAdmin(g.handleProviders))
 		r.Post("/", g.requireAdmin(g.handleProviders))
 		r.Post("/bulk", g.requireAdmin(g.handleProvidersBulk))
+		r.Get("/client", g.requireAdmin(g.handleProvidersExtras))
+		r.Post("/prune-dead", g.requireAdmin(g.handleProvidersExtras))
+		r.Get("/suggested-models", g.requireAdmin(g.handleProvidersExtras))
+		r.Get("/kilo/free-models", g.requireAdmin(g.handleProvidersExtras))
+		r.Post("/test-batch", g.requireAdmin(g.handleProvidersExtras))
+		r.Post("/validate", g.requireAdmin(g.handleProvidersExtras))
 		r.Route("/{id}", func(sr chi.Router) {
 			sr.Get("/", g.requireAdmin(g.handleProviderByID))
 			sr.Put("/", g.requireAdmin(g.handleProviderByID))
 			sr.Delete("/", g.requireAdmin(g.handleProviderByID))
 			sr.Get("/models", g.requireAdmin(g.handleProviderModels))
+			sr.Get("/overrides", g.requireAdmin(g.handleProvidersExtras))
+			sr.Put("/overrides", g.requireAdmin(g.handleProvidersExtras))
+			sr.Post("/overrides", g.requireAdmin(g.handleProvidersExtras))
+			sr.Delete("/overrides", g.requireAdmin(g.handleProvidersExtras))
+			sr.Post("/test", g.requireAdmin(g.handleProvidersExtras))
+			sr.Post("/test-models", g.requireAdmin(g.handleProvidersExtras))
 		})
 	})
 
@@ -248,6 +392,7 @@ func (g *Gateway) registerRoutes() {
 		r.Post("/", g.requireAdmin(g.handleProxyPools))
 		r.Route("/{id}", func(sr chi.Router) {
 			sr.Get("/", g.requireAdmin(g.handleProxyPoolByID))
+			sr.Post("/test", g.requireAdmin(g.handleProxyPoolsExtras))
 			sr.Put("/", g.requireAdmin(g.handleProxyPoolByID))
 			sr.Delete("/", g.requireAdmin(g.handleProxyPoolByID))
 		})

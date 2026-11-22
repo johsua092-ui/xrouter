@@ -174,6 +174,82 @@ func (d *DB) initSchema() error {
 		snapshot TEXT NOT NULL
 	);
 
+	CREATE TABLE IF NOT EXISTS shareTokens (
+		token TEXT PRIMARY KEY,
+		apiKeyId TEXT NOT NULL,
+		label TEXT DEFAULT '',
+		expiresAt TEXT,
+		viewCount INTEGER NOT NULL DEFAULT 0,
+		lastViewedAt TEXT,
+		createdAt TEXT NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_sharetok_key ON shareTokens(apiKeyId);
+	CREATE INDEX IF NOT EXISTS idx_sharetok_expires ON shareTokens(expiresAt);
+
+	CREATE TABLE IF NOT EXISTS providerNodes (
+		id TEXT PRIMARY KEY,
+		type TEXT,
+		name TEXT,
+		data TEXT NOT NULL,
+		createdAt TEXT NOT NULL,
+		updatedAt TEXT NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_pn_type ON providerNodes(type);
+
+	CREATE TABLE IF NOT EXISTS voucherClaims (
+		id TEXT PRIMARY KEY,
+		voucherId TEXT NOT NULL,
+		voucherCode TEXT NOT NULL,
+		apiKeyId TEXT NOT NULL,
+		apiKey TEXT NOT NULL,
+		clientIp TEXT,
+		deviceFp TEXT DEFAULT '',
+		hardwareFp TEXT DEFAULT '',
+		claimedAt TEXT NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_vc_voucher ON voucherClaims(voucherId);
+	CREATE INDEX IF NOT EXISTS idx_vc_key ON voucherClaims(apiKeyId);
+	CREATE INDEX IF NOT EXISTS idx_vc_ip ON voucherClaims(clientIp);
+
+	CREATE TABLE IF NOT EXISTS securityEvents (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		at TEXT NOT NULL,
+		type TEXT NOT NULL,
+		severity TEXT NOT NULL,
+		ip TEXT NOT NULL,
+		actor TEXT,
+		method TEXT,
+		path TEXT,
+		status INTEGER DEFAULT 0,
+		detail TEXT,
+		userAgent TEXT
+	);
+	CREATE INDEX IF NOT EXISTS idx_se_at ON securityEvents(at DESC);
+	CREATE INDEX IF NOT EXISTS idx_se_severity ON securityEvents(severity);
+
+	CREATE TABLE IF NOT EXISTS accessEvents (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		at TEXT NOT NULL,
+		method TEXT,
+		path TEXT,
+		status INTEGER DEFAULT 0,
+		ms INTEGER DEFAULT 0,
+		ip TEXT,
+		role TEXT
+	);
+	CREATE INDEX IF NOT EXISTS idx_ae_at ON accessEvents(at DESC);
+
+	CREATE TABLE IF NOT EXISTS ipBans (
+		ip TEXT PRIMARY KEY,
+		reason TEXT NOT NULL DEFAULT 'manual',
+		failedAttempts INTEGER NOT NULL DEFAULT 1,
+		banStartedAt TEXT NOT NULL,
+		banExpiresAt TEXT,
+		notes TEXT DEFAULT '',
+		createdAt TEXT NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_ipb_expires ON ipBans(banExpiresAt);
+
 	CREATE TABLE IF NOT EXISTS usageHistory (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		timestamp TEXT NOT NULL,
