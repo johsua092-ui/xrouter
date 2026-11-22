@@ -769,6 +769,118 @@ func init() {
 	register(hermes)
 }
 
+// ---------------------------------------------------------------- yaml block tools
+
+// yamlBlockTool writes a marker-delimited YAML block. Used by agents whose
+// config is YAML with a provider map (omp, hermes-style).
+type yamlBlockTool struct {
+	path   func(home string) string
+	header string
+}
+
+func (y yamlBlockTool) block(params Params) []string {
+	base := normaliseBase(params.BaseURL, "/v1")
+	return []string{
+		"# >>> xrouter managed — edits inside this block are overwritten",
+		y.header + ":",
+		"  xrouter:",
+		"    base_url: " + base,
+		"    api_key: " + params.APIKey,
+		"    model: " + params.Model,
+		"    type: openai-compat",
+		"# <<< xrouter managed",
+	}
+}
+
+func (y yamlBlockTool) write(home string, params Params) (Result, error) {
+	target := y.path(home)
+	blob, _ := os.ReadFile(target)
+	text := stripManaged(string(blob))
+	updated := strings.TrimRight(text, "\n")
+	if updated != "" {
+		updated += "\n"
+	}
+	updated += strings.Join(y.block(params), "\n") + "\n"
+	if err := ensureDir(target); err != nil {
+		return Result{}, err
+	}
+	backup, _ := backupFile(target)
+	return Result{Path: target, Written: true, Backup: backup}, os.WriteFile(target, []byte(updated), 0o644)
+}
+
+func (y yamlBlockTool) read(home string) (Status, error) {
+	target := y.path(home)
+	blob, err := os.ReadFile(target)
+	if err != nil && !os.IsNotExist(err) {
+		return Status{}, err
+	}
+	return Status{Path: target, Configured: strings.Contains(string(blob), y.header + ":\n  xrouter:")}, nil
+}
+
+func (y yamlBlockTool) reset(home string) (Result, error) {
+	target := y.path(home)
+	blob, err := os.ReadFile(target)
+	if err != nil {
+		return Result{Path: target, Message: "no config file to reset"}, nil
+	}
+	updated := stripManaged(string(blob))
+	backup, _ := backupFile(target)
+	if strings.TrimSpace(updated) == "" {
+		_ = os.Remove(target)
+		return Result{Path: target, Written: true, Backup: backup, Message: "config removed"}, nil
+	}
+	return Result{Path: target, Written: true, Backup: backup}, os.WriteFile(target, []byte(updated+"\n"), 0o644)
+}
+
+func init() {
+	register(&Tool{
+		ID:   "omp",
+		Name: "omp",
+		write: yamlBlockTool{
+			path:   func(home string) string { return expand(home, ".omp/agent/models.yml") },
+			header: "providers",
+		}.write,
+		read: yamlBlockTool{
+			path:   func(home string) string { return expand(home, ".omp/agent/models.yml") },
+			header: "providers",
+		}.read,
+		reset: yamlBlockTool{
+			path:   func(home string) string { return expand(home, ".omp/agent/models.yml") },
+			header: "providers",
+		}.reset,
+	})
+
+	register(&Tool{
+		ID:   "devin",
+		Name: "Devin CLI",
+		write: providerMapTool{
+			path:     func(home string) string { return expand(home, ".devin/config.json") },
+			modelKey: "model",
+		}.write,
+		read: providerMapTool{
+			path: func(home string) string { return expand(home, ".devin/config.json") },
+		}.read,
+		reset: providerMapTool{
+			path: func(home string) string { return expand(home, ".devin/config.json") },
+		}.reset,
+	})
+
+	register(&Tool{
+		ID:   "cowork",
+		Name: "Cowork",
+		write: providerMapTool{
+			path:     func(home string) string { return filepath.Join(dataDir(home), "cowork", "config.json") },
+			modelKey: "model",
+		}.write,
+		read: providerMapTool{
+			path: func(home string) string { return filepath.Join(dataDir(home), "cowork", "config.json") },
+		}.read,
+		reset: providerMapTool{
+			path: func(home string) string { return filepath.Join(dataDir(home), "cowork", "config.json") },
+		}.reset,
+	})
+}
+
 // ---------------------------------------------------------------- public API
 
 // Install configures one tool.

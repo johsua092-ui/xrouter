@@ -1,3 +1,23 @@
+# v0.1.0 (2026-11-22) — wave 18: federation login, remaining writers
+
+### Added — wave 18
+- Federation login is real now, not a 501: `GET /api/auth/oidc/start` reads
+  `auth_oidc` settings, resolves discovery, builds a PKCE authorize URL and
+  redirects; `GET /api/auth/oidc/callback` validates state, exchanges the code
+  and issues the admin session cookie. `GET /api/auth/saml/start` redirects to
+  the configured IdP SSO URL with a RelayState.
+- `/api/cli-tools/{omp,devin,cowork}` writers (marker-delimited YAML block for
+  omp, provider-map JSON for devin/cowork), `/api/cli-tools/cowork-mcp-registry`
+  and `cowork-mcp-tools` served from settings, `antigravity-mitm` reports its
+  real configuration state instead of a bare 404.
+- `kiro/auto-import` routed through the credential importer.
+
+### Fixed — wave 18
+- `GET /api/locale` returned a 500 when the stored locale was absent or not a
+  string; it now falls back to the request header and then the default.
+
+# v0.1.0 (2026-11-22) — wave 17: interactive OAuth
+
 ### Added — wave 17
 - `internal/oauthflow`: interactive OAuth, ported. PKCE authorization-code
   sessions (`authorize` → `callback`) with S256 challenge, state validation,

@@ -36,6 +36,26 @@ func stripBlock(text string) string {
 	return text[:start] + text[end:]
 }
 
+const managedEnd = "# <<< xrouter managed"
+
+// stripManaged removes a `# >>> xrouter managed` … `# <<< xrouter managed`
+// block, leaving every other line untouched.
+func stripManaged(text string) string {
+	start := strings.Index(text, blockStart)
+	if start < 0 {
+		return text
+	}
+	rel := strings.Index(text[start:], managedEnd)
+	if rel < 0 {
+		return text[:start]
+	}
+	end := start + rel + len(managedEnd)
+	if end < len(text) && text[end] == '\n' {
+		end++
+	}
+	return text[:start] + text[end:]
+}
+
 // stripSection deletes a TOML table by header, e.g. "model_providers.xrouter".
 func stripSection(text, header string) string {
 	lines := strings.Split(text, "\n")

@@ -68,7 +68,7 @@ func (g *Gateway) handleLocale(w http.ResponseWriter, r *http.Request) {
 			locale = cookie.Value
 		}
 		if locale == "" {
-			locale = g.kvObject("settings", "locale")["locale"].(string)
+			locale = asString(g.kvObject("settings", "locale")["locale"])
 		}
 		if locale == "" {
 			locale = "en"

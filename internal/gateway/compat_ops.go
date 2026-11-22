@@ -11,6 +11,7 @@ package gateway
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -480,6 +481,7 @@ var oauthImportTargets = map[string]struct {
 	"kiro/api-key":            {"kiro", "apikey"},
 	"kiro/import":             {"kiro", "oauth"},
 	"kiro/import-cli-proxy":   {"kiro", "oauth"},
+	"kiro/auto-import":        {"kiro", "oauth"},
 	"kiro/social-exchange":    {"kiro", "oauth"},
 	"gitlab/pat":              {"gitlab", "apikey"},
 	"iflow/cookie":            {"iflow", "cookie"},
@@ -777,6 +779,64 @@ func (g *Gateway) oauthImport(w http.ResponseWriter, r *http.Request, provider, 
 	jsonResponse(w, http.StatusOK, map[string]any{"success": true, "connection": conn})
 }
 
+// federationCallbackURL builds the absolute URL an identity provider should
+// redirect back to, honouring an explicit public base when one is configured.
+func (g *Gateway) federationCallbackURL(r *http.Request, path string) string {
+	state := g.kvObject("settings", "auth_oidc")
+	if base := asString(state["publicBaseUrl"]); base != "" {
+		return strings.TrimSuffix(base, "/") + path
+	}
+	scheme := "http"
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+	host := r.Host
+	if forwarded := r.Header.Get("X-Forwarded-Host"); forwarded != "" {
+		host = forwarded
+	}
+	return scheme + "://" + host + path
+}
+
+// fetchOIDCDiscovery reads the issuer's well-known configuration.
+func fetchOIDCDiscovery(issuer string) (map[string]any, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	response, err := client.Get(strings.TrimRight(issuer, "/") + "/.well-known/openid-configuration")
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("discovery returned %s", response.Status)
+	}
+	var doc map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&doc); err != nil {
+		return nil, err
+	}
+	if asString(doc["authorization_endpoint"]) == "" || asString(doc["token_endpoint"]) == "" {
+		return nil, fmt.Errorf("discovery document is missing the authorization or token endpoint")
+	}
+	return doc, nil
+}
+
+// claimsFromIDToken decodes the JWT payload without verifying it. The token was
+// just received over TLS directly from the token endpoint, which is the trust
+// anchor; the payload only labels the session.
+func claimsFromIDToken(idToken string) map[string]any {
+	parts := strings.Split(idToken, ".")
+	if len(parts) != 3 {
+		return map[string]any{}
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return map[string]any{}
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return map[string]any{}
+	}
+	return claims
+}
+
 // -------------------------------------------------------------- CLI tools
 
 // cliToolPaths is the config file each CLI reads on this platform. Only the
@@ -837,6 +897,41 @@ func (g *Gateway) handleCLITools(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		jsonResponse(w, http.StatusOK, map[string]any{"statuses": payload, "tools": payload})
+		return
+	}
+
+	// Endpoints that are not per-agent config files.
+	switch rest {
+	case "cowork-mcp-registry":
+		state := g.kvObject("settings", "cowork_mcp_registry")
+		servers, _ := state["servers"].([]any)
+		if servers == nil {
+			servers = []any{}
+		}
+		jsonResponse(w, http.StatusOK, map[string]any{"success": true, "servers": servers, "registry": servers})
+		return
+	case "cowork-mcp-tools":
+		state := g.kvObject("settings", "cowork_mcp_registry")
+		tools, _ := state["tools"].([]any)
+		if tools == nil {
+			tools = []any{}
+		}
+		jsonResponse(w, http.StatusOK, map[string]any{"success": true, "tools": tools})
+		return
+	case "antigravity-mitm", "antigravity-mitm/alias":
+		if r.Method != http.MethodGet {
+			jsonResponse(w, http.StatusOK, map[string]any{
+				"success":   false,
+				"supported": false,
+				"error":     "The Antigravity MITM proxy is configured by the Node runtime; the Go engine does not rewrite its CA or host map.",
+			})
+			return
+		}
+		state := g.kvObject("settings", "antigravity_mitm")
+		configured := asString(state["caPath"]) != ""
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"success": true, "configured": configured, "settings": state,
+		})
 		return
 	}
 

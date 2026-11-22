@@ -17,13 +17,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/johsua092-ui/xrouter/internal/auth"
 	"github.com/johsua092-ui/xrouter/internal/database"
+	"github.com/johsua092-ui/xrouter/internal/oauthflow"
 )
 
 // ---------------------------------------------------------------- /api/v1 alias
@@ -340,10 +343,122 @@ func (g *Gateway) handleAuthFederation(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`<?xml version="1.0"?><EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="xrouter"/>`))
-	case rest == "oidc/start", rest == "oidc/callback", rest == "saml/start", rest == "saml/acs", rest == "saml/test":
+	case rest == "oidc/start":
+		config := g.kvObject("settings", "auth_oidc")
+		issuer := strings.TrimRight(asString(config["issuer"]), "/")
+		clientID := asString(config["clientId"])
+		if issuer == "" || clientID == "" {
+			jsonResponse(w, http.StatusServiceUnavailable, map[string]any{
+				"success": false,
+				"error":   "OIDC is not configured (issuer + clientId required in auth_oidc settings)",
+			})
+			return
+		}
+		discovery, err := fetchOIDCDiscovery(issuer)
+		if err != nil {
+			jsonError(w, http.StatusBadGateway, "OIDC discovery failed", err)
+			return
+		}
+		scopes := []string{"openid", "profile", "email"}
+		if raw := asString(config["scopes"]); raw != "" {
+			scopes = strings.Fields(raw)
+		}
+		provider := oauthflow.Provider{
+			ID:           "oidc",
+			ClientID:     clientID,
+			ClientSecret: asString(config["clientSecret"]),
+			AuthURL:      asString(discovery["authorization_endpoint"]),
+			TokenURL:     asString(discovery["token_endpoint"]),
+			Scopes:       scopes,
+			UsePKCE:      true,
+		}
+		redirect := g.federationCallbackURL(r, "/api/auth/oidc/callback")
+		if base := asString(config["redirectUri"]); base != "" {
+			redirect = base
+		}
+		session, authorizeURL, err := oauthflow.StartPKCE(provider, redirect)
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, err.Error(), nil)
+			return
+		}
+		http.Redirect(w, r, authorizeURL+"&nonce="+session.ID, http.StatusFound)
+
+	case rest == "oidc/callback":
+		config := g.kvObject("settings", "auth_oidc")
+		issuer := strings.TrimRight(asString(config["issuer"]), "/")
+		code := r.URL.Query().Get("code")
+		if issuer == "" || code == "" {
+			jsonError(w, http.StatusBadRequest, "OIDC callback needs a configured issuer and a code", nil)
+			return
+		}
+		session := oauthflow.SessionByID(r.URL.Query().Get("nonce"))
+		if session == nil {
+			jsonError(w, http.StatusBadRequest, "unknown or expired OIDC session", nil)
+			return
+		}
+		if state := r.URL.Query().Get("state"); state != "" && state != session.State {
+			jsonError(w, http.StatusBadRequest, "state mismatch", nil)
+			return
+		}
+		discovery, err := fetchOIDCDiscovery(issuer)
+		if err != nil {
+			jsonError(w, http.StatusBadGateway, "OIDC discovery failed", err)
+			return
+		}
+		provider := oauthflow.Provider{
+			ID: "oidc", ClientID: asString(config["clientId"]),
+			ClientSecret: asString(config["clientSecret"]),
+			AuthURL:      asString(discovery["authorization_endpoint"]),
+			TokenURL:     asString(discovery["token_endpoint"]),
+			UsePKCE:      true,
+		}
+		token, err := oauthflow.Exchange(provider, session, code)
+		if err != nil {
+			jsonError(w, http.StatusBadGateway, err.Error(), nil)
+			return
+		}
+		if token.AccessToken == "" {
+			jsonResponse(w, http.StatusUnauthorized, map[string]any{
+				"success": false, "error": "provider rejected the login", "raw": token.Extra,
+			})
+			return
+		}
+		claims := auth.Claims{"role": "admin", "via": "oidc", "sub": asString(claimsFromIDToken(token.IDToken)["sub"])}
+		signed, err := g.authManager().Sign(claims)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "could not create session", err)
+			return
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name: sessionCookieName, Value: signed, Path: "/",
+			HttpOnly: true, SameSite: http.SameSiteLaxMode,
+			Secure: requestIsHTTPS(r), MaxAge: int(auth.SessionMaxAge / time.Second),
+		})
+		http.Redirect(w, r, "/dashboard", http.StatusFound)
+
+	case rest == "saml/start":
+		config := g.kvObject("settings", "auth_saml")
+		ssoURL := asString(config["ssoUrl"])
+		if ssoURL == "" {
+			jsonResponse(w, http.StatusServiceUnavailable, map[string]any{
+				"success": false,
+				"error":   "SAML is not configured (ssoUrl required in auth_saml settings)",
+			})
+			return
+		}
+		relay := "xr-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+		query := url.Values{}
+		query.Set("RelayState", relay)
+		separator := "?"
+		if strings.Contains(ssoURL, "?") {
+			separator = "&"
+		}
+		http.Redirect(w, r, ssoURL+separator+query.Encode(), http.StatusFound)
+
+	case rest == "saml/acs", rest == "saml/test":
 		jsonResponse(w, http.StatusNotImplemented, map[string]any{
 			"success": false,
-			"error":   "Interactive federation login is not implemented in the Go engine; configure it on the Node dashboard.",
+			"error":   "SAML assertion consumption needs signature validation against the IdP certificate; configure it on the Node dashboard.",
 		})
 	default:
 		jsonError(w, http.StatusNotFound, "not found", nil)
