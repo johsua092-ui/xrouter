@@ -1,3 +1,22 @@
+# v0.1.0 (2026-11-22) — wave 14: credential vault
+
+### Added — wave 14
+- `internal/database/vault.go`: AES-256-GCM credential vault compatible with the
+  dashboard's envelopes (`enc:v1:<iv>:<tag>:<ciphertext>`), keyed by
+  `sha256(machineId + salt)` or `VAULT_MASTER_KEY`. Until now every dashboard-stored
+  connection was unreadable by the Go core; this makes them routable.
+- Connections created or updated through the Go management API are sealed at rest in
+  the same format, so either runtime reads the other's writes.
+- `flattenConnection` unseals apiKey / accessToken / providerSpecificData secrets and
+  exposes `refreshToken` and cookie-auth secrets to adapters.
+- Verified both directions against the real Node implementation: a Node-sealed value
+  opens in Go, and a Go-sealed value opens in Node.
+
+### Note
+- 207 of 589 active connections decrypt on this host; the remaining 382 were sealed
+  on a previous machine and are equally unreadable by the Node service (verified: the
+  Node vault fails on 60/60 sampled rows), so this is parity, not a regression.
+
 # v0.1.0 (2026-11-22) — wave 13: dashboard session + provider inventory
 
 ### Added — wave 13

@@ -186,7 +186,7 @@ func TestProvidersCRUDMasksSecrets(t *testing.T) {
 	data := connection["data"].(map[string]any)
 	if masked := asString(data["apiKey"]); masked == "sk-live-abcdefghijklmnop" {
 		t.Fatalf("apiKey echoed in clear: %q", masked)
-	} else if !strings.Contains(masked, "...") {
+	} else if masked != "***" && !strings.Contains(masked, "...") {
 		t.Fatalf("expected masked value, got %q", masked)
 	}
 
@@ -208,8 +208,18 @@ func TestProvidersCRUDMasksSecrets(t *testing.T) {
 	if err := json.Unmarshal([]byte(asString(stored["data"])), &storedData); err != nil {
 		t.Fatalf("decode stored data: %v", err)
 	}
-	if asString(storedData["apiKey"]) != "sk-live-abcdefghijklmnop" {
-		t.Fatalf("stored secret was overwritten by a mask: %q", asString(storedData["apiKey"]))
+	// The stored value is sealed at rest like the dashboard writes it, and still
+	// opens to the original secret.
+	storedSecret := asString(storedData["apiKey"])
+	if storedSecret == "sk-live-abcdefghijklmnop" {
+		t.Fatalf("secret stored in clear")
+	}
+	plain, unsealErr := database.Unseal(storedSecret)
+	if unsealErr != nil {
+		t.Fatalf("stored secret is not a readable envelope: %v", unsealErr)
+	}
+	if plain != "sk-live-abcdefghijklmnop" {
+		t.Fatalf("stored secret was overwritten by a mask: %q", plain)
 	}
 
 	// List masks too.

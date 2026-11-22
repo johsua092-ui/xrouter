@@ -200,6 +200,17 @@ func (g *Gateway) createConnection(body map[string]any) (map[string]any, error) 
 	for key := range data {
 		if sensitiveDataKeys[key] && looksMasked(asString(data[key])) {
 			delete(data, key)
+			continue
+		}
+		// Seal credentials at rest exactly like the dashboard does.
+		if sensitiveDataKeys[key] {
+			if plain := asString(data[key]); plain != "" {
+				sealed, serr := database.Seal(plain)
+				if serr != nil {
+					return nil, serr
+				}
+				data[key] = sealed
+			}
 		}
 	}
 	encoded, err := json.Marshal(data)

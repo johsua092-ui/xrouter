@@ -148,13 +148,42 @@ func flattenConnection(c *ProviderConnection) (*ProviderCredential, error) {
 	}
 	// providerSpecificData may hold an apiKey for the compatible-chat nodes.
 	if cred.APIKey == "" {
-		if v := strField(psd, "apiKey"); v != "" && !IsEncrypted(v) {
-			cred.APIKey = v
+		if v := strField(psd, "apiKey"); v != "" {
+			if plain, uerr := Unseal(v); uerr == nil {
+				cred.APIKey = plain
+			}
+		}
+	}
+	// Cookie-auth providers (iflow and friends) carry their secret in the cookie.
+	if cred.APIKey == "" && cred.Token == "" {
+		if v := strField(psd, "cookie"); v != "" {
+			if plain, uerr := Unseal(v); uerr == nil {
+				cred.Extra["cookie"] = plain
+				cred.Token = plain
+			}
+		}
+	}
+	if refresh := strField(psd, "refreshToken"); refresh != "" {
+		if plain, uerr := Unseal(refresh); uerr == nil {
+			cred.Extra["refreshToken"] = plain
 		}
 	}
 
-	if IsEncrypted(cred.APIKey) || IsEncrypted(cred.Token) {
-		return nil, errSealedCredential
+	// Sealed values are opened here, not skipped: the vault key is derivable on
+	// this host, so a dashboard-written credential is usable by the Go core.
+	if IsEncrypted(cred.APIKey) {
+		plain, uerr := Unseal(cred.APIKey)
+		if uerr != nil {
+			return nil, uerr
+		}
+		cred.APIKey = plain
+	}
+	if IsEncrypted(cred.Token) {
+		plain, uerr := Unseal(cred.Token)
+		if uerr != nil {
+			return nil, uerr
+		}
+		cred.Token = plain
 	}
 	if cred.Token == "" && cred.APIKey == "" {
 		return nil, fmt.Errorf("connection %s (%s) has no usable credential", c.ID, c.Provider)
