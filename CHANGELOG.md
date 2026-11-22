@@ -23,6 +23,8 @@
   - Fixed leftover internal staging domain `daily-cloudcode-pa.googleapis.com` to production `cloudcode-pa.googleapis.com` in `src/lib/usage/antigravityTier.js`.
   - Added comprehensive test suite `tests/unit/antigravity-direct-http-safe-recipe.test.mjs` (4/4 PASS).
 
+# v0.1.0 (2026-11-21)
+
 ### Bug Fixes — False "Cross-origin request blocked" Behind Tunnels / Reverse Proxies
 
 - **Fixed the origin gate rejecting legitimate dashboard POSTs whenever X Router sits behind a proxy that rewrites `Host`** (abc-tunnel, cloudflared, ngrok, nginx `proxy_set_header Host`), in `src/middleware.js`.
