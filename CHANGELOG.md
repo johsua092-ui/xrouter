@@ -37,6 +37,10 @@ remaining 34 are resources that legitimately 404 (a key whose id is literally
   share-token lifecycle, dashboard job completion, sidecar honesty.
 
 ### Fixed
+- Provider create/update ignored credentials posted at the top level (`apiKey`,
+  `accessToken`, `baseUrl`, `defaultModel`, ...), so a connection made through
+  the dashboard API looked credential-less to the router. Both shapes now fold
+  into the stored row.
 - Models list addressed models by canonical id while operators set aliases and
   disable flags by the alias-prefixed id; both now resolve.
 - `teams` INSERT/UPDATE omitted the `NOT NULL` `updatedAt` column, so creating a

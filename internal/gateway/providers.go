@@ -189,6 +189,23 @@ func (g *Gateway) createConnection(body map[string]any) (map[string]any, error) 
 	}
 
 	data := map[string]any{}
+	// The dashboard posts credentials at the top level (apiKey, accessToken,
+	// baseUrl, ...) while stored rows keep them under data. Fold the documented
+	// top-level fields in so a create from either shape behaves the same.
+	for _, key := range []string{
+		"apiKey", "accessToken", "refreshToken", "idToken", "cookie", "sessionToken",
+		"accountId", "email", "baseUrl", "baseURL", "endpoint", "defaultModel",
+		"model", "projectId", "region", "organization", "machineId", "expiresAt",
+	} {
+		value, present := body[key]
+		if !present {
+			continue
+		}
+		if _, exists := data[key]; exists {
+			continue
+		}
+		data[key] = value
+	}
 	if incoming, ok := body["data"].(map[string]any); ok {
 		for key, value := range incoming {
 			data[key] = value
