@@ -1,3 +1,17 @@
+# v0.1.0 (2026-11-22)
+
+### Features & Hardening — FreePI Session Launch Handshake & Stream Queue
+
+- **FreePI Session Launch Handshake (`session_start`)**:
+  - Implemented `launchSessionHandshake()` in `open-sse/executors/freepi.js` delivering official FreePI launch handshake telemetry: requests banner ad with `x-ad-trigger: launch`, pings TryGravity tracking pixel (`ad.imp_url`), reports impression to `/ads/impression`, and synchronizes profile/meter via `GET /me`.
+  - Wired eager launch handshake into GitHub OAuth `postExchange` (`src/lib/oauth/providers/freepi.js`) and lazy executor pre-warming with 55m TTL cache to eliminate prompt cold-start latency and prevent false 403 `ads_required` pauses.
+  - Injected `x-ad-context: none` header directly into chat completion requests in `FreePiExecutor.buildHeaders()`.
+- **FreePI Single-Concurrency Stream Queue**:
+  - Implemented per-token FIFO mutex queue in `open-sse/executors/freepi.js` enforcing strict upstream single-concurrency limit (`limit = 1`) to eliminate `429 concurrent: one request at a time` rejections during prompt speculation or burst requests.
+  - Wrapped active SSE streaming responses with `TransformStream` lifecycle tracking (`flush` and `cancel`) so concurrency locks are safely held across the entire token stream duration.
+  - Added 500ms post-stream grace settling delay before unlocking next queued turn to allow upstream socket reset.
+  - Updated unit tests in `tests/unit/freepi-provider.test.js` validating launch handshake, `x-ad-context: none`, and serial FIFO queue order (1/1 suite PASS).
+
 # v0.1.0 (2026-11-21)
 
 ### Bug Fixes — False "Cross-origin request blocked" Behind Tunnels / Reverse Proxies
