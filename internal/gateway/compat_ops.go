@@ -22,6 +22,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/johsua092-ui/xrouter/internal/clitools"
 )
 
 // ------------------------------------------------------------- proxy pools
@@ -641,20 +643,17 @@ func (g *Gateway) handleCLITools(w http.ResponseWriter, r *http.Request) {
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/cli-tools"), "/")
 
 	if rest == "all-statuses" {
-		statuses := map[string]any{}
-		names := make([]string, 0, len(cliToolPaths))
-		for tool := range cliToolPaths {
-			names = append(names, tool)
-		}
-		sort.Strings(names)
-		for _, tool := range names {
-			path, configured := cliToolConfigPath(tool)
-			statuses[tool] = map[string]any{
-				"configured": configured,
-				"path":       path,
+		statuses := clitools.AllStatuses(clitools.Params{})
+		payload := map[string]any{}
+		for id, status := range statuses {
+			payload[id] = map[string]any{
+				"configured": status.Configured,
+				"path":       status.Path,
+				"name":       status.Name,
+				"error":      status.Error,
 			}
 		}
-		jsonResponse(w, http.StatusOK, map[string]any{"statuses": statuses, "tools": statuses})
+		jsonResponse(w, http.StatusOK, map[string]any{"statuses": payload, "tools": payload})
 		return
 	}
 
@@ -663,38 +662,56 @@ func (g *Gateway) handleCLITools(w http.ResponseWriter, r *http.Request) {
 		tool = rest[:index]
 	}
 	tool = normaliseCLITool(tool)
-	paths, known := cliToolPaths[tool]
-	if !known {
-		jsonError(w, http.StatusNotFound, "Unknown CLI tool: "+tool, nil)
-		return
-	}
 
 	switch r.Method {
 	case http.MethodGet:
-		path, configured := cliToolConfigPath(tool)
-		payload := map[string]any{
-			"tool":       tool,
-			"path":       path,
-			"configured": configured,
-			"files":      paths,
+		status, err := clitools.StatusOf(tool, clitools.Params{})
+		if err != nil {
+			jsonError(w, http.StatusNotFound, err.Error(), nil)
+			return
 		}
-		if configured {
-			if blob, err := os.ReadFile(path); err == nil {
-				payload["config"] = string(blob)
-				var decoded any
-				if json.Unmarshal(blob, &decoded) == nil {
-					payload["json"] = decoded
-				}
-			}
+		payload := map[string]any{
+			"tool":       status.Tool,
+			"name":       status.Name,
+			"path":       status.Path,
+			"configured": status.Configured,
+		}
+		if status.Config != nil {
+			payload["config"] = status.Config
+		}
+		if status.Raw != "" {
+			payload["raw"] = status.Raw
 		}
 		jsonResponse(w, http.StatusOK, payload)
-	case http.MethodPost, http.MethodPut, http.MethodDelete:
+	case http.MethodPost, http.MethodPut:
+		body, ok := decodeJSONBody(w, r)
+		if !ok {
+			return
+		}
+		result, err := clitools.Install(tool, clitools.Params{
+			BaseURL: asString(body["baseUrl"]),
+			APIKey:  asString(body["apiKey"]),
+			Model:   firstNonEmpty(asString(body["model"]), asString(body["defaultModel"])),
+			Profile: firstNonEmpty(asString(body["profile"]), asString(body["name"])),
+			Home:    asString(body["home"]),
+		})
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, err.Error(), nil)
+			return
+		}
 		jsonResponse(w, http.StatusOK, map[string]any{
-			"success":   false,
-			"supported": false,
-			"tool":      tool,
-			"path":      paths,
-			"error":     "The Go engine does not rewrite " + tool + " configuration yet; use the Node dashboard for this tool.",
+			"success": true, "tool": result.Tool, "name": result.Name,
+			"path": result.Path, "backup": result.Backup,
+		})
+	case http.MethodDelete:
+		result, err := clitools.Reset(tool, clitools.Params{})
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, err.Error(), nil)
+			return
+		}
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"success": true, "tool": result.Tool, "path": result.Path,
+			"message": result.Message, "backup": result.Backup,
 		})
 	default:
 		jsonError(w, http.StatusMethodNotAllowed, "method not allowed", nil)

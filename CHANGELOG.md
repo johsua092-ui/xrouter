@@ -1,3 +1,36 @@
+# v0.1.0 (2026-11-22) — wave 16: CLI agents, MCP transport, sidecars
+
+### Added — wave 16
+- `internal/clitools`: the dashboard's CLI-tool writers, ported to Go. Each
+  writer does read-modify-write, keeps a single `<file>.xrouter.bak`, validates
+  JSON after writing and restores the original if the result would not parse.
+  Covers Claude Code (`env.ANTHROPIC_BASE_URL` + token), Codex (`config.toml`
+  managed block + `model_provider`), Codex profiles, OpenCode, Cline/Kilo/Roo/
+  Continue (globalState + secrets), Crush, Smelt, OpenClaw, Pi, Droid, Forge,
+  CodeWhale, DeepSeek TUI, JCode, Grok Build, Copilot's `chatLanguageModels`,
+  and Hermes' YAML block. 23 tools registered.
+- TOML/YAML surgery is line-based and marker-delimited, so operator comments and
+  unrelated tables survive; sections are removed by header, never by re-encoding
+  the whole document.
+- `/api/mcp/{plugin}/sse` + `/message` now implement the MCP HTTP transport for
+  real: SSE endpoint event, session registry, JSON-RPC `initialize`/`tools/list`/
+  `ping`, and unknown methods answered with -32601.
+- Headroom passthrough proxies to the configured `baseUrl` with a real reverse
+  proxy instead of refusing.
+- Translator console `translate`/`send` routes through this host's own
+  `/v1/chat/completions`, so the console exercises the same path the gateway
+  uses rather than a second, divergent implementation.
+
+### Tests
+- `internal/clitools/clitools_test.go`: 7 tests over throwaway home dirs —
+  Claude env shape, foreign-key preservation, refusal on corrupt config, Codex
+  section idempotency and reset, provider-map tools, OpenCode shape, registry
+  status sweep.
+
+### Still not ported
+- Interactive OAuth login (browser/PKCE/device-code per provider). Credential
+  *import* is fully ported; the login flow itself is not.
+
 # v0.1.0 (2026-11-22) — wave 15: management-plane parity
 
 ### Added — wave 15

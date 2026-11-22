@@ -9,12 +9,16 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -165,14 +169,129 @@ func boolToInt(value bool) int {
 
 // ---------------------------------------------------------------- MCP plugins
 
+// mcpSession is one open SSE transport. Requests arrive on the plugin's message
+// endpoint and their JSON-RPC replies are pushed back through the stream, which
+// is what the MCP HTTP transport expects.
+type mcpSession struct {
+	id      string
+	plugin  string
+	events  chan []byte
+	closeOn chan struct{}
+}
+
+var (
+	mcpMu       sync.Mutex
+	mcpSessions = map[string]*mcpSession{}
+)
+
 func (g *Gateway) handleMCP(w http.ResponseWriter, r *http.Request) {
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/mcp"), "/")
 	plugin := strings.TrimSuffix(strings.TrimSuffix(rest, "/message"), "/sse")
-	jsonResponse(w, http.StatusNotImplemented, map[string]any{
-		"success": false,
-		"plugin":  plugin,
-		"error":   "MCP plugin transport is served by the Node runtime in this deployment",
-	})
+
+	switch {
+	case strings.HasSuffix(rest, "/sse"):
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			jsonError(w, http.StatusInternalServerError, "streaming unsupported", nil)
+			return
+		}
+		session := &mcpSession{
+			id:      newCompatID(),
+			plugin:  plugin,
+			events:  make(chan []byte, 16),
+			closeOn: make(chan struct{}),
+		}
+		mcpMu.Lock()
+		mcpSessions[session.id] = session
+		mcpMu.Unlock()
+		defer func() {
+			mcpMu.Lock()
+			delete(mcpSessions, session.id)
+			mcpMu.Unlock()
+			close(session.closeOn)
+		}()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprintf(w, "event: endpoint\ndata: /api/mcp/%s/message?sessionId=%s\n\n", plugin, session.id)
+		flusher.Flush()
+
+		ticker := time.NewTicker(20 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case payload := <-session.events:
+				_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n", payload)
+				flusher.Flush()
+			case <-ticker.C:
+				_, _ = fmt.Fprint(w, ": keep-alive\n\n")
+				flusher.Flush()
+			}
+		}
+
+	case strings.HasSuffix(rest, "/message"):
+		body, ok := decodeJSONBody(w, r)
+		if !ok {
+			return
+		}
+		sessionID := r.URL.Query().Get("sessionId")
+		mcpMu.Lock()
+		session := mcpSessions[sessionID]
+		mcpMu.Unlock()
+
+		reply := mcpHandleJSONRPC(body)
+		if session != nil && reply != nil {
+			select {
+			case session.events <- reply:
+			default:
+			}
+		}
+		if reply == nil {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(reply)
+	default:
+		jsonError(w, http.StatusNotFound, "not found", nil)
+	}
+}
+
+// mcpHandleJSONRPC answers the handshake methods; anything else is reported as
+// an unsupported method rather than silently ignored.
+func mcpHandleJSONRPC(request map[string]any) []byte {
+	method := asString(request["method"])
+	id, hasID := request["id"]
+	if !hasID {
+		return nil // notification: nothing to answer
+	}
+	respond := func(result any) []byte {
+		blob, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
+		return blob
+	}
+	switch method {
+	case "initialize":
+		return respond(map[string]any{
+			"protocolVersion": "2024-11-05",
+			"capabilities":    map[string]any{"tools": map[string]any{}},
+			"serverInfo":      map[string]any{"name": "xrouter", "version": "0.1.0"},
+		})
+	case "tools/list":
+		return respond(map[string]any{"tools": []any{}})
+	case "ping":
+		return respond(map[string]any{})
+	default:
+		blob, _ := json.Marshal(map[string]any{
+			"jsonrpc": "2.0", "id": id,
+			"error": map[string]any{"code": -32601, "message": "method not found: " + method},
+		})
+		return blob
+	}
 }
 
 // -------------------------------------------------------------- auth federation
@@ -364,10 +483,28 @@ func (g *Gateway) handleSidecar(w http.ResponseWriter, r *http.Request) {
 			"note":      "Headroom extras are served by the Node sidecar when present.",
 		})
 	case "proxy", "proxy/*":
-		jsonResponse(w, http.StatusServiceUnavailable, map[string]any{
-			"success": false,
-			"error":   "Headroom sidecar is not reachable from the Go engine",
-		})
+		state := g.kvObject("settings", "sidecar_headroom")
+		upstream := firstNonEmpty(asString(state["baseUrl"]), asString(state["url"]))
+		if upstream == "" {
+			jsonResponse(w, http.StatusServiceUnavailable, map[string]any{
+				"success": false,
+				"error":   "headroom baseUrl is not configured",
+			})
+			return
+		}
+		target, err := url.Parse(upstream)
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, "headroom baseUrl is invalid", err)
+			return
+		}
+		suffix := strings.TrimPrefix(action, "proxy")
+		proxy := httputil.NewSingleHostReverseProxy(target)
+		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+			jsonResponse(w, http.StatusBadGateway, map[string]any{"success": false, "error": err.Error()})
+		}
+		r.URL.Path = strings.TrimSuffix(target.Path, "/") + suffix
+		r.Host = target.Host
+		proxy.ServeHTTP(w, r)
 	case "tailscale-check", "tailscale-enable", "tailscale-disable", "tailscale-install":
 		tsPath, tsErr := exec.LookPath("tailscale")
 		tsInstalled := tsErr == nil
@@ -417,9 +554,68 @@ func (g *Gateway) handleTranslator(w http.ResponseWriter, r *http.Request) {
 		blob, _ := os.ReadFile(logPath)
 		jsonResponse(w, http.StatusOK, map[string]any{"logs": string(blob), "path": logPath})
 	case "translate", "send":
-		jsonResponse(w, http.StatusNotImplemented, map[string]any{
-			"success": false,
-			"error":   "The interactive translator console is not implemented in the Go engine.",
+		body, ok := decodeJSONBody(w, r)
+		if !ok {
+			return
+		}
+		model := firstNonEmpty(asString(body["model"]), asString(g.kvObject("settings", "translator")["model"]))
+		if model == "" {
+			jsonError(w, http.StatusBadRequest, "model is required", nil)
+			return
+		}
+		// Reuse the real routing path instead of a second translation engine:
+		// the console sends what it built to /v1/chat/completions on this host.
+		payload := map[string]any{
+			"model":    model,
+			"stream":   false,
+			"messages": body["messages"],
+		}
+		if payload["messages"] == nil {
+			text := asString(body["text"])
+			if text == "" {
+				jsonError(w, http.StatusBadRequest, "messages or text is required", nil)
+				return
+			}
+			system := asString(body["system"])
+			if system == "" {
+				system = "Translate the user's text. Reply with the translation only."
+			}
+			payload["messages"] = []any{
+				map[string]any{"role": "system", "content": system},
+				map[string]any{"role": "user", "content": text},
+			}
+		}
+		encoded, _ := json.Marshal(payload)
+		address := fmt.Sprintf("http://127.0.0.1:%s/v1/chat/completions", g.cfg.Port)
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, address, strings.NewReader(string(encoded)))
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "cannot build request", err)
+			return
+		}
+		request.Header.Set("Content-Type", "application/json")
+		client := &http.Client{Timeout: 120 * time.Second}
+		response, err := client.Do(request)
+		if err != nil {
+			jsonError(w, http.StatusBadGateway, "chat upstream unreachable", err)
+			return
+		}
+		defer response.Body.Close()
+		var upstream map[string]any
+		if err := json.NewDecoder(response.Body).Decode(&upstream); err != nil {
+			jsonError(w, http.StatusBadGateway, "upstream returned a non-JSON body", err)
+			return
+		}
+		content := ""
+		if choices, ok := upstream["choices"].([]any); ok && len(choices) > 0 {
+			if choice, ok := choices[0].(map[string]any); ok {
+				if message, ok := choice["message"].(map[string]any); ok {
+					content = asString(message["content"])
+				}
+			}
+		}
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"success": true, "output": content, "translation": content,
+			"raw": upstream, "model": model,
 		})
 	default:
 		jsonError(w, http.StatusNotFound, "not found", nil)
