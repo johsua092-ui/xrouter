@@ -475,7 +475,7 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
   // OpenAI Tool Bridge (opt-in per model): a provider with no native tool
   // support answers in prose. The invocation is already in the model's answer,
   // so promoting it to tool_calls is a format repair, not a guess.
-  if (pluginResult?.isToolBridgeActive && translatedResponse && typeof translatedResponse === "object") {
+  if ((pluginResult?.isToolBridgeActive || pluginResult?.isOpenaiToolBridgeActive) && translatedResponse && typeof translatedResponse === "object") {
     const bridged = bridgeOpenAIChatResponse(translatedResponse, body);
     if (bridged > 0) {
       log?.debug?.("TOOLBRIDGE", `${bridged} call(s) recovered from prose · ${provider}/${model}`);

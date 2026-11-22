@@ -297,6 +297,8 @@ export async function applyCustomPlugins(body, provider, model, sourceFormat, re
     isSpeedModeActive: false,
     isJsonGuardActive: false,
     isContextSqueezerActive: false,
+    isOpenaiToolBridgeActive: false,
+    isToolBridgeActive: false,
     contextStats: null,
   };
 
@@ -330,6 +332,7 @@ export async function applyCustomPlugins(body, provider, model, sourceFormat, re
 
   if (config.openaiToolBridge?.enabled && checkMatch(config.openaiToolBridge.models)) {
     result.isOpenaiToolBridgeActive = true;
+    result.isToolBridgeActive = true;
     body._openaiToolBridge = {
       tools: body.tools,
       functions: body.functions,
