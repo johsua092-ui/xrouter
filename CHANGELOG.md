@@ -1,3 +1,39 @@
+# v0.1.0 (2026-11-22) — wave 11: media plane
+
+### Added — wave 11: embeddings, images, speech, search, fetch and video
+
+Every media endpoint is config-driven. Each provider already ships a descriptor in
+the catalogue (`embeddingConfig`, `imageConfig`, `ttsConfig`, `sttConfig`,
+`searchConfig`, `fetchConfig`, `videoConfig`); the Go dispatcher reads that
+descriptor instead of growing a per-provider switch, so a provider added on the
+Node side is callable here without a Go change.
+
+- `POST /v1/embeddings` — JSON forwarded with the routing prefix stripped from the
+  model id; Gemini's model-scoped `/{model}:embedContent` suffix handled.
+- `POST /v1/images/generations` — model-segment suffix for `fal-ai` and
+  `black-forest-labs`, whose base URLs stop before the model.
+- `POST /v1/audio/speech` — ElevenLabs voice-in-path synthesis, including the
+  default voice when the client omits one.
+- `POST /v1/audio/transcriptions` — multipart forwarded as multipart; only the
+  model field is rewritten, because re-encoding the audio would change what the
+  upstream receives.
+- `GET /v1/audio/voices` — live list for providers with a voice endpoint, built-in
+  list for the fixed OpenAI and ElevenLabs voice sets.
+- `POST /v1/search` — normalised query field, GET-vs-POST per descriptor, provider
+  result shape relayed untouched.
+- `POST /v1/web/fetch` — reader-style GET path form and body form.
+- `POST /v1/videos/generations|edits|extensions`, `GET /v1/videos/{id}`.
+
+### Fixed — media plane
+
+- `callMedia` streams the upstream body through with its content type instead of
+  decoding it, so audio and image bytes survive the hop.
+- Connection credentials prefer the API key and fall back to an OAuth token; a
+  provider with no usable connection answers `503` with the same body shape the
+  chat path uses, instead of a misleading `400`.
+
+---
+
 # v0.1.0 (2026-11-22) — wave 10: catalogue, model surface, dialogs, Gemini + Responses
 
 ### Added — wave 10: the Go core serves the real catalogue and the remaining chat dialects

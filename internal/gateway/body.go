@@ -20,6 +20,12 @@ func replayBody(body []byte) io.ReadCloser {
 	return io.NopCloser(bytes.NewReader(body))
 }
 
+// asObject reads a decoded JSON object, returning nil for any other type.
+func asObject(v any) map[string]any {
+	m, _ := v.(map[string]any)
+	return m
+}
+
 // asString reads a string from a decoded JSON value, treating anything else as
 // absent.
 func asString(v any) string {

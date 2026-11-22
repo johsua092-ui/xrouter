@@ -146,6 +146,21 @@ func (g *Gateway) registerRoutes() {
 		r.Post("/api/chat", g.handleOllamaChat)
 		// Decision models take a native payload and have no chat translation.
 		r.Post("/systemone", g.handleSystemone)
+
+		// Media plane. Each endpoint is dispatched from the provider's catalogue
+		// descriptor rather than a per-provider switch, so a provider that ships
+		// a descriptor is callable here without a Go change.
+		r.Post("/embeddings", g.handleEmbeddings)
+		r.Post("/images/generations", g.handleImages)
+		r.Post("/audio/speech", g.handleSpeech)
+		r.Post("/audio/transcriptions", g.handleTranscriptions)
+		r.Get("/audio/voices", g.handleVoices)
+		r.Post("/search", g.handleSearch)
+		r.Post("/web/fetch", g.handleFetch)
+		r.Post("/videos/generations", g.handleVideoGeneration)
+		r.Post("/videos/edits", g.handleVideoGeneration)
+		r.Post("/videos/extensions", g.handleVideoGeneration)
+		r.Get("/videos/{id}", g.handleVideoStatus)
 	})
 
 	// Gemini-native surface. The model lives in the URL here, so the catch-all
