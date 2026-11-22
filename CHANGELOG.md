@@ -1,3 +1,66 @@
+# v0.1.0 (2026-11-22) — wave 10: catalogue, model surface, dialogs, Gemini + Responses
+
+### Added — wave 10: the Go core serves the real catalogue and the remaining chat dialects
+
+**Catalogue generated from the Node source of truth.** `scripts/gen-catalog.mjs`
+dumps `open-sse/config/providerModels.js` + `shared/constants/providers.js` into
+`internal/catalog/catalog.json` (146 providers, 1428 models, 124 model buckets)
+and `internal/translate/signatures.json` (thinking-signature wire constants).
+`internal/catalog` embeds both. Re-typing the catalogue in Go would guarantee
+drift on the next Node commit; a build-time dump cannot drift.
+
+The generator resolves the app's bare-specifier aliases (`open-sse/*`, `@/*`)
+through a `module.register` hook (`scripts/alias-hook.mjs`), so it runs under
+plain `node` outside Next.js.
+
+**Model surface (was a 10-entry hardcoded stub):**
+- `GET /v1` and `GET /v1/models` — full catalogue in OpenAI list shape.
+- `GET /v1/models/info` — adds `endpoint`, `kind`, `params`, `capabilities`,
+  `contextWindow`, `voicesUrl` for TTS backends with a live voice list, and the
+  search config knobs (`searchTypes`, `maxResults`, `required`).
+- `GET /v1/models/{kind}` — kind filter (`image`, `tts`, `stt`, `embedding`,
+  `image-to-text`, `web`).
+- `GET /v1/models/{provider}/{model}` — single lookup with the OpenAI
+  `model_not_found` error document on a miss.
+- `GET /v1beta/models` + `/v1beta/models/{path}` — Gemini-native surface. The
+  model travels in the URL there, so the path is parsed and folded into the body
+  before the chat path runs; a bare model name is resolved against the catalogue.
+
+**New endpoints on the chat pipeline:**
+- `POST /v1/responses` and `/v1/responses/compact`.
+- `POST /v1/messages/count_tokens` — local character-based estimate, matching the
+  Node numbers exactly (object keys count, `/4`, rounded up).
+- `POST /v1/api/chat` — Ollama framing. The OpenAI SSE stream is converted to
+  JSON-lines by a `ResponseWriter` decorator, so a streamed answer still arrives
+  incrementally; tool-call fragments are accumulated and emitted complete on the
+  final line.
+- `POST /v1/systemone` — decision models, config-driven from
+  `systemoneConfig` in the catalogue.
+
+**Translators (new pairs):**
+- `gemini → openai`, `gemini-cli → openai` (request + response)
+- `openai → gemini`, `openai → vertex`, `openai → gemini-cli` (request)
+- `openai ↔ antigravity` (response)
+- `openai-responses ↔ openai` (request + response, including the typed SSE event
+  stream: `response.created`, `output_item.added`, `output_text.delta`,
+  `function_call_arguments.delta`, `output_item.done`, `response.completed`)
+
+Gemini specifics carried over: function-name sanitisation (Gemini's alphabet and
+64-char limit), conversation-wide tool-call-id uniquification (Gemini rejects a
+repeated `functionCall` id across history with 400 INVALID_ARGUMENT), per-id tool
+response queues (an id is only unique within its own assistant turn), call/response
+pairing, history normalisation (alternate turns, must open with user, unanswered
+trailing calls get responses), and Gemini-4 sampling-param stripping.
+
+**Build fix:** `Dockerfile.go` (a containerfile with a `.go` extension) broke
+`go build ./...` for the whole tree; renamed to `Dockerfile.gocore`.
+
+Tests: 24 new (`internal/catalog`, `internal/gateway`, `internal/translate`) —
+catalogue load/alias/lookup, model list + kind filter + 404 shape, Gemini model
+names, count_tokens cases, Ollama frame conversion incl. tool-call assembly,
+Gemini request/response round-trips, Vertex id stripping, Responses item
+conversion and event streams.
+
 # v0.1.0 (2026-11-18) — wave 9, registry complete
 
 ### Added — wave 9: all remaining providers ported (149 registry names, 100% of Node set)

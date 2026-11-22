@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/johsua092-ui/xrouter/internal/catalog"
 	"github.com/johsua092-ui/xrouter/internal/config"
 	"github.com/johsua092-ui/xrouter/internal/connection"
 	"github.com/johsua092-ui/xrouter/internal/database"
@@ -28,6 +29,7 @@ type Gateway struct {
 	registry    *providers.Registry
 	translators *translate.Registry
 	upstream    *providers.Transport
+	catalog     *catalog.Catalog
 }
 
 func New(cfg *config.Config, db *database.DB) *Gateway {
@@ -93,6 +95,7 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 		registry:    registry,
 		translators: translators,
 		upstream:    providers.NewTransport(nil),
+		catalog:     catalog.MustLoad(),
 	}
 
 	// API routes first, then the dashboard. Order matters: mountDashboard
@@ -115,13 +118,40 @@ func (g *Gateway) registerRoutes() {
 
 	// AI Gateway V1 Endpoints
 	g.mux.Route("/v1", func(r chi.Router) {
+		// Model discovery. `/` and `/models` are the same catalogue in the shape
+		// OpenAI clients expect; `/models/info` adds endpoint + capability
+		// metadata; the catch-all answers kind filters and single-model lookups.
+		r.Get("/", g.handleModels)
 		r.Get("/models", g.handleModels)
+		// One catch-all, not a static+wildcard pair: chi's regexp parameter
+		// does not cross a slash, so a provider-prefixed model id
+		// ("/models/{provider}/{model}") has to be matched by a true wildcard.
+		// `/info` is dispatched inside the handler.
+		r.Get("/models/*", g.handleModelByPath)
+
 		r.Post("/chat/completions", g.handleChatCompletions)
 		// The Claude Messages endpoint. A Claude Code client posts here, so the
 		// path must exist for the translate-in path to be reachable at all —
 		// without it a Claude client 404s before translation is ever considered.
 		r.Post("/messages", g.handleChatCompletions)
+		// Token counting is answered locally: it is a pre-flight budget call with
+		// no upstream equivalent.
+		r.Post("/messages/count_tokens", g.handleCountTokens)
+		// The Responses API shares the chat pipeline; the dialect is chosen by
+		// the path, and `compact` only differs in how the client trims history.
+		r.Post("/responses", g.handleChatCompletions)
+		r.Post("/responses/compact", g.handleChatCompletions)
+		// Ollama-compatible chat: same pipeline, line-delimited JSON on the way
+		// out instead of SSE.
+		r.Post("/api/chat", g.handleOllamaChat)
+		// Decision models take a native payload and have no chat translation.
+		r.Post("/systemone", g.handleSystemone)
 	})
+
+	// Gemini-native surface. The model lives in the URL here, so the catch-all
+	// has to fold it back into the body before the chat path runs.
+	g.mux.Get("/v1beta/models", g.handleGeminiModels)
+	g.mux.Post("/v1beta/models/*", g.handleGeminiModelAction)
 
 	// Diagnostic & Proxy Test Utility
 	g.mux.Get("/api/test-proxy", g.handleTestProxy)
@@ -260,26 +290,6 @@ func (g *Gateway) handleAdapterCoverage(w http.ResponseWriter, r *http.Request) 
 		"node_executor_total": cov.NodeExecutorTotal,
 		"fallback":            cov.Fallback,
 		"note":                "unported providers still route through the fallback adapter",
-	})
-}
-
-func (g *Gateway) handleModels(w http.ResponseWriter, r *http.Request) {
-	models := []map[string]interface{}{
-		{"id": "oc/glm-5.3-flash-free", "object": "model", "owned_by": "opencode"},
-		{"id": "oc/deepseek-v4.1-flash-free", "object": "model", "owned_by": "opencode"},
-		{"id": "ag/gemini-3.8-flash-high", "object": "model", "owned_by": "antigravity"},
-		{"id": "gemini-web/gemini-2.5-flash", "object": "model", "owned_by": "gemini-web"},
-		{"id": "gemini-web/gemini-2.5-pro", "object": "model", "owned_by": "gemini-web"},
-		{"id": "ovh/Qwen3.6-27B", "object": "model", "owned_by": "ovh"},
-		{"id": "ovh/gpt-oss-120b", "object": "model", "owned_by": "ovh"},
-		{"id": "cbai/deepseek-v4.1-flash", "object": "model", "owned_by": "codebuddy"},
-		{"id": "cbcn/hy4", "object": "model", "owned_by": "codebuddy"},
-		{"id": "cbcn/hy4-preview", "object": "model", "owned_by": "codebuddy"},
-	}
-
-	jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"object": "list",
-		"data":   models,
 	})
 }
 

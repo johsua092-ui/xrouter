@@ -336,6 +336,11 @@ func DetectFormatByEndpoint(pathname string, body map[string]any) Format {
 	switch {
 	case contains(pathname, "/v1/responses"):
 		return FormatOpenAIResponses
+	// Gemini's native surface: the body speaks `contents`, not `messages`, and
+	// the model travels in the URL. Detecting it here means the Gemini request
+	// converter runs before the body reaches the provider adapter.
+	case contains(pathname, "/v1beta/models"):
+		return FormatGemini
 	case contains(pathname, "/v1/messages"):
 		return FormatClaude
 	case contains(pathname, "/v1/chat/completions"):
