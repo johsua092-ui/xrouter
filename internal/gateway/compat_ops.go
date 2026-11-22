@@ -20,10 +20,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/johsua092-ui/xrouter/internal/clitools"
+	"github.com/johsua092-ui/xrouter/internal/oauthflow"
 )
 
 // ------------------------------------------------------------- proxy pools
@@ -500,10 +502,6 @@ func (g *Gateway) handleOAuth(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, http.StatusOK, map[string]any{"status": "unsupported", "note": "headless login is not implemented in the Go engine"})
 		return
 	}
-	if rest == "xiaomi-mimo/login/start" || rest == "kiro/social-authorize" {
-		jsonError(w, http.StatusNotImplemented, "interactive OAuth is not implemented in the Go engine", nil)
-		return
-	}
 
 	// Generic /api/oauth/{provider}/{action}
 	if strings.HasSuffix(rest, "/import") {
@@ -512,7 +510,192 @@ func (g *Gateway) handleOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Interactive flows: authorize → callback, or device → poll.
+	if index := strings.Index(rest, "/"); index > 0 {
+		providerID := rest[:index]
+		action := rest[index+1:]
+		registry := oauthflow.Registry(g.oauthOverrides())
+		provider, known := registry[providerID]
+
+		switch action {
+		case "authorize", "start":
+			if !known {
+				jsonError(w, http.StatusNotFound, "unknown OAuth provider: "+providerID, nil)
+				return
+			}
+			redirect := r.URL.Query().Get("redirectUri")
+			if redirect == "" {
+				redirect = g.oauthRedirectURI(r, providerID)
+			}
+			session, authorizeURL, err := oauthflow.StartPKCE(provider, redirect)
+			if err != nil {
+				jsonError(w, http.StatusBadRequest, err.Error(), nil)
+				return
+			}
+			jsonResponse(w, http.StatusOK, map[string]any{
+				"success": true, "provider": providerID, "sessionId": session.ID,
+				"authUrl": authorizeURL, "authorizeUrl": authorizeURL,
+				"state": session.State, "redirectUri": redirect,
+			})
+			return
+
+		case "callback", "exchange":
+			if !known {
+				jsonError(w, http.StatusNotFound, "unknown OAuth provider: "+providerID, nil)
+				return
+			}
+			body, ok := decodeJSONBody(w, r)
+			if !ok {
+				return
+			}
+			sessionID := firstNonEmpty(asString(body["sessionId"]), r.URL.Query().Get("sessionId"))
+			session := oauthflow.SessionByID(sessionID)
+			if session == nil {
+				jsonError(w, http.StatusBadRequest, "unknown or expired session", nil)
+				return
+			}
+			if state := asString(body["state"]); state != "" && state != session.State {
+				jsonError(w, http.StatusBadRequest, "state mismatch", nil)
+				return
+			}
+			token, err := oauthflow.Exchange(provider, session, asString(body["code"]))
+			if err != nil {
+				jsonError(w, http.StatusBadGateway, err.Error(), nil)
+				return
+			}
+			if token.AccessToken == "" {
+				jsonResponse(w, http.StatusBadGateway, map[string]any{
+					"success": false, "provider": providerID, "raw": token.Extra,
+					"error": firstNonEmpty(asString(token.Extra["error_description"]), asString(token.Extra["error"]), "no access_token returned"),
+				})
+				return
+			}
+			g.persistOAuthToken(providerID, token)
+			jsonResponse(w, http.StatusOK, map[string]any{
+				"success": true, "provider": providerID,
+				"accessToken": token.AccessToken, "refreshToken": token.RefreshToken,
+				"expiresIn": token.ExpiresIn, "scope": token.Scope,
+			})
+			return
+
+		case "device":
+			if !known {
+				jsonError(w, http.StatusNotFound, "unknown OAuth provider: "+providerID, nil)
+				return
+			}
+			session, payload, err := oauthflow.StartDevice(provider)
+			if err != nil {
+				jsonError(w, http.StatusBadRequest, err.Error(), nil)
+				return
+			}
+			jsonResponse(w, http.StatusOK, map[string]any{
+				"success": true, "provider": providerID, "sessionId": session.ID,
+				"userCode":  payload["user_code"],
+				"verifyUrl": firstNonEmpty(asString(payload["verification_uri"]), asString(payload["verification_url"])),
+				"interval":  session.Interval,
+				"expiresIn": payload["expires_in"],
+			})
+			return
+
+		case "device/poll", "poll":
+			if !known {
+				jsonError(w, http.StatusNotFound, "unknown OAuth provider: "+providerID, nil)
+				return
+			}
+			body, _ := decodeJSONBody(w, r)
+			session := oauthflow.SessionByID(firstNonEmpty(asString(body["sessionId"]), r.URL.Query().Get("sessionId")))
+			if session == nil {
+				jsonError(w, http.StatusBadRequest, "unknown or expired device session", nil)
+				return
+			}
+			token, pending, err := oauthflow.PollDevice(provider, session)
+			if err != nil {
+				jsonError(w, http.StatusBadGateway, err.Error(), nil)
+				return
+			}
+			if token == nil || token.AccessToken == "" {
+				jsonResponse(w, http.StatusOK, map[string]any{
+					"success": false, "status": "pending", "error": pending,
+				})
+				return
+			}
+			g.persistOAuthToken(providerID, token)
+			jsonResponse(w, http.StatusOK, map[string]any{
+				"success": true, "provider": providerID, "status": "complete",
+				"accessToken": token.AccessToken, "refreshToken": token.RefreshToken,
+				"expiresIn": token.ExpiresIn,
+			})
+			return
+		}
+	}
+
 	jsonError(w, http.StatusNotImplemented, "OAuth action not implemented in the Go engine: "+rest, nil)
+}
+
+// oauthOverrides reads the deployment's own OAuth client definitions.
+func (g *Gateway) oauthOverrides() []oauthflow.Provider {
+	state := g.kvObject("settings", "oauth_providers")
+	if state == nil {
+		return nil
+	}
+	var providers []oauthflow.Provider
+	if raw, ok := state["providers"]; ok {
+		blob, err := json.Marshal(raw)
+		if err == nil {
+			_ = json.Unmarshal(blob, &providers)
+		}
+	}
+	if len(providers) == 0 {
+		// The setting may itself be the array.
+		blob, err := json.Marshal(state)
+		if err == nil {
+			_ = json.Unmarshal(blob, &providers)
+		}
+	}
+	return providers
+}
+
+// oauthRedirectURI picks the callback the provider should send the browser back
+// to: an explicit public base if configured, else this request's origin.
+func (g *Gateway) oauthRedirectURI(r *http.Request, provider string) string {
+	state := g.kvObject("settings", "oauth_providers")
+	if base := asString(state["publicBaseUrl"]); base != "" {
+		return strings.TrimSuffix(base, "/") + "/api/oauth/" + provider + "/callback"
+	}
+	scheme := "http"
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+	host := r.Host
+	if forwarded := r.Header.Get("X-Forwarded-Host"); forwarded != "" {
+		host = forwarded
+	}
+	return scheme + "://" + host + "/api/oauth/" + provider + "/callback"
+}
+
+// persistOAuthToken stores a freshly minted token as a provider connection so
+// the router can use it immediately after login.
+func (g *Gateway) persistOAuthToken(provider string, token *oauthflow.Token) {
+	data := map[string]any{
+		"authType":    "oauth",
+		"accessToken": token.AccessToken,
+	}
+	if token.RefreshToken != "" {
+		data["refreshToken"] = token.RefreshToken
+	}
+	if token.ExpiresIn > 0 {
+		data["expiresAt"] = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second).UTC().Format(time.RFC3339)
+	}
+	name := provider + "-oauth-" + strconv.FormatInt(time.Now().Unix(), 36)
+	data["provider"] = provider
+	data["name"] = name
+	data["data"] = map[string]any{
+		"authType":    "oauth",
+		"accessToken": token.AccessToken,
+		"refreshToken": token.RefreshToken,
+		"expiresAt":   data["expiresAt"],
+	}
+	_, _ = g.createConnection(data)
 }
 
 // oauthImport normalises whatever credential shape the dashboard posts and

@@ -1,3 +1,23 @@
+### Added — wave 17
+- `internal/oauthflow`: interactive OAuth, ported. PKCE authorization-code
+  sessions (`authorize` → `callback`) with S256 challenge, state validation,
+  verifier storage and a 15-minute session TTL; device-code flows (`device` →
+  `device/poll`) with RFC 8628 `authorization_pending` handling; token exchange
+  that accepts either JSON or form-encoded provider responses.
+- Provider definitions are data, not code: built-ins for GitHub (device),
+  GitLab and xAI (PKCE), plus a deployment override array in the
+  `oauth_providers` setting for forks with their own client ids/secrets.
+- Successful logins persist straight into a provider connection, so a token
+  minted through the browser is usable by the router immediately.
+- Verified live: `POST /api/oauth/github/device` against github.com returned a
+  real user code and verification URL; provider-without-client and unknown
+  provider cases return explicit errors instead of pretending.
+
+### Tests
+- `internal/oauthflow/oauthflow_test.go`: 6 tests — PKCE URL shape and verifier
+  round-trip against a stub token endpoint, provider error passthrough, device
+  flow pending→token transition, registry overrides, session expiry, token JSON.
+
 # v0.1.0 (2026-11-22) — wave 16: CLI agents, MCP transport, sidecars
 
 ### Added — wave 16
@@ -28,8 +48,10 @@
   status sweep.
 
 ### Still not ported
-- Interactive OAuth login (browser/PKCE/device-code per provider). Credential
-  *import* is fully ported; the login flow itself is not.
+- Provider-specific headless login for the proprietary endpoints (Kiro social
+  exchange, Xiaomi MIMO platform login, Claude/Codex proprietary PKCE wrappers).
+  The generic PKCE and device machinery is in place — those need their own
+  client id + endpoint pair in `oauth_providers`, not more code.
 
 # v0.1.0 (2026-11-22) — wave 15: management-plane parity
 
