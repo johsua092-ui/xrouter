@@ -30,6 +30,8 @@ func buildRegistry() *providers.Registry {
 	providers.RegisterWave9WebCookie(r)
 	providers.RegisterWave9Misc(r)
 	providers.RegisterWave19(r)
+	providers.RegisterWave20(r)
+	providers.RegisterWave21(r)
 	return r
 }
 

@@ -13,6 +13,7 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -101,6 +102,15 @@ type Preflighter interface {
 	Preflight(ctx context.Context, req Request, cred Credential)
 }
 
+// ErrorNormalizer is implemented by adapters whose upstream misreports its own
+// failures. MiniMax Code is the case: it answers a spent balance with 402/403,
+// which the account loop reads as "bad credential" and retries forever against an
+// account that has nothing left. The hook only runs for error responses, so no
+// stream body is ever buffered.
+type ErrorNormalizer interface {
+	NormalizeError(req Request, status int, header http.Header, body []byte) (int, []byte)
+}
+
 // Transport performs the HTTP call. Shared by every adapter so there is exactly
 // one place where timeouts, proxying and SSE-streaming behaviour are defined.
 type Transport struct {
@@ -170,6 +180,25 @@ func (t *Transport) Do(ctx context.Context, a Adapter, req Request, cred Credent
 	resp, err := t.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("%s: upstream: %w", a.Name(), err)
+	}
+
+	// Error bodies are small and already fully buffered by the caller's error
+	// path, so an adapter that reclassifies its own failures can read them
+	// without ever touching a completion stream.
+	if normalizer, ok := a.(ErrorNormalizer); ok && resp.StatusCode >= 400 {
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("%s: read error body: %w", a.Name(), readErr)
+		}
+		status, normalised := normalizer.NormalizeError(req, resp.StatusCode, resp.Header, body)
+		resp.StatusCode = status
+		resp.Body = io.NopCloser(bytes.NewReader(normalised))
+		return &Response{
+			StatusCode: resp.StatusCode,
+			Header:     resp.Header,
+			Body:       resp.Body,
+		}, nil
 	}
 
 	return &Response{

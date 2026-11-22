@@ -93,6 +93,11 @@ func New(cfg *config.Config, db *database.DB) *Gateway {
 	// Code Assist envelope, kimchi's OpenAI-gateway sanitising, freepi's ad
 	// heartbeat.
 	providers.RegisterWave19(registry)
+	// Wave 20 — providers that sign or rebuild their own requests: iFlow's HMAC,
+	// Xiaomi MiMo's dual route, CodeBuddy's CLI envelope, Vertex's three auth paths.
+	providers.RegisterWave20(registry)
+	// Wave 21 — request-side contracts plus failure reclassification.
+	providers.RegisterWave21(registry)
 
 	// Translator registry. Every request and response converter self-registers
 	// from its own file's init(), so this only needs to hand out the shared set.

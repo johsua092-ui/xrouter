@@ -1,3 +1,34 @@
+# v0.1.0 (2026-11-22) — wave 21: signed requests and honest failures
+
+### Added — wave 21
+- **iflow** — HMAC-SHA256 request signing over `UserAgent:sessionId:timestamp`
+  keyed by the API key, with the `session-id` / `x-iflow-timestamp` /
+  `x-iflow-signature` headers and `stream_options.include_usage` on streams.
+  Without the signature the upstream rejects a valid bearer with 401.
+- **xiaomi-mimo** — dual route: cloud models on the OpenAI shim, the v2.6 family on
+  the account service (`/api/route/chat/completions`) authenticated by the desktop
+  session cookie when one is supplied, with `reasoning_effort` bridged to
+  `output_config.effort` and the app's sampling defaults. Cluster host follows the
+  region (cn/sgp/ams/ru/in).
+- **codebuddy-cn** / **codebuddy-intl** — the CLI envelope: forced stream, the full
+  identity header set, one leading system message, user turns as typed blocks, and
+  neutralisation of competitor identity strings that get accounts banned.
+- **vertex** — three auth shapes: service-account JWT (RS256 assertion minted and
+  cached in-process), ADC refresh-token grant, and raw key in the query string;
+  project-scoped or projectless paths, regional vs global location, `alt=sse` on
+  streams, and the `vertex-partner` OpenAI-compatible route.
+- **commandcode** — alpha generate route with a per-request `x-session-id` and
+  forced stream (the route has no non-streaming mode).
+- **minimax-code** — Mavis messages endpoint; spent balance reported as 402/403 is
+  reclassified to 429 so the account loop fails over instead of refreshing a token
+  that is still valid. A 403 that is a real auth refusal passes through untouched.
+- New optional `ErrorNormalizer` transport hook, applied to error responses only so
+  no completion stream is ever buffered.
+- Tests: HMAC vector, iFlow header set, usage injection on streams, MiMo dual route
+  and effort bridge, CodeBuddy envelope/marker stripping for both deployments,
+  Vertex raw-key URL and a real RS256 assertion verified against a generated key,
+  CommandCode forced stream, MiniMax quota reclassification and auth pass-through.
+
 # v0.1.0 (2026-11-22) — wave 19: the providers that were on the wrong contract
 
 ### Added — wave 19
