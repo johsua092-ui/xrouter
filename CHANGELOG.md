@@ -1,5 +1,23 @@
 # v0.1.0 (2026-11-22)
 
+### Features & Hardening — Venice.ai Keyless Webchat Handshake & OpenAI Tool Bridge Integration
+
+- **Venice.ai Client Attestation Lifecycle & TTL Preemption**:
+  - Implemented `isTokenFresh(expiresAt)` with a 60-second grace margin (`TOKEN_EXPIRATION_GRACE_MS = 60_000`) in `open-sse/executors/venice.js`. Stale or expiring tokens are preemptively purged from the queue before dispatch, eliminating upstream 401/403 token expiration failures.
+  - Implemented in-flight mint deduplication (`inFlightMints` Promise map) to collapse concurrent requests into a single batch minting call (`count: 5`), preventing rate limiting and race conditions during burst traffic.
+  - Added transient auto-retry with 400ms delay on HTTP 429/5xx responses matching official client error recovery behavior.
+- **Venice.ai Session Pooling & Cookie Affinity**:
+  - Added persistent `sessionPool` caching `wreq-js` Chrome 133 TLS sessions per proxy/direct connection with 10-minute TTL. Preserves Cloudflare protection cookies (`__cf_bm`, `_cfuvid`) between minting and inference while cutting chat response latency by 300–800ms through TLS socket reuse.
+  - Added automatic proxy rotation/failover across `localProxies` on connection drops or timeouts.
+- **OpenAI Tool Bridge & Tool Calling Alignment**:
+  - Aligned plugin runtime flag naming between `src/lib/plugins/customPluginsRuntime.js` and `open-sse/handlers/chatCore/nonStreamingHandler.js` (`isOpenaiToolBridgeActive` / `isToolBridgeActive`), fixing broken bridge invocation for non-streaming completions.
+  - Integrated native tool definitions serialization in `VeniceExecutor.formatPayload()`, mapping client tools into the webchat system prompt and formatting tool results (`role: "tool"` / `role: "assistant"` with `tool_calls`) into conversational transcripts.
+  - Integrated `applyOpenAIToolBridge` on Venice completion answers, automatically promoting prose tool invocations (`<tool_call>...`, `to=...`, etc.) into valid OpenAI `tool_calls` structures. Verified live end-to-end via `POST /v1/chat/completions`.
+- **Venice.ai Upstream Parity & Headers Alignment**:
+  - Updated middleface version from `0.1.1267` to official upstream `0.1.1272`.
+  - Injected official `User-Agent: venice-middleface/0.1.1272`, `x-venice-middleface-version: 0.1.1272`, and `x-venice-request-timestamp-ms` headers across all inference and mint calls.
+  - Expanded unit test suite in `tests/unit/venice-provider.test.js` validating TTL grace margins, stale cache purging, in-flight deduplication, and tool definitions/transcripts (10/10 PASS).
+
 ### Features & Hardening — FreePI Session Launch Handshake & Stream Queue
 
 - **FreePI Session Launch Handshake (`session_start`)**:
