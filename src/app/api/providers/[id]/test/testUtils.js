@@ -80,6 +80,53 @@ const OAUTH_TEST_CONFIG = {
     noAuth: true,
   },
   kiro: { checkExpiry: true, refreshable: true },
+  "aws-quick": {
+    // Probe Quick's data plane (entitlements qbs-event): validates the id_token,
+    // the tenant and the account in one call without spending agent-hours.
+    // Refresh is handled here (AWS rotates the refresh token every refresh);
+    // testSingleConnection persists newTokens.
+    checkExpiry: false,
+    refreshable: false,
+    customTest: async (connection) => {
+      const psd = connection.providerSpecificData || {};
+      const tenant = String(psd.tenantUrl || "").replace(/\/+$/, "");
+      const accountId = psd.awsAccountId || "";
+      if (!tenant || !accountId) return { valid: false, error: "Missing Quick tenant/account metadata" };
+      const probe = (token) => fetch(`${tenant}/integration/quick-work/qbs-event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          eventType: "getAvailableEntitlementUnits",
+          eventBody: { getAvailableEntitlementUnits: { awsAccountId: accountId } },
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      let res = await probe(connection.accessToken).catch(() => null);
+      let refreshed = false;
+      let newTokens = null;
+      if ((!res || res.status === 401 || res.status === 403) && connection.refreshToken) {
+        try {
+          const { refreshAwsQuickToken } = await import("open-sse/services/tokenRefresh/aws-quick.js");
+          const merged = await refreshAwsQuickToken(connection.refreshToken, psd, console);
+          if (merged?.accessToken) {
+            refreshed = true;
+            newTokens = {
+              accessToken: merged.accessToken,
+              idToken: merged.idToken,
+              refreshToken: merged.refreshToken || connection.refreshToken,
+              expiresIn: merged.expiresIn,
+            };
+            res = await probe(newTokens.accessToken).catch(() => null);
+          }
+        } catch { /* fall through to the original response's classification */ }
+      }
+      if (res && res.ok) return { valid: true, error: null, refreshed, newTokens };
+      if (res && (res.status === 401 || res.status === 403)) {
+        return { valid: false, error: "Token invalid or revoked", refreshed, newTokens };
+      }
+      return { valid: false, error: res ? `Quick API returned ${res.status}` : "Connection to Quick failed or timed out", refreshed, newTokens };
+    },
+  },
   qoder: {
     // Test by hitting Qoder's userinfo endpoint with the device token.
     // refreshable: false because the device-flow refresh endpoint returns
