@@ -1226,7 +1226,7 @@ export function startAwsQuickProxy() {
       // Reuse the live listener, but renew its idle timeout (zed pattern).
       if (awsQuickRuntime.timeout) clearTimeout(awsQuickRuntime.timeout);
       awsQuickRuntime.timeout = setTimeout(() => { console.log("[aws-quick oauth] timeout, stopping"); stopAwsQuickProxy(); }, AWS_QUICK_CONFIG.oauthTimeoutMs);
-      resolve({ success: true, port: awsQuickRuntime.port, callbackUrl: `http://127.0.0.1:${awsQuickRuntime.port}/` });
+      resolve({ success: true, port: awsQuickRuntime.port, callbackUrl: `http://127.0.0.1:${awsQuickRuntime.port}` });
       return;
     }
 
@@ -1356,7 +1356,7 @@ export function startAwsQuickProxy() {
       resolve({
         success: true,
         port: awsQuickRuntime.port,
-        callbackUrl: `http://127.0.0.1:${awsQuickRuntime.port}/`,
+        callbackUrl: `http://127.0.0.1:${awsQuickRuntime.port}`,
       });
     });
   });

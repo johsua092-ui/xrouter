@@ -151,12 +151,16 @@ export async function registerAwsQuickClient({ discovery, redirectUri, stage }) 
   const idcRegion = discovery?.idc_region || "us-east-1";
   assertValidAwsRegion(idcRegion);
   const scopes = AWS_QUICK_CONFIG.scopes[stage] || AWS_QUICK_CONFIG.scopes.prod;
+  // AWS OIDC rejects loopback redirect URIs that carry a path ("Requested
+  // client type must use loopback interface for redirect") — register the
+  // bare http://127.0.0.1:<port> form, exactly like the desktop client.
+  const bareRedirectUri = String(redirectUri || "").replace(/\/+$/, "");
   const client = await postJson(`https://oidc.${idcRegion}.amazonaws.com/client/register`, {
     clientName: AWS_QUICK_CONFIG.clientName,
     clientType: AWS_QUICK_CONFIG.clientType,
     scopes: [scopes],
     grantTypes: AWS_QUICK_CONFIG.grantTypes,
-    redirectUris: [redirectUri],
+    redirectUris: [bareRedirectUri],
     issuerUrl: discovery.issuer_url,
   });
   const clientId = client.clientId || client.client_id || "";
