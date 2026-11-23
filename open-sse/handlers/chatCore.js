@@ -78,7 +78,7 @@ export function stripContinuityFields(body) {
   return body;
 }
 
-export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, contextPruningEnabled, maxMessagesLimit, semanticCacheEnabled, semanticCacheTtlHours, semanticCacheMaxEntries, contextPruningLevel, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, kernelEnabled = false, kernelPrompt = "", pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, requestedModel, toolCallFallbackEnabled = true, providerOverrides }) {
+export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, contextPruningEnabled, maxMessagesLimit, semanticCacheEnabled, semanticCacheTtlHours, semanticCacheMaxEntries, contextPruningLevel, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, kernelEnabled = false, kernelPrompt = "", pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, requestedModel, toolCallFallbackEnabled = true, providerOverrides, signal: clientSignal = null }) {
   const { provider, model } = modelInfo;
   const requestStartTime = Date.now();
   const overhead = new OverheadTracker();
@@ -473,6 +473,12 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   log?.debug?.("REQUEST", `${provider.toUpperCase()} | ${model} | ${msgCount} msgs`);
 
   const streamController = createStreamController({
+    // The client's HTTP signal is bridged into the controller, so
+    // streamController.signal (handed to every executor.execute below) aborts on
+    // a hang-up as well as on a stream cancel. Without it a non-streaming turn,
+    // or an executor pre-pulling before its Response exists, kept running to
+    // completion while holding the per-connection turn mutex.
+    signal: clientSignal,
     onDisconnect: (reason) => {
       trackPendingRequest(trackedModel, provider, connectionId, false);
       if (onDisconnect) onDisconnect(reason);

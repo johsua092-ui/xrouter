@@ -135,8 +135,28 @@ function renderToolCalls(calls) {
     .join("\n");
 }
 
-const te = new TextEncoder();
-export const byteLen = (s) => te.encode(String(s ?? "")).length;
+// ---------------------------------------------------------------------------
+// Byte measurement without allocator churn.
+//
+// Lengths used to come from `new TextEncoder().encode(s).length`, which
+// allocates a full Uint8Array copy of the input on every call — and the
+// truncation paths called it inside binary searches and re-measured the same
+// block up to four times. Rendering one 150-message transcript with 200 KB
+// tool results cost ~8 000 encodes / ~150 MB of transient ArrayBuffers to emit
+// a 60 KB frame, and capText(1 MB → 16 KB) allocated 3.2 MB to produce 16 KB.
+//
+// Now: lengths come from Buffer.byteLength (a scan, no allocation), each block
+// is measured once, and cuts are found by scanning in small chunks — the scan
+// stops as soon as the budget is exceeded, so capping a 1 MB body to 16 KB
+// never touches the last ~98% of it. Cuts land on code point boundaries, so no
+// half surrogate pairs reach the wire.
+// ---------------------------------------------------------------------------
+
+/**
+ * UTF-8 byte length of `s`, without materialising the encoding.
+ * Counts like TextEncoder: a lone surrogate becomes U+FFFD (3 bytes).
+ */
+export const byteLen = (s) => Buffer.byteLength(String(s ?? ""), "utf8");
 
 /** user_message.text is hard-capped at 64 KB server-side; stay under it. */
 export const UPSTREAM_TEXT_LIMIT = 60 * 1024;
@@ -144,56 +164,125 @@ const SYSTEM_CAP = 24 * 1024;
 const USER_TURN_CAP = 20 * 1024;
 const TOOL_RESULT_CAP = 16 * 1024;
 const TRUNC_MARK = "\n…[truncated]";
+const TRUNC_MARK_BYTES = byteLen(TRUNC_MARK);
 
-function fitBytes(s, max) {
-  if (byteLen(s) <= max) return s;
-  let lo = 0,
-    hi = s.length;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (byteLen(s.slice(0, mid)) <= max) lo = mid;
-    else hi = mid - 1;
+// Scan granularity: big enough for Buffer.byteLength to run at C++ speed, small
+// enough that the transient slice stays a few KB.
+const SCAN_CHUNK = 4096;
+
+const isHighSurrogate = (c) => c >= 0xd800 && c <= 0xdbff;
+const isLowSurrogate = (c) => c >= 0xdc00 && c <= 0xdfff;
+
+/**
+ * Longest prefix of `s` within `max` UTF-8 bytes → {text, bytes}.
+ * Returns `s` itself (same reference) when it already fits.
+ * Scans whole chunks, then walks code points only inside the one chunk that
+ * straddles the budget — no binary search, no re-encoding.
+ */
+function fitPrefix(s, max) {
+  if (max <= 0) return { text: "", bytes: 0 };
+  const n = s.length;
+  let bytes = 0;
+  let i = 0;
+  while (i < n) {
+    let end = i + SCAN_CHUNK;
+    if (end >= n) end = n;
+    else if (isHighSurrogate(s.charCodeAt(end - 1))) end += 1; // never split a pair
+    const chunkBytes = Buffer.byteLength(s.slice(i, end), "utf8");
+    if (bytes + chunkBytes <= max) {
+      bytes += chunkBytes;
+      i = end;
+      continue;
+    }
+    // Budget runs out inside [i, end): step code point by code point.
+    while (i < end) {
+      const c = s.charCodeAt(i);
+      let cost;
+      let units = 1;
+      if (c < 0x80) cost = 1;
+      else if (c < 0x800) cost = 2;
+      else if (isHighSurrogate(c)) {
+        if (i + 1 < n && isLowSurrogate(s.charCodeAt(i + 1))) {
+          cost = 4;
+          units = 2;
+        } else cost = 3; // lone high surrogate → U+FFFD
+      } else cost = 3; // BMP 3-byte char, or lone low surrogate → U+FFFD
+      if (bytes + cost > max) return { text: s.slice(0, i), bytes };
+      bytes += cost;
+      i += units;
+    }
   }
-  return s.slice(0, lo);
+  return { text: s, bytes };
 }
 
 /** Truncate to a byte budget, appending a marker. */
 export function capText(s, maxBytes) {
   const str = String(s ?? "");
-  if (byteLen(str) <= maxBytes) return str;
-  const room = maxBytes - byteLen(TRUNC_MARK);
-  if (room <= 0) return fitBytes(str, maxBytes);
-  return fitBytes(str, room) + TRUNC_MARK;
+  const head = fitPrefix(str, maxBytes);
+  if (head.text === str) return str; // fits: unchanged, no marker, no encode
+  const room = maxBytes - TRUNC_MARK_BYTES;
+  if (room <= 0) return head.text;
+  return fitPrefix(str, room).text + TRUNC_MARK;
 }
 
 const STALE_TOOL_CAP = 2 * 1024;
 
-/** Longest suffix of `s` within `max` bytes. */
-function tailBytes(s, max) {
-  if (max <= 0) return "";
-  let lo = 0,
-    hi = s.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (byteLen(s.slice(mid)) <= max) hi = mid;
-    else lo = mid + 1;
+/** Longest suffix of `s` within `max` UTF-8 bytes → {text, bytes}. */
+function tailSuffix(s, max) {
+  if (max <= 0) return { text: "", bytes: 0 };
+  let bytes = 0;
+  let i = s.length;
+  while (i > 0) {
+    let start = i - SCAN_CHUNK;
+    if (start <= 0) start = 0;
+    else if (isHighSurrogate(s.charCodeAt(start - 1))) start -= 1; // never split a pair
+    const chunkBytes = Buffer.byteLength(s.slice(start, i), "utf8");
+    if (bytes + chunkBytes <= max) {
+      bytes += chunkBytes;
+      i = start;
+      continue;
+    }
+    // Budget runs out inside [start, i): walk back code point by code point.
+    let room = max - bytes;
+    let j = i;
+    while (j > start) {
+      const c = s.charCodeAt(j - 1);
+      let cost;
+      let k = j - 1;
+      if (c < 0x80) cost = 1;
+      else if (c < 0x800) cost = 2;
+      else if (isLowSurrogate(c) && k > start && isHighSurrogate(s.charCodeAt(k - 1))) {
+        cost = 4;
+        k -= 1;
+      } else cost = 3; // BMP 3-byte char, or lone surrogate → U+FFFD
+      if (cost > room) return { text: s.slice(j), bytes };
+      room -= cost;
+      bytes += cost;
+      j = k;
+    }
+    i = j;
   }
-  return s.slice(lo);
+  return { text: s, bytes };
 }
 
 /**
  * Shrink a tool result to `max` bytes keeping head + tail (file headers and
  * trailing errors both matter) and telling the model how to get the rest —
  * a silent cut makes it guess, a vanished result makes it re-run blindly.
+ * Returns {text, bytes} so the caller never has to measure the result again.
  */
-function shrinkTool(body, max) {
-  const total = byteLen(body);
-  if (total <= max) return body;
+function shrinkTool(body, max, total = byteLen(body)) {
+  if (total <= max) return { text: body, bytes: total };
   const mark = `\n…[${total}-byte result, middle omitted to fit Quick's frame — re-run the tool with a narrower range if you need it]…\n`;
-  const room = max - byteLen(mark);
-  if (room < 256) return `[${total}-byte result omitted to fit Quick's frame — re-run the tool if you need it]`;
-  const head = fitBytes(body, Math.floor((room * 2) / 3));
-  return head + mark + tailBytes(body, room - byteLen(head));
+  const markBytes = byteLen(mark);
+  const room = max - markBytes;
+  if (room < 256) {
+    const whole = `[${total}-byte result omitted to fit Quick's frame — re-run the tool if you need it]`;
+    return { text: whole, bytes: byteLen(whole) };
+  }
+  const head = fitPrefix(body, Math.floor((room * 2) / 3));
+  const tail = tailSuffix(body, room - head.bytes);
+  return { text: head.text + mark + tail.text, bytes: head.bytes + markBytes + tail.bytes };
 }
 
 const toolHead = (m) => `[tool_result ${[m.name, m.tool_call_id].filter(Boolean).join(" ")}]`;
@@ -206,26 +295,34 @@ const renderBlock = (b) => (b.tool ? `${b.head}\n${b.body}` : b.body);
  * split the remainder evenly), so parallel results all survive partially
  * instead of the oldest vanishing. Only if text alone overflows are the
  * oldest blocks dropped; the last block is never dropped.
+ *
+ * Every block carries its own byte length (`b.bytes`), measured once per
+ * render — the sort, the water-fill and the overflow loop all reuse it instead
+ * of re-encoding bodies. `b.headBytes` covers the tool_result header line.
  */
 function fitBlocks(blocks, maxBytes, cut) {
-  let avail = maxBytes - blocks.reduce((n, b) => n + 2 + (b.tool ? byteLen(b.head) + 1 : byteLen(b.body)), 0);
-  const tools = blocks
-    .filter((b) => b.tool)
-    .sort((a, b) => byteLen(a.body) - byteLen(b.body));
+  for (const b of blocks) if (b.bytes === undefined) b.bytes = byteLen(b.body);
+  let avail = maxBytes - blocks.reduce((n, b) => n + 2 + (b.tool ? b.headBytes + 1 : b.bytes), 0);
+  const tools = blocks.filter((b) => b.tool).sort((a, b) => a.bytes - b.bytes);
   let left = tools.length;
   for (const b of tools) {
     const share = Math.max(0, Math.floor(avail / left--));
-    if (byteLen(b.body) > share) {
-      b.body = shrinkTool(b.body, share);
+    if (b.bytes > share) {
+      const shrunk = shrinkTool(b.body, share, b.bytes);
+      b.body = shrunk.text;
+      b.bytes = shrunk.bytes;
       cut();
     }
-    avail -= byteLen(b.body);
+    avail -= b.bytes;
   }
   const out = blocks.map(renderBlock);
-  let used = out.reduce((n, s) => n + byteLen(s) + 2, 0);
+  // Rendered size is additive per part (header + "\n" + body), so it comes
+  // from the cached lengths instead of a fresh encode of each block.
+  const sizes = blocks.map((b) => (b.tool ? b.headBytes + 1 + b.bytes : b.bytes));
+  let used = sizes.reduce((n, x) => n + x + 2, 0);
   let dropped = 0;
   while (used > maxBytes && dropped < out.length - 1) {
-    used -= byteLen(out[dropped++]) + 2;
+    used -= sizes[dropped++] + 2;
     cut();
   }
   const kept = out.slice(dropped);
@@ -237,12 +334,17 @@ function fitBlocks(blocks, maxBytes, cut) {
 }
 
 function toolBlock(m, cap, cut) {
-  let body = textOf(m.content);
-  if (byteLen(body) > cap) {
-    body = shrinkTool(body, cap);
+  const text = textOf(m.content);
+  let body = text;
+  let bytes = byteLen(text);
+  if (bytes > cap) {
+    const shrunk = shrinkTool(text, cap, bytes);
+    body = shrunk.text;
+    bytes = shrunk.bytes;
     cut();
   }
-  return { tool: true, head: toolHead(m), body };
+  const head = toolHead(m);
+  return { tool: true, head, headBytes: byteLen(head), body, bytes };
 }
 
 /** One transcript line for a non-tool message in the rendered history. */

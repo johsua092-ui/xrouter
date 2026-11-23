@@ -543,6 +543,10 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       credentials: refreshedCredentials,
       log,
       clientRawRequest,
+      // Client hang-up must abort the upstream turn (non-streaming too, where
+      // there is no stream to cancel). `request` is null on the worker/internal
+      // path, which simply has no client signal to bridge.
+      signal: request?.signal,
       connectionId: credentials.connectionId,
       userAgent,
       apiKey,
