@@ -1,5 +1,18 @@
 # v0.1.0 (2026-11-22)
 
+### Bug Fix — Antigravity 429 That Is a Prompt Refusal, Not Quota
+
+- **A bare `RESOURCE_EXHAUSTED` (generic message, no `details`) from Antigravity is a refusal of the request body, not a quota signal.** It repeats for the same body on every attempt while real quota errors carry `quotaResetTimeStamp` / `RetryInfo`. Until now that response armed a 2-minute account cooldown, locked `modelLock_<model>`, and surfaced as `503 … use another provider`, so a chat whose system prompt carried known third-party agent text could never succeed no matter how much quota was left.
+- New `open-sse/executors/antigravityPromptGuard.js`:
+  - `isAntigravityPromptRejection(status, bodyText)` — true only for a 429 whose body is the bare message with no `details`; real quota 429s and non-429s are untouched.
+  - `moveSystemInstructionToContents(body)` — moves `systemInstruction` parts into the front of the first user turn. Antigravity fingerprints `systemInstruction` only, so the same text sent in a user turn passes; this converts a new, unlisted fingerprint into one extra round trip instead of a permanent failure.
+  - `readBodyOnce(response)` — shares a single body read between the retry hook, the rejection check and `parseError`, including `proxyAwareFetch`'s DNS-bypass responses that have no `clone()` and drain on `text()`.
+  - `ANTIGRAVITY_PROMPT_REJECTED_MESSAGE` — the explanation shown when even the moved retry is refused.
+- `open-sse/executors/antigravity.js`: after the direct HTTP dispatch, one retry with the moved body when the response is a prompt rejection (image models skipped — they never send `systemInstruction`); `parseError` reports a prompt rejection as a **400** with no `resetsAtMs`, so no cooldown is armed and combos advance instead of hammering a healthy account; `computeRetryDelay` vetoes retries for the bare body since the same body is refused identically.
+- `open-sse/config/appConstants.js`: `ANTIGRAVITY_PROMPT_REWRITES` now rewords instead of deleting — the Hermes identity/`Be direct` lines, `skill_view(name='hermes-agent')` and the docs URL are preserved; adds the `Claude Code` identity lines, `x-anthropic-billing-header`, the `pasted_content` sentence, the dual-use security sentence, the OpenClaw identity and the `opencode` rename. Deleting the line also deleted identifiers the model was supposed to receive.
+- **Regression suite** `tests/unit/antigravity-prompt-rejection.test.js` (18 cases): classifier matrix, drained-body single read, system→user move, retry veto for the bare body with backoff still applied to empty 429s, 400 mapping with no `resetsAtMs`, real quota 429 left as 429, and rewrite coverage for Hermes/Claude Code/OpenClaw/billing header/dual-use. 18/18 PASS.
+- Smoke: live gateway on the pre-patch build answered the Claude Code identity prompt with `[429] Resource has been exhausted … use another provider` (HTTP 503). End-to-end 200 after the patch could not be captured from this host: `generateContent` now returns `403 UNSUPPORTED_LOCATION` for the linked account from this VPS region (verified directly against `cloudcode-pa.googleapis.com`), so the account is geo-blocked here regardless of prompt.
+
 ### Features & Hardening — Venice.ai Keyless Webchat Handshake & OpenAI Tool Bridge Integration
 
 - **Venice.ai Client Attestation Lifecycle & TTL Preemption**:
@@ -42,6 +55,28 @@
   - Added comprehensive test suite `tests/unit/antigravity-direct-http-safe-recipe.test.mjs` (4/4 PASS).
 
 # v0.1.0 (2026-11-21)
+
+### Bug Fixes — Refresh Storm From Connections Without a `refreshToken`
+
+- **An OAuth connection with an empty/missing `refreshToken` entered the refresh pipeline anyway, on every request and every scheduler tick**, in `src/sse/services/tokenRefresh.js` and `open-sse/services/oauthCredentialManager.js`. Such a connection can never refresh successfully, so each attempt burned an upstream call path, a lock, and a log line while the token stayed dead — and with many empty connections the loop had no spacing or batch cap, which is where the intermittent X Router slowness came from.
+  - `canRefreshCredentials(provider, credentials)` is now the single gate. It requires a non-empty string `refreshToken`, with an explicit allowlist for providers whose refresh flow does not use one (`vertex`, `vertex-partner`, `zed`).
+  - `checkAndRefreshToken()` consults the gate **before** `shouldRefreshCredentials()` and skips without touching upstream. `force: true` no longer bypasses an active cooldown, so background sweeps cannot hammer a dead connection either.
+  - `refreshProviderCredentials()` returns `null` up front for non-refreshable credentials, protecting every other caller (models catalog, usage probes, provider probes).
+- **Added a per-connection refresh cooldown** (`markRefreshCooldown` / `getRefreshCooldown` / `clearRefreshCooldown`): a connection that cannot refresh is parked for `REFRESH_NO_TOKEN_COOLDOWN_MS` (default 10 min) and a connection whose refresh failed is parked for `REFRESH_FAIL_COOLDOWN_MS` (default 30 s). A successful refresh clears the entry. The map is bounded by `REFRESH_MAX_COOLDOWN_ENTRIES` (500) with expired-first pruning.
+- **Bounded the background sweep**: `backgroundTokenRefresh` now filters out connections on cooldown and processes at most `REFRESH_MAX_PER_TICK` (default 25) per tick, deferring the rest to the next tick instead of firing a full burst after downtime.
+- Tunables live in `REFRESH_GUARD_CONFIG` (`open-sse/config/runtimeConfig.js`) — no magic numbers at the call sites.
+- **Added regression suite** `tests/unit/refresh-guard.test.js` (13 cases): empty/missing token rejected, allowlisted providers pass, cooldown hit/expiry/clear, `force` cannot bypass cooldown, scheduler skips empty connections entirely and honours the per-tick cap. 13/13 PASS. Full `unit/` delta measured in a clean worktree: **317 failed / 2853 passed** with the patch vs **317 failed / 2840 passed** at HEAD — no new failures, 13 new passes.
+
+### Features & Hardening — Antigravity Direct HTTP Native Safe Architecture
+
+- **Antigravity Direct HTTP Safe Recipe & Native TLS Impersonation**:
+  - Implemented `open-sse/services/antigravityTlsClient.js` delivering Chrome 133 BoringSSL TLS 1.3 ClientHello with GREASE extension and Google cipher suite via `wreq-js`, matching official desktop Antigravity IDE and `language_server.exe` native fingerprints.
+  - Added connection proxy support and LRU TLS session caching (`MAX_TLS_SESSIONS = 32`) to prevent native memory leaks while providing graceful fail-open resilience to native `fetch`.
+  - Injected official `Client-Metadata` headers (`ideType: "ANTIGRAVITY"`, `ideName: "antigravity"`, `pluginType: "GEMINI"`, `ideVersion: "2.32.1"`), canonical `x-goog-user-project: aicode-consumers`, and `x-request-source: local` into `buildHeaders()` in `open-sse/executors/antigravity.js`.
+  - Enforced canonical `project: "aicode-consumers"`, native `requestId` format, and stripped `requestType: "agent"` on chat path in `transformRequest` to prevent Google edge fake 429 RESOURCE_EXHAUSTED.
+  - Implemented proactive quota monitoring engine `open-sse/services/antigravityQuotaMonitor.js` querying `v1internal:retrieveUserQuotaSummary` with 120s TTL caching; automatically skips connections with remaining quota `<= 2%` before hitting Google rate limits to protect accounts from abuse flags.
+  - Fixed leftover internal staging domain `daily-cloudcode-pa.googleapis.com` to production `cloudcode-pa.googleapis.com` in `src/lib/usage/antigravityTier.js`.
+  - Added comprehensive test suite `tests/unit/antigravity-direct-http-safe-recipe.test.mjs` (4/4 PASS).
 
 ### Bug Fixes — False "Cross-origin request blocked" Behind Tunnels / Reverse Proxies
 

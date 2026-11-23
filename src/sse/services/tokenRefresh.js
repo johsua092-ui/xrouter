@@ -26,6 +26,10 @@ import {
 import {
   refreshProviderCredentials as _refreshProviderCredentials,
   shouldRefreshCredentials as _shouldRefreshCredentials,
+  canRefreshCredentials as _canRefreshCredentials,
+  getRefreshCooldown as _getRefreshCooldown,
+  markRefreshCooldown as _markRefreshCooldown,
+  clearRefreshCooldown as _clearRefreshCooldown,
 } from "open-sse/services/oauthCredentialManager.js";
 
 export const TOKEN_EXPIRY_BUFFER_MS = BUFFER_MS;
@@ -240,36 +244,68 @@ export async function checkAndRefreshToken(provider, credentials, options = {}) 
     const remaining = expiresAt ? expiresAt - Date.now() : null;
     const refreshLead = _getRefreshLeadMs(provider);
 
-    log.info("TOKEN_REFRESH", "Refreshing provider credentials proactively", {
-      provider,
-      expiresIn: remaining === null ? null : Math.round(remaining / 1000),
-      refreshLeadMs: refreshLead,
-      lastRefreshAt: creds.lastRefreshAt || null,
-    });
+    // A connection with no refreshToken can never be refreshed. Skip it instead of
+    // spending an upstream round-trip (and a log line) on every request / every tick.
+    if (!_canRefreshCredentials(provider, creds)) {
+      _markRefreshCooldown(provider, creds, "no_refresh_token");
+      log.debug("TOKEN_REFRESH", "Refresh skipped: connection has no refreshToken", {
+        provider,
+        connectionId: creds.connectionId || null,
+        forced: force,
+      });
+    } else {
+      const cooldownMs = _getRefreshCooldown(provider, creds);
 
-    const newCreds = await _refreshProviderCredentials(provider, creds, log);
-    if (newCreds?.accessToken || newCreds?.apiKey || newCreds?.copilotToken) {
-      const mergedCreds = {
-        ...newCreds,
-        existingProviderSpecificData: creds.providerSpecificData,
-      };
+      if (cooldownMs > 0) {
+        log.debug("TOKEN_REFRESH", "Refresh skipped: cooldown active", {
+          provider,
+          connectionId: creds.connectionId || null,
+          cooldownMs,
+        });
+      } else {
+        log.info("TOKEN_REFRESH", "Refreshing provider credentials proactively", {
+          provider,
+          expiresIn: remaining === null ? null : Math.round(remaining / 1000),
+          refreshLeadMs: refreshLead,
+          lastRefreshAt: creds.lastRefreshAt || null,
+        });
 
-      // Persist to DB (non-blocking path continues below)
-      await updateProviderCredentials(creds.connectionId, mergedCreds);
+        const newCreds = await _refreshProviderCredentials(provider, creds, log);
+        if (newCreds?.accessToken || newCreds?.apiKey || newCreds?.copilotToken) {
+          _clearRefreshCooldown(provider, creds);
 
-      creds = {
-        ...creds,
-        ...newCreds,
-        expiresAt: newCreds.expiresIn
-          ? toExpiresAt(newCreds.expiresIn)
-          : normalizeExpiresAt(newCreds.expiresAt) || newCreds.expiresAt || creds.expiresAt,
-        providerSpecificData: newCreds.providerSpecificData
-          ? { ...creds.providerSpecificData, ...newCreds.providerSpecificData }
-          : creds.providerSpecificData,
-      };
+          const mergedCreds = {
+            ...newCreds,
+            existingProviderSpecificData: creds.providerSpecificData,
+          };
 
-      // Non-blocking: refresh projectId with the new access token
-      _refreshProjectId(provider, creds.connectionId, creds.accessToken);
+          // Persist to DB (non-blocking path continues below)
+          await updateProviderCredentials(creds.connectionId, mergedCreds);
+
+          creds = {
+            ...creds,
+            ...newCreds,
+            expiresAt: newCreds.expiresIn
+              ? toExpiresAt(newCreds.expiresIn)
+              : normalizeExpiresAt(newCreds.expiresAt) || newCreds.expiresAt || creds.expiresAt,
+            providerSpecificData: newCreds.providerSpecificData
+              ? { ...creds.providerSpecificData, ...newCreds.providerSpecificData }
+              : creds.providerSpecificData,
+          };
+
+          // Non-blocking: refresh projectId with the new access token
+          _refreshProjectId(provider, creds.connectionId, creds.accessToken);
+        } else {
+          // Nothing usable came back — back off so this account is not hammered again
+          // on the next request or the next scheduler tick.
+          const appliedMs = _markRefreshCooldown(provider, creds, "refresh_failed");
+          log.warn("TOKEN_REFRESH", "Refresh produced no usable credentials; backing off", {
+            provider,
+            connectionId: creds.connectionId || null,
+            cooldownMs: appliedMs,
+          });
+        }
+      }
     }
   }
 

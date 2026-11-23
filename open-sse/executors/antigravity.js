@@ -12,6 +12,20 @@ import { cloakUser, outgoing } from "../services/antigravityPromptCloak.js";
 import { executeViaAgyCli, resolveAgyTransport } from "./agyCliExecutor.js";
 import { refusedPromptHint } from "./antigravityUpstreamError.js";
 import { decide429, classify429 } from "../services/antigravity429Engine.js";
+import {
+  ANTIGRAVITY_PROMPT_REJECTED_MESSAGE,
+  isAntigravityPromptRejection,
+  moveSystemInstructionToContents,
+  readBodyOnce,
+} from "./antigravityPromptGuard.js";
+
+// Re-exported so tests and callers have one entry point for the whole guard.
+export {
+  ANTIGRAVITY_PROMPT_REJECTED_MESSAGE,
+  isAntigravityPromptRejection,
+  moveSystemInstructionToContents,
+  readBodyOnce,
+};
 import { ANTIGRAVITY_IDE_VERSION, ANTIGRAVITY_IDE_USER_AGENT } from "../providers/shared.js";
 import { antigravityTlsFetch } from "../services/antigravityTlsClient.js";
 import { isAntigravityQuotaDrained } from "../services/antigravityQuotaMonitor.js";
@@ -289,6 +303,13 @@ export class AntigravityExecutor extends BaseExecutor {
           code: "PERMISSION_DENIED",
         };
       }
+    }
+
+    // Request-scoped rejection (bare 429, no quota detail): report it as a client-visible 400 so no
+    // account cooldown is armed and combos advance to their next model instead of hammering a
+    // healthy account with the same refused prompt.
+    if (isAntigravityPromptRejection(response.status, bodyText)) {
+      return { status: HTTP_STATUS.BAD_REQUEST, message: ANTIGRAVITY_PROMPT_REJECTED_MESSAGE };
     }
 
     if ((response.status === 429 || response.status === 409) && bodyText) {
@@ -651,11 +672,32 @@ export class AntigravityExecutor extends BaseExecutor {
     }
 
     // Direct HTTP path — Safe Recipe: BoringSSL TLS Impersonation via wreq-js
-    return super.execute({
-      ...input,
+    const dispatch = (payload) => super.execute({
+      ...payload,
       directFetch: antigravityTlsFetch,
       directFetchProxy: true,
     });
+
+    let result = await dispatch(input);
+
+    // A prompt rejection means systemInstruction carries text Google fingerprints that
+    // ANTIGRAVITY_PROMPT_REWRITES does not cover yet. Antigravity only inspects
+    // systemInstruction, so retry once with that text moved into the first user turn: a new
+    // fingerprint then costs one extra round trip instead of failing every request. Image
+    // requests never send systemInstruction, so there is nothing to move for them.
+    if (result?.response?.status === HTTP_STATUS.RATE_LIMITED && !isImageModel(input.model)) {
+      const moved = moveSystemInstructionToContents(input.body);
+      if (moved && isAntigravityPromptRejection(result.response.status, await readBodyOnce(result.response))) {
+        (input.log?.warn || input.log?.info || (() => {})).call(
+          input.log,
+          "ANTIGRAVITY",
+          "System prompt rejected (fingerprinted third-party text not in ANTIGRAVITY_PROMPT_REWRITES); retrying with it in the first user turn"
+        );
+        result = await dispatch({ ...input, body: moved });
+      }
+    }
+
+    return result;
   }
 
   async refreshCredentials(credentials, log, proxyOptions = null) {
@@ -781,6 +823,9 @@ export class AntigravityExecutor extends BaseExecutor {
       retryMs = this.parseRetryFromErrorMessage(errorMessage);
     }
     if (retryMs) return retryMs <= MAX_RETRY_AFTER_MS ? retryMs : false;
+
+    // The same body is refused the same way every time — retries only add backoff delay.
+    if (isAntigravityPromptRejection(response.status, bodyText)) return false;
 
     if (!this.isTransientAntigravityError(response.status, errorMessage)) return false;
 
