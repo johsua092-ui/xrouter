@@ -22,6 +22,7 @@ import { FORMATS } from "../translator/formats.js";
 import { SSE_HEADERS, SSE_DONE } from "../utils/sseConstants.js";
 import { QuickSocket, QuickWsError, acquireTurn, getSharedSocket } from "./awsQuick/protocol.js";
 import { normalizeTools, buildToolPreamble, createToolCallParser } from "./awsQuick/tools.js";
+import { createQuickMarkupFilter } from "./awsQuick/markup.js";
 import {
   modeFor,
   effortFor,
@@ -294,6 +295,9 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
   // `let`: a retry starts a brand-new turn, so a partially-consumed <tool_call>
   // from the failed attempt must not corrupt it.
   let parser = tools.length ? createToolCallParser() : null;
+  // Quick app-only widgets (<decision>/<option>/<artifact>/<sources>) do not
+  // render outside the app: rewrite them to Markdown before tool parsing.
+  let markup = createQuickMarkupFilter();
   let fedText = false;
   let sawOutput = false;
 
@@ -305,7 +309,13 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
     user_locale: (Intl.DateTimeFormat().resolvedOptions().locale || "en-US").replace("_", "-"),
   };
   if (effort) payload.thinking_effort = effort;
-  if (systemPrompt) payload.system_prompt = systemPrompt;
+  // Quick's built-in prompt asks for app-only widgets (<decision>/<option>,
+  // <artifact>, <sources>); external clients cannot render them. Ask for plain
+  // Markdown and keep the markup filter as the safety net.
+  const plainMarkdownNote =
+    "Reply in plain Markdown only. Do not emit <decision>, <option>, <artifact> or <sources> blocks; " +
+    "present choices as a Markdown bullet list instead.";
+  if (systemPrompt) payload.system_prompt = systemPrompt + "\n\n" + plainMarkdownNote;
   if (customPrompt) payload.custom_prompt = customPrompt;
   // Client-supplied tools own the tool loop; keep Quick's web search out of it.
   if (tools.length) payload.web_search_enabled = false;
@@ -333,8 +343,11 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
       const p = evt.payload || {};
       if (t === "text_delta" && typeof p.delta === "string") {
         fedText = true;
-        const r = parser ? parser.push(p.delta) : { text: p.delta, calls: [] };
-        yield* emitParsed(r);
+        const clean = markup.push(p.delta);
+        if (clean) {
+          const r = parser ? parser.push(clean) : { text: clean, calls: [] };
+          yield* emitParsed(r);
+        }
       } else if (t === "thinking_delta" && typeof p.delta === "string") {
         sawOutput = true;
         state.reasoning += p.delta;
@@ -349,8 +362,11 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
         // Fallback: deltas can be dropped; the complete payload carries full text.
         // Only when NO delta arrived — parser buffer would double-count otherwise.
         if (!fedText && typeof p.text === "string" && p.text) {
-          const r = parser ? parser.push(p.text) : { text: p.text, calls: [] };
-          yield* emitParsed(r);
+          const clean = markup.push(p.text);
+          if (clean) {
+            const r = parser ? parser.push(clean) : { text: clean, calls: [] };
+            yield* emitParsed(r);
+          }
         }
       } else if (t === "message_start" || t === "connected" || t === "session_established" || t === "keepalive") {
         // noise
@@ -368,6 +384,11 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
       // tool_start/tool_arguments/tool_progress/tool_result, runs_updated,
       // task_list_update, title_generated, session_sync … are agent-internal;
       // Quick executes its own tools, so they don't map to OpenAI tool_calls.
+    }
+    const heldMarkup = markup.end();
+    if (heldMarkup) {
+      const r = parser ? parser.push(heldMarkup) : { text: heldMarkup, calls: [] };
+      yield* emitParsed(r);
     }
     if (parser) {
       const tail = parser.end();
@@ -409,6 +430,7 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
       fedText = false;
       sawOutput = false;
       parser = tools.length ? createToolCallParser() : null;
+      markup = createQuickMarkupFilter();
       threadId = fresh;
       reused = false;
       yield { type: "meta", threadId: fresh, reused: false, mode };
