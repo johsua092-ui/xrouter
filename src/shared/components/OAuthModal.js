@@ -12,7 +12,10 @@ import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 // /api/oauth/xiaomi-mimo/login/*), surfaced by XiaomiMimoAuthModal. Adding it
 // here routed the flow through /register-session, which only implements
 // trae/windsurf/zed and rejected the request outright.
-const PROXY_OAUTH_PROVIDERS = new Set(["trae", "windsurf", "zed"]);
+// aws-quick: two-hop loopback flow (discovery → OIDC authorize); the proxy
+// handles both hops, plus a paste-back fallback for browsers that can't reach
+// this machine's 127.0.0.1 callback (see submitAwsQuickPaste below).
+const PROXY_OAUTH_PROVIDERS = new Set(["trae", "windsurf", "zed", "aws-quick"]);
 
 // Providers offering a paste-token fallback (import-token flow).
 // UX warns if the IDE (which issues the token) is not installed.
@@ -52,6 +55,10 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
   const [authMode, setAuthMode] = useState("browser"); // "browser" | "paste-token"
   const [pasteToken, setPasteToken] = useState("");
   const [ideStatus, setIdeStatus] = useState(null);
+  // aws-quick paste-back fallback: the browser's final address (hop-1
+  // discovery URL, or the final /?code&state URL) from a browser that can't
+  // reach this machine's 127.0.0.1 callback.
+  const [awsQuickPasteUrl, setAwsQuickPasteUrl] = useState("");
   const popupRef = useRef(null);
   const pollingAbortRef = useRef(false);
   const openedRef = useRef(false);
@@ -268,6 +275,68 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     popupRef.current = window.open(authData.authUrl, "oauth_popup", "width=600,height=700");
     if (!popupRef.current) setStep("input"); // popup blocked → fall back to manual paste
   }, [stopOwnedProxy]);
+
+  // aws-quick: finish from the settled session (POST /exchange reads the
+  // server-side result and creates the connection).
+  const completeAwsQuickExchange = useCallback(async (state) => {
+    try {
+      const res = await fetch("/api/oauth/aws-quick/exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setStep("success");
+      onSuccessRef.current?.();
+    } catch (err) {
+      setError(err.message);
+      setStep("error");
+    }
+  }, []);
+
+  // aws-quick paste-back (two attempts, magpie semantics): the pasted address is
+  // either the hop-1 /callback?... discovery URL — the server saves the
+  // discovery fields and we re-authorize straight to the OIDC authorize URL —
+  // or the final /?code&state URL, which completes the exchange.
+  const submitAwsQuickPaste = useCallback(async (pasted) => {
+    try {
+      setError(null);
+      const res = await fetch("/api/oauth/aws-quick/paste", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: pasted }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      if (data.status === "discovery-saved") {
+        // Attempt 2: reuse the session (state) — /authorize now skips the
+        // discovery hop and returns the OIDC authorize URL.
+        if (!authData?.redirectUri) throw new Error("Login session expired; restart the login flow");
+        const authUrl = new URL("/api/oauth/aws-quick/authorize", window.location.origin);
+        authUrl.searchParams.set("redirect_uri", authData.redirectUri);
+        authUrl.searchParams.set("state", data.state);
+        const authRes = await fetch(authUrl.toString());
+        const newAuth = await authRes.json();
+        if (!authRes.ok) throw new Error(newAuth.error);
+        setAuthData((prev) => ({ ...(prev || {}), ...newAuth, proxyProvider: "aws-quick" }));
+        callbackProcessedRef.current = false;
+        setError(null);
+        setStep("waiting");
+        popupRef.current = window.open(newAuth.authorizeUrl, "oauth_popup", "width=600,height=700");
+        if (!popupRef.current) setStep("input"); // popup blocked → paste the final URL next
+        return;
+      }
+      if (data.status === "done") {
+        await completeAwsQuickExchange(data.state);
+        return;
+      }
+      throw new Error(data.error || "Unexpected paste-back result");
+    } catch (err) {
+      setError(err.message);
+      setStep("error");
+    }
+  }, [authData, completeAwsQuickExchange]);
 
   // Start OAuth flow (plain function by design: it is only invoked from the
   // open effect via ref and from user actions, so memoization would only add
@@ -512,6 +581,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     setPolling(false);
     setAuthMode("browser");
     setPasteToken("");
+    setAwsQuickPasteUrl("");
     setIdeStatus(null);
     pollingAbortRef.current = false;
     flowRef.current = { proxyStarted: false, proxyProvider: null, stopSent: false };
@@ -692,6 +762,14 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
 
       const input = callbackUrl.trim();
 
+      // aws-quick paste-back: the input is the browser's final address (either
+      // the hop-1 /callback?... discovery URL or the final /?code&state URL) —
+      // handled by /paste, not the generic callback-URL exchange.
+      if (provider === "aws-quick" && input) {
+        await submitAwsQuickPaste(input);
+        return;
+      }
+
       // Trae/Windsurf/Zed proxy flow fallback (popup blocked): paste the full callback URL
       if (PROXY_OAUTH_PROVIDERS.has(provider) && input) {
         const res = await fetch(`/api/oauth/${provider}/exchange`, {
@@ -827,6 +905,35 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
                   </div>
                 )}
               </>
+            )}
+
+            {/* aws-quick paste-back: for a browser that cannot reach this
+                machine's 127.0.0.1 callback (e.g. remote host), paste the
+                browser's address bar URL after sign-in. Two attempts: the
+                hop-1 discovery URL first, then the final code URL. */}
+            {provider === "aws-quick" && authMode === "browser" && (step === "waiting" || step === "input") && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 my-1">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-text-muted uppercase tracking-wider">Or paste the final URL</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <p className="text-xs text-text-muted">
+                  If the browser that signed in can't reach this machine's localhost callback, paste its address-bar URL
+                  after sign-in. If it's the quick.aws.com callback URL (with a nonce), the login retries automatically —
+                  then paste the final localhost URL (with the code) to finish.
+                </p>
+                <Input
+                  value={awsQuickPasteUrl}
+                  onChange={(e) => setAwsQuickPasteUrl(e.target.value)}
+                  placeholder="http://127.0.0.1:.../?code=...&state=... or /callback?nonce=..."
+                  className="font-mono text-xs"
+                />
+                <div className="flex gap-2">
+                  <Button onClick={() => submitAwsQuickPaste(awsQuickPasteUrl)} fullWidth disabled={!awsQuickPasteUrl}>Connect</Button>
+                  <Button onClick={handleClose} variant="ghost" fullWidth>Cancel</Button>
+                </div>
+              </div>
             )}
 
             {authMode === "paste-token" && PASTE_TOKEN_PROVIDERS[provider] && (
