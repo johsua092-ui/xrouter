@@ -272,7 +272,8 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     // 4. Open popup; proxy auto-exchanges on callback, modal polls poll-status.
     setAuthData({ ...authData, proxyProvider: providerId });
     setStep("waiting");
-    popupRef.current = window.open(authData.authUrl, "oauth_popup", "width=600,height=700");
+    const openUrl = authData.authUrl || authData.authorizeUrl;
+    popupRef.current = openUrl ? window.open(openUrl, "oauth_popup", "width=600,height=700") : null;
     if (!popupRef.current) setStep("input"); // popup blocked → fall back to manual paste
   }, [stopOwnedProxy]);
 
@@ -323,7 +324,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         callbackProcessedRef.current = false;
         setError(null);
         setStep("waiting");
-        popupRef.current = window.open(newAuth.authorizeUrl, "oauth_popup", "width=600,height=700");
+        popupRef.current = window.open(newAuth.authorizeUrl || newAuth.authUrl, "oauth_popup", "width=600,height=700");
         if (!popupRef.current) setStep("input"); // popup blocked → paste the final URL next
         return;
       }
@@ -882,9 +883,23 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
             {authMode === "browser" && (
               <>
                 {step === "waiting" && (
-                  <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
-                    <span className="material-symbols-outlined text-base text-primary animate-spin">progress_activity</span>
-                    <span className="text-sm">Waiting for browser authorization…</span>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
+                      <span className="material-symbols-outlined text-base text-primary animate-spin">progress_activity</span>
+                      <span className="text-sm">Waiting for browser authorization…</span>
+                    </div>
+                    {provider === "aws-quick" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const u = authData?.authUrl || authData?.authorizeUrl;
+                          if (u) window.open(u, "_blank", "noopener,noreferrer");
+                        }}
+                        className="w-full text-xs text-text-muted hover:text-primary underline"
+                      >
+                        Popup blank or blocked? Open the sign-in page manually
+                      </button>
+                    )}
                   </div>
                 )}
                 {step === "input" && (

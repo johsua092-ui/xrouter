@@ -1113,16 +1113,20 @@ export async function resolveAwsQuickAuthorizeUrl({ state, redirectUri, stage, a
     session.clientId = client.clientId;
     session.clientSecret = client.clientSecret;
     session.discovery.idc_region = client.idcRegion;
+    const authorizeUrl = buildAwsQuickAuthorizeUrl({
+      clientId: client.clientId,
+      redirectUri: session.redirectUri,
+      state,
+      codeChallenge: session.challenge,
+      idcRegion: client.idcRegion,
+      stage: stage_,
+    });
     return {
       state,
-      authorizeUrl: buildAwsQuickAuthorizeUrl({
-        clientId: client.clientId,
-        redirectUri: session.redirectUri,
-        state,
-        codeChallenge: session.challenge,
-        idcRegion: client.idcRegion,
-        stage: stage_,
-      }),
+      // authUrl mirrors authorizeUrl: the shared proxy-flow modal opens
+      // authData.authUrl, the aws-quick paste-retry path reads authorizeUrl.
+      authUrl: authorizeUrl,
+      authorizeUrl,
       redirectUri: session.redirectUri,
       codeVerifier: null, // PKCE verifier stays server-side (session-scoped)
       flowType: "authorization_code",
@@ -1130,9 +1134,11 @@ export async function resolveAwsQuickAuthorizeUrl({ state, redirectUri, stage, a
     };
   }
 
+  const authorizeUrl = buildAwsQuickSigninUrl({ port, nonce: session.nonce, appVersion: appVersion || session.appVersion, stage: stage_ });
   return {
     state,
-    authorizeUrl: buildAwsQuickSigninUrl({ port, nonce: session.nonce, appVersion: appVersion || session.appVersion, stage: stage_ }),
+    authUrl: authorizeUrl, // shared proxy-flow modal opens authData.authUrl
+    authorizeUrl,
     redirectUri: session.redirectUri,
     codeVerifier: null,
     flowType: "authorization_code",
