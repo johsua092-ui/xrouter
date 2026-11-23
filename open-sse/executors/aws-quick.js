@@ -77,6 +77,7 @@ function errorResponse(status, message, type = "api_error") {
 
 function errorType(err) {
   if (err?.kind === "auth") return "authentication_error";
+  if (err?.kind === "guardrail") return "invalid_request_error";
   if (err?.status === 429 || err?.kind === "quota") return "rate_limit_error";
   if (String(err?.code || "").match(/limitexceeded|throttl/i)) return "rate_limit_error";
   return "api_error";
@@ -85,6 +86,9 @@ function errorType(err) {
 function httpStatus(err) {
   if (err instanceof QuickWsError || err?.kind) {
     if (err.kind === "auth") return 401;
+    // 400 keeps a content-filter refusal request-scoped: checkFallbackError hands
+    // 4xx (non-401/402/403/429) back to the caller without cooling the account.
+    if (err.kind === "guardrail") return 400;
     if (err.kind === "quota") return 429;
     if (err.kind === "abort") return 499;
     if (err.kind === "timeout") return 503;
@@ -387,7 +391,12 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
         const detail = p.message || p.reason || p.error || evt.message || evt.reason || evt.error || evt.code;
         const extra = detail ? "" : ` ${JSON.stringify(evt).slice(0, 400)}`;
         const quota = String(evt.code || "").match(/limitexceeded|throttl|toomanyrequests/i);
-        throw new QuickWsError(`${detail || `quick ${t}`}${extra}`, { kind: quota ? "quota" : "stream", code: evt.code });
+        // Quick's own guardrail/content filter is a verdict on THIS request, not a
+        // broken account: 502 made chatCore lock the model for 30 s and rotate to
+        // the next account, so one refusal cascaded through the whole pool.
+        const guardrail = /content filter|guardrail|blocked this reply|safety/i.test(String(detail || ""));
+        const kind = quota ? "quota" : guardrail ? "guardrail" : "stream";
+        throw new QuickWsError(`${detail || `quick ${t}`}${extra}`, { kind, code: evt.code });
       }
       // tool_start/tool_arguments/tool_progress/tool_result, runs_updated,
       // task_list_update, title_generated, session_sync … are agent-internal;
