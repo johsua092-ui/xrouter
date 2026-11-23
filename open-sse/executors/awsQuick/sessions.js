@@ -134,12 +134,27 @@ export function createSessionStore({ ttlMs = SESSION_DEFAULTS.ttlMs, max = SESSI
 const storeHolder = (globalThis.__awsQuickSessionStores ||= new Map());
 const DEFAULT_SHARD = "default";
 
+// Every distinct account ever served used to keep its shard forever (an empty
+// store still holds its Map, and 200 threads hold ~750 B each). Cap the shard
+// count and drop the least-recently-used one; losing a cold shard only costs a
+// fresh Quick thread (the executor retries), never correctness.
+const MAX_SHARDS = Number(process.env.QUICK_MAX_SESSION_SHARDS || 64);
+
 function shardFor(identity) {
   const key = identity ? String(identity) : DEFAULT_SHARD;
   let store = storeHolder.get(key);
-  if (!store) {
-    store = createSessionStore();
+  if (store) {
+    // refresh LRU position (Map keeps insertion order)
+    storeHolder.delete(key);
     storeHolder.set(key, store);
+    return store;
+  }
+  store = createSessionStore();
+  storeHolder.set(key, store);
+  while (storeHolder.size > MAX_SHARDS) {
+    const oldest = storeHolder.keys().next().value;
+    if (oldest === key) break;
+    storeHolder.delete(oldest);
   }
   return store;
 }

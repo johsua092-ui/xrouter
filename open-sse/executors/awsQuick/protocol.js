@@ -134,7 +134,8 @@ const SESSION_ACK_TIMEOUT_MS = 8_000;
 // A turn that goes silent upstream parks on the waiter forever — and the turn
 // holds the per-socket mutex (and a Quick slot) the whole time. Bound the idle
 // gap between events; every consumed event re-arms it.
-const TURN_IDLE_MS = Number(process.env.QUICK_TURN_IDLE_MS || 180000);
+// 0/negative would mean "never time out", which strands the per-socket mutex.
+const TURN_IDLE_MS = Math.max(5000, Number(process.env.QUICK_TURN_IDLE_MS || 180000));
 
 async function resolveWebSocketImpl() {
   if (globalThis.WebSocket) return globalThis.WebSocket;
@@ -410,11 +411,23 @@ export class QuickSocket {
   async *turn(threadId, payload, { signal, onEvent } = {}) {
     await this.connect();
     if (this.waiters.has(threadId)) throw new QuickWsError(`thread ${threadId} already has an active turn`, { kind: "busy" });
+    // A waiter that nobody drains (abandoned iterator) would queue every
+    // broadcast event forever; cap the queue and fail loudly instead.
+    const MAX_QUEUED_EVENTS = Number(process.env.QUICK_MAX_QUEUED_EVENTS || 5000);
     const q = [];
     let failed = null;
     let notify = null;
     const waiter = {
       push: (evt) => {
+        if (q.length >= MAX_QUEUED_EVENTS) {
+          // Same effect as waiter.fail without depending on a closure that the
+          // turn body declares later: record the error and wake the park.
+          failed = new QuickWsError("event queue overflow", { kind: "overflow" });
+          const n0 = notify;
+          notify = null;
+          n0?.();
+          return;
+        }
         q.push(evt);
         const n = notify;
         notify = null;
@@ -595,17 +608,18 @@ function sweepSharedSockets(now = Date.now()) {
 // cost ~1 s to rebuild and a turn is never seated on an evicted socket.
 const MAX_SHARED_SOCKETS = Number(process.env.QUICK_MAX_SOCKETS || 12);
 
-function evictOverflowSockets() {
+function evictOverflowSockets(protectKey = null) {
   while (socketRegistry.size > MAX_SHARED_SOCKETS) {
     let victimKey = null;
     let victimAt = Infinity;
     for (const [key, socket] of socketRegistry) {
-      // never evict a socket with a seated or queued turn
+      // never evict the socket under construction, or one with a seated or queued turn
+      if (key === protectKey) continue;
       if (socket.waiters?.size) continue;
       const at = socket.lastUsedAt || 0;
       if (at < victimAt) { victimAt = at; victimKey = key; }
     }
-    if (!victimKey) return; // everything is busy — let the pool overshoot briefly
+    if (!victimKey) return; // everything else is busy — let the pool overshoot briefly
     const victim = socketRegistry.get(victimKey);
     socketRegistry.delete(victimKey);
     try { victim?.close?.().catch?.(() => {}); } catch {}
@@ -625,7 +639,7 @@ export function getSharedSocket(key, factory) {
   const socket = factory();
   socket.lastUsedAt = Date.now();
   socketRegistry.set(key, socket);
-  evictOverflowSockets();
+  evictOverflowSockets(key); // the newcomer is never its own victim
   return socket;
 }
 
