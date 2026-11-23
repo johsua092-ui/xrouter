@@ -192,6 +192,14 @@ function applyDotEnv() {
 }
 applyDotEnv();
 
+// Last-resort safety net: a rejected promise nobody awaited (e.g. a waiter
+// rejected while its generator was already abandoned) must not take the whole
+// gateway down. Log it and keep serving; uncaughtException is deliberately not
+// trapped because continuing after one is unsafe.
+process.on("unhandledRejection", (err) => {
+  console.error("[unhandledRejection]", err?.stack || err);
+});
+
 // --- Dashboard auth guard (loader hooks: scripts/auth-guard-hooks.mjs) -----
 // Upstream enforces auth in middleware.js -> proxy.js (Next.js 16, Node
 // runtime). This fork runs Next.js 14, whose middleware is Edge-only, so the

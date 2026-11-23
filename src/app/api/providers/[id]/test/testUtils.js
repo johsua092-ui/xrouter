@@ -83,22 +83,20 @@ const OAUTH_TEST_CONFIG = {
   "aws-quick": {
     // Probe Quick's data plane (entitlements qbs-event): validates the id_token,
     // the tenant and the account in one call without spending agent-hours.
+    // Uses the shared proxy-aware helper (tenantUrl, else wsHost fallback) so a
+    // connection's proxy and relay settings apply here too.
     // Refresh is handled here (AWS rotates the refresh token every refresh);
     // testSingleConnection persists newTokens.
     checkExpiry: false,
     refreshable: false,
-    customTest: async (connection) => {
+    customTest: async (connection, effectiveProxy) => {
       const psd = connection.providerSpecificData || {};
-      const tenant = String(psd.tenantUrl || "").replace(/\/+$/, "");
-      const accountId = psd.awsAccountId || "";
-      if (!tenant || !accountId) return { valid: false, error: "Missing Quick tenant/account metadata" };
-      const probe = (token) => fetch(`${tenant}/integration/quick-work/qbs-event`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          eventType: "getAvailableEntitlementUnits",
-          eventBody: { getAvailableEntitlementUnits: { awsAccountId: accountId } },
-        }),
+      // wsHost is a valid base too (the helper derives https://<wsHost>).
+      if (!psd.tenantUrl && !psd.wsHost) {
+        return { valid: false, error: "Missing Quick tenant/account metadata" };
+      }
+      const { probeAwsQuickEntitlementsResponse } = await import("open-sse/services/usage/aws-quick.js");
+      const probe = (token) => probeAwsQuickEntitlementsResponse(token, psd, effectiveProxy, {
         signal: AbortSignal.timeout(15000),
       });
       let res = await probe(connection.accessToken).catch(() => null);
@@ -124,7 +122,15 @@ const OAUTH_TEST_CONFIG = {
       if (res && (res.status === 401 || res.status === 403)) {
         return { valid: false, error: "Token invalid or revoked", refreshed, newTokens };
       }
-      return { valid: false, error: res ? `Quick API returned ${res.status}` : "Connection to Quick failed or timed out", refreshed, newTokens };
+      // Throttling / upstream outage / timeout says nothing about the
+      // credentials: soft success keeps the connection active with a warning.
+      if (res && (res.status === 408 || res.status === 429 || res.status >= 500)) {
+        return { valid: true, warning: `Quick API returned ${res.status} — quota unknown`, refreshed, newTokens };
+      }
+      if (!res) {
+        return { valid: true, warning: "Quick API probe failed or timed out — quota unknown", refreshed, newTokens };
+      }
+      return { valid: false, error: `Quick API returned ${res.status}`, refreshed, newTokens };
     },
   },
   qoder: {

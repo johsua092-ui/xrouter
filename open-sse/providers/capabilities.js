@@ -793,10 +793,11 @@ export function getCapabilitiesForModel(provider, model) {
     if (providerCaps?.[baseModel]) return { ...DEFAULT_CAPABILITIES, ...providerCaps[baseModel] };
   }
 
-  // 1.5 AWS Quick agent modes (any openai-compatible node, model ids smart/balanced/fast):
-  // server-side routed Claude models (smart -> claude-opus-5-5, balanced -> sonnet-5-5,
-  // fast -> haiku-5-5), all 1M context (verified via turn_usage.context_window).
-  if (String(provider || "").startsWith("openai-compatible-") && ["smart", "balanced", "fast"].includes(baseModel)) {
+  // 1.5 AWS Quick agent modes (any openai-compatible node, model ids
+  // smart/balanced/advanced/fast): server-side routed Claude models (smart ->
+  // claude-opus-5-5, balanced/advanced -> sonnet-5-5, fast -> haiku-5-5), all 1M
+  // context (verified via turn_usage.context_window).
+  if (String(provider || "").startsWith("openai-compatible-") && ["smart", "balanced", "advanced", "fast"].includes(baseModel)) {
     return refine(
       { vision: true, reasoning: baseModel !== "fast", thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 1000000, maxOutput: 64000 },
       provider, model

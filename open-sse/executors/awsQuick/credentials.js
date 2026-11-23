@@ -8,7 +8,8 @@
 //   refreshToken = AWS ROTATES it on every refresh — the rotated value must be
 //                  persisted to the connection row or the next refresh reuses
 //                  a spent token and dies with invalid_grant
-//   expiresAt    = epoch ms
+//   expiresAt    = ISO string on the row (expiryMsOf also accepts epoch ms and
+//                  digs exp out of the id_token when the field is absent)
 //
 // chatCore's 401/403 path persists the merged credentials itself (via
 // onCredentialsRefreshed → updateProviderCredentials); this module covers the
@@ -56,18 +57,22 @@ async function persistRefreshed(connectionId, refreshed, currentCredentials) {
   if (!connectionId) return;
   try {
     const { updateProviderConnection } = await import("@/lib/localDb");
+    // ISO string + expiresIn, matching every other credential writer in the
+    // repo (the numeric form this used to write was read inconsistently).
     const expiresAt = refreshed.expiresIn
-      ? Date.now() + refreshed.expiresIn * 1000
+      ? new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
       : currentCredentials?.expiresAt;
     await updateProviderConnection(connectionId, {
       ...(refreshed.accessToken ? { accessToken: refreshed.accessToken } : {}),
       ...(refreshed.refreshToken ? { refreshToken: refreshed.refreshToken } : {}),
       ...(expiresAt ? { expiresAt, tokenExpiresAt: expiresAt } : {}),
+      ...(refreshed.expiresIn ? { expiresIn: refreshed.expiresIn } : {}),
       lastRefreshAt: new Date().toISOString(),
       testStatus: "active",
-      // providerSpecificData is merged by callers that know the full row; pass
-      // it through unchanged — the RT rotation lives on the top-level columns.
-      providerSpecificData: currentCredentials?.providerSpecificData,
+      // Deliberately NOT providerSpecificData: writing it back could blank the
+      // column (undefined) and would bake per-request runtime fields
+      // (connectionProxy*/vercelRelayUrl/pool id) into the stored connection.
+      // RT rotation lives on the top-level columns above.
     });
   } catch (e) {
     // The executor's 401 path re-persists via chatCore onCredentialsRefreshed,

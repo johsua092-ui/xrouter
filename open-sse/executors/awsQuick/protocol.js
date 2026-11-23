@@ -49,14 +49,24 @@ function esDrain(buffer) {
   while (pos + 16 <= n) {
     const view = new DataView(buffer.buffer, buffer.byteOffset + pos);
     const totalLen = view.getUint32(0, false);
+    // Prelude CRC (bytes 0..7 → uint32 at 8) guards the length itself: one
+    // corrupt totalLen used to desync the shared socket permanently (a 1-byte
+    // walk resyncs mid-frame and swallows every following good frame).
     if (totalLen < 16 || totalLen > ES_MAX_MESSAGE_BYTES) {
-      pos += 1;
-      continue;
+      return { messages, consumed: pos, desync: true };
     }
-    if (pos + totalLen > n) break;
+    if (crc32(buffer.subarray(pos, pos + 8)) !== view.getUint32(8, false)) {
+      return { messages, consumed: pos, desync: true };
+    }
+    if (pos + totalLen > n) break; // incomplete — wait for more bytes
+    // Message CRC covers prelude+headers+payload; exclude the trailing uint32.
+    if (crc32(buffer.subarray(pos, pos + totalLen - 4)) !== view.getUint32(totalLen - 4, false)) {
+      return { messages, consumed: pos, desync: true };
+    }
     const headersLen = view.getUint32(4, false);
     const hstart = pos + 12;
     const hend = hstart + headersLen;
+    if (hend > pos + totalLen - 4) return { messages, consumed: pos, desync: true };
     const headers = {};
     let j = hstart;
     try {
@@ -99,7 +109,7 @@ function esDrain(buffer) {
     }
     pos += totalLen;
   }
-  return { messages, consumed: pos };
+  return { messages, consumed: pos, desync: false };
 }
 
 const b64e = (s) => Buffer.from(s, "utf8").toString("base64");
@@ -121,6 +131,11 @@ export class QuickWsError extends Error {
 const PING_MS = 25_000;
 const CONNECT_TIMEOUT_MS = 30_000;
 const SESSION_ACK_TIMEOUT_MS = 8_000;
+// A turn that goes silent upstream parks on the waiter forever — and the turn
+// holds the per-socket mutex (and a Quick slot) the whole time. Bound the idle
+// gap between events; every consumed event re-arms it.
+// 0/negative would mean "never time out", which strands the per-socket mutex.
+const TURN_IDLE_MS = Math.max(5000, Number(process.env.QUICK_TURN_IDLE_MS || 180000));
 
 async function resolveWebSocketImpl() {
   if (globalThis.WebSocket) return globalThis.WebSocket;
@@ -189,24 +204,42 @@ export class QuickSocket {
     this.buf = new Uint8Array(0);
 
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new QuickWsError("WebSocket connect timeout", { kind: "timeout" })), CONNECT_TIMEOUT_MS);
+      let settled = false;
+      let timer = null;
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        // A rejected connect must not leave a half-open socket behind: the next
+        // request would open a second one while this one's frames land in the
+        // CURRENT socket's buffer (onmessage is bound per socket).
+        if (this.ws === ws) this.ws = null;
+        this.buf = new Uint8Array(0);
+        try {
+          ws.close();
+        } catch {}
+        reject(err);
+      };
+      timer = setTimeout(() => fail(new QuickWsError("WebSocket connect timeout", { kind: "timeout" })), CONNECT_TIMEOUT_MS);
+      timer.unref?.();
       ws.onopen = () => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
         resolve();
       };
-      ws.onerror = () => {
-        clearTimeout(timer);
-        reject(new QuickWsError("WebSocket connect failed", { kind: "ws" }));
-      };
+      ws.onerror = () => fail(new QuickWsError("WebSocket connect failed", { kind: "ws" }));
       ws.onclose = (e) => {
-        clearTimeout(timer);
         if (this.ws === ws) {
           this.ws = null;
           this._failAll(new QuickWsError(`socket closed ${e.code}`, { code: e.code }));
         }
-        reject(new QuickWsError(`socket closed before open (${e.code})`, { code: e.code }));
+        fail(new QuickWsError(`socket closed before open (${e.code})`, { code: e.code }));
       };
-      ws.onmessage = (ev) => this._onFrame(ev);
+      // Bound per socket so a replaced socket can never feed this instance.
+      ws.onmessage = (ev) => {
+        if (this.ws === ws) this._onFrame(ev);
+      };
     });
     this._sendRaw({
       type: "session_connect",
@@ -286,12 +319,33 @@ export class QuickSocket {
       const merged = new Uint8Array(this.buf.length + data.length);
       merged.set(this.buf);
       merged.set(data, this.buf.length);
-      const { messages, consumed } = esDrain(merged);
+      const { messages, consumed, desync } = esDrain(merged);
       this.buf = merged.slice(consumed);
+      // Deliver what framed cleanly BEFORE the corrupt one — a single bad frame
+      // must not swallow the good frames that preceded it in the same chunk.
       for (const m of messages) this._onEsMessage(m);
+      if (desync) this._desync();
     } catch (e) {
       this.log?.(`[aws-quick][ws] frame decode error: ${e.message}`);
     }
+  }
+
+  /**
+   * Framing desync: the buffer can no longer be trusted to find the next frame
+   * boundary, so drop it, drop the socket and fail in-flight turns (they would
+   * otherwise park until the idle timeout).
+   */
+  _desync() {
+    this.buf = new Uint8Array(0);
+    const err = new QuickWsError("event-stream desync", { kind: "ws", code: "desync" });
+    // Fail waiters with the real cause BEFORE closing: ws close handlers would
+    // otherwise replace it with a generic "socket closed".
+    this._failAll(err);
+    try {
+      this.ws?.close(4002, "framing");
+    } catch {}
+    this.ws = null;
+    throw err;
   }
 
   _onEsMessage(m) {
@@ -357,11 +411,23 @@ export class QuickSocket {
   async *turn(threadId, payload, { signal, onEvent } = {}) {
     await this.connect();
     if (this.waiters.has(threadId)) throw new QuickWsError(`thread ${threadId} already has an active turn`, { kind: "busy" });
+    // A waiter that nobody drains (abandoned iterator) would queue every
+    // broadcast event forever; cap the queue and fail loudly instead.
+    const MAX_QUEUED_EVENTS = Number(process.env.QUICK_MAX_QUEUED_EVENTS || 5000);
     const q = [];
     let failed = null;
     let notify = null;
     const waiter = {
       push: (evt) => {
+        if (q.length >= MAX_QUEUED_EVENTS) {
+          // Same effect as waiter.fail without depending on a closure that the
+          // turn body declares later: record the error and wake the park.
+          failed = new QuickWsError("event queue overflow", { kind: "overflow" });
+          const n0 = notify;
+          notify = null;
+          n0?.();
+          return;
+        }
         q.push(evt);
         const n = notify;
         notify = null;
@@ -400,8 +466,30 @@ export class QuickSocket {
         }
         if (signal?.aborted) throw new QuickWsError("aborted", { kind: "abort" });
         if (failed) throw failed;
-        await new Promise((r) => {
-          notify = r;
+        // Park until an event arrives, the client aborts, or the turn falls
+        // silent. Without the idle bound a stalled upstream holds the per-socket
+        // mutex forever (aws-quick.js's finally never runs). The waiter's
+        // push/fail still wake us through `notify`; the timer re-arms on every
+        // park, i.e. after each consumed event.
+        await new Promise((resolve, reject) => {
+          let timer = null;
+          let settled = false;
+          const finish = (fn, v) => {
+            if (settled) return;
+            settled = true;
+            if (timer) clearTimeout(timer);
+            timer = null;
+            signal?.removeEventListener?.("abort", onAbort);
+            notify = null;
+            fn(v);
+          };
+          const onAbort = () => finish(reject, new QuickWsError("aborted", { kind: "abort" }));
+          notify = () => finish(resolve);
+          if (signal) signal.addEventListener("abort", onAbort, { once: true });
+          if (TURN_IDLE_MS > 0) {
+            timer = setTimeout(() => finish(reject, new QuickWsError("turn idle timeout", { kind: "timeout" })), TURN_IDLE_MS);
+            timer.unref?.();
+          }
         });
       }
     } finally {
@@ -434,15 +522,55 @@ export class QuickSocket {
  * Quick allows only ~2 concurrent turns per account; serialize turns per
  * socket. Returns a release function — acquire BEFORE building/sending the
  * turn, release in finally when the generator is fully consumed.
+ *
+ * Waiting is bounded: a queued request behind a dead holder used to wait
+ * forever. On timeout/abort the queue slot is released so the chain cannot
+ * stay wedged behind a request that already gave up.
+ * @param {object} socket
+ * @param {object} [opts] {signal, timeoutMs}
  */
-export async function acquireTurn(socket) {
+export async function acquireTurn(socket, { signal, timeoutMs = Number(process.env.QUICK_TURN_QUEUE_MS || 600000) } = {}) {
   const prev = socket._turnChain || Promise.resolve();
   let release;
   const gate = new Promise((r) => {
     release = r;
   });
   socket._turnChain = prev.catch(() => {}).then(() => gate);
-  await prev.catch(() => {});
+  if (signal?.aborted) {
+    release();
+    throw new QuickWsError("aborted", { kind: "abort" });
+  }
+  let timer = null;
+  let onAbort = null;
+  const ready = prev.catch(() => {});
+  const races = [ready];
+  if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+    races.push(
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new QuickWsError("turn queue timeout", { kind: "timeout" })), timeoutMs);
+        timer.unref?.();
+      })
+    );
+  }
+  if (signal) {
+    races.push(
+      new Promise((_, reject) => {
+        onAbort = () => reject(new QuickWsError("aborted", { kind: "abort" }));
+        signal.addEventListener("abort", onAbort, { once: true });
+      })
+    );
+  }
+  try {
+    // Promise.race subscribes to every arm, so a losing arm's later rejection
+    // is already handled (no unhandled rejection warnings).
+    await Promise.race(races);
+  } catch (e) {
+    release();
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
   return release;
 }
 
@@ -450,18 +578,68 @@ export async function acquireTurn(socket) {
 // sockets (module state is recreated, globalThis survives).
 const socketRegistry = (globalThis.__awsQuickSockets ||= new Map());
 
+// A cached socket that has not served a request for 30 min is swept: the
+// connection was rotated/deleted, or the account is idle — either way the
+// socket and its ping timer should not outlive its usefulness.
+// Idle sockets hold their buffers and object graph for as long as they live;
+// rebuilding one costs ~1 s and a cold thread is safe (the executor retries),
+// so release them sooner than the old 30 min.
+const SHARED_SOCKET_IDLE_MS = Number(process.env.QUICK_SOCKET_IDLE_MS || 15 * 60 * 1000);
+
+function sweepSharedSockets(now = Date.now()) {
+  for (const [key, socket] of socketRegistry) {
+    const last = Number(socket?.lastUsedAt) || 0;
+    if (last && now - last <= SHARED_SOCKET_IDLE_MS) continue;
+    socketRegistry.delete(key);
+    try {
+      socket?.close?.();
+    } catch {}
+  }
+}
+
 /**
  * Shared, cached socket per key (connection id + ws host). A socket whose
- * session host changed or that was closed outright is replaced.
+ * session host changed or that was closed outright is replaced; idle entries
+ * are swept on every call.
  */
+// Bound the pool: every live socket keeps a frame buffer and a JS object graph
+// for the life of the connection. 23 farmed accounts staying open forever is
+// wasted RSS on a box that only chats with a few at a time; the extra sockets
+// cost ~1 s to rebuild and a turn is never seated on an evicted socket.
+const MAX_SHARED_SOCKETS = Number(process.env.QUICK_MAX_SOCKETS || 12);
+
+function evictOverflowSockets(protectKey = null) {
+  while (socketRegistry.size > MAX_SHARED_SOCKETS) {
+    let victimKey = null;
+    let victimAt = Infinity;
+    for (const [key, socket] of socketRegistry) {
+      // never evict the socket under construction, or one with a seated or queued turn
+      if (key === protectKey) continue;
+      if (socket.waiters?.size) continue;
+      const at = socket.lastUsedAt || 0;
+      if (at < victimAt) { victimAt = at; victimKey = key; }
+    }
+    if (!victimKey) return; // everything else is busy — let the pool overshoot briefly
+    const victim = socketRegistry.get(victimKey);
+    socketRegistry.delete(victimKey);
+    try { victim?.close?.().catch?.(() => {}); } catch {}
+  }
+}
+
 export function getSharedSocket(key, factory) {
+  sweepSharedSockets();
   const existing = socketRegistry.get(key);
-  if (existing && !existing.closed) return existing;
+  if (existing && !existing.closed) {
+    existing.lastUsedAt = Date.now();
+    return existing;
+  }
   if (existing) {
     existing.close().catch(() => {});
   }
   const socket = factory();
+  socket.lastUsedAt = Date.now();
   socketRegistry.set(key, socket);
+  evictOverflowSockets(key); // the newcomer is never its own victim
   return socket;
 }
 
