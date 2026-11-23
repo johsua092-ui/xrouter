@@ -31,6 +31,7 @@ import {
   textOf,
   byteLen,
   capText,
+  capMiddle,
   canonRole,
   pickImages,
   UPSTREAM_TEXT_LIMIT,
@@ -193,7 +194,9 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
   // even at ~54 KB). It shares the same ~64 KB frame budget as `text`, so both
   // are capped together — the transcript budget shrinks by whatever the system
   // prompt occupies.
-  const systemPrompt = systemText ? capText(systemText, SYSTEM_PROMPT_CAP) : "";
+  // Head+tail: an operating spec keeps hard rules first and format/attribution
+  // rules last, so a plain head cut silently drops half of them.
+  const systemPrompt = systemText ? capMiddle(systemText, SYSTEM_PROMPT_CAP) : "";
   const stats = {};
   if (systemText && byteLen(systemText) > SYSTEM_PROMPT_CAP) stats.truncated = true;
   // custom_prompt is a real per-turn instruction channel (verified live). Use
@@ -420,7 +423,15 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
   }
 
   yield { type: "meta", threadId, reused, mode };
-  if (stats.truncated) yield { type: "note", text: "Context exceeded Quick's 64KB frame cap; earlier content was truncated" };
+  if (stats.truncated) {
+    const shed = stats.omittedMessages || 0;
+    yield {
+      type: "note",
+      text: shed
+        ? `Context exceeded Quick's 64 KB frame cap: ${shed} earlier message(s) omitted and long tool output shortened (newest turns kept intact)`
+        : "Context exceeded Quick's 64 KB frame cap; long content was shortened (newest turns kept intact)",
+    };
+  }
 
   const produced = () => state.text.length > 0 || state.calls.length > 0 || state.reasoning.length > 0;
   // Bounded wait: a request queued behind a wedged holder must fail cleanly

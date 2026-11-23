@@ -216,6 +216,26 @@ function fitPrefix(s, max) {
 }
 
 /** Truncate to a byte budget, appending a marker. */
+/**
+ * Keep the head and the tail of an over-long system prompt. Operating specs put
+ * hard rules first and the response-format/attribution rules last, so a plain
+ * head cut silently drops half of them; the middle (usually examples) is what
+ * can go.
+ */
+export function capMiddle(s, maxBytes) {
+  const str = String(s ?? "");
+  if (byteLen(str) <= maxBytes) return str;
+  const mark = "\n\n…[middle of the instructions truncated]…\n\n";
+  const markBytes = byteLen(mark);
+  const room = maxBytes - markBytes;
+  if (room <= 1024) return capText(str, maxBytes);
+  const headBytes = Math.floor(room * 0.6);
+  const tailBytes = room - headBytes;
+  const head = fitPrefix(str, headBytes).text;
+  const tail = tailSuffix(str, tailBytes).text;
+  return head + mark + tail;
+}
+
 export function capText(s, maxBytes) {
   const str = String(s ?? "");
   const head = fitPrefix(str, maxBytes);
@@ -315,19 +335,19 @@ function fitBlocks(blocks, maxBytes, cut) {
     }
     avail -= b.bytes;
   }
-  const out = blocks.map(renderBlock);
   // Rendered size is additive per part (header + "\n" + body), so it comes
   // from the cached lengths instead of a fresh encode of each block.
   const sizes = blocks.map((b) => (b.tool ? b.headBytes + 1 + b.bytes : b.bytes));
   let used = sizes.reduce((n, x) => n + x + 2, 0);
   let dropped = 0;
-  while (used > maxBytes && dropped < out.length - 1) {
+  while (used > maxBytes && dropped < blocks.length - 1) {
     used -= sizes[dropped++] + 2;
     cut();
   }
-  const kept = out.slice(dropped);
+  const kept = blocks.slice(dropped).map((b) => ({ ...b, rendered: renderBlock(b) }));
   if (used > maxBytes && kept.length) {
-    kept[kept.length - 1] = capText(kept[kept.length - 1], Math.max(0, maxBytes - 2));
+    const lastBlock = kept[kept.length - 1];
+    lastBlock.rendered = capText(lastBlock.rendered, Math.max(0, maxBytes - 2));
     cut();
   }
   return { kept, dropped };
@@ -391,19 +411,34 @@ export function renderTranscript(messages, systemText, { maxBytes = Infinity, st
         t = capText(t, USER_TURN_CAP);
         cut();
       }
-      return { tool: false, body: t || "(empty)" };
+      return { tool: false, role: "user", body: t || "(empty)" };
     }
-    return { tool: false, body: transcriptLine(m) };
+    return { tool: false, role: canonRole(m.role), body: transcriptLine(m) };
   });
   if (!blocks.length) blocks.push({ tool: false, body: "(empty)" });
   const sysBytes = parts.reduce((n, s) => n + byteLen(s) + 2, 0);
   const { kept, dropped } = fitBlocks(blocks, maxBytes - sysBytes - (blocks.length > 1 ? HISTORY_HEAD_RESERVE : 0), cut);
   const last = kept.pop();
-  if (kept.length || dropped) {
-    const head = dropped ? `[conversation so far — ${dropped} earlier message(s) omitted]\n` : "[conversation so far]\n";
-    parts.push(head + kept.join("\n\n"));
+  // A tool result whose assistant tool_call fell outside the window is
+  // unanswerable — the model would see an output for a call it never made.
+  let orphanTools = 0;
+  // A trimmed transcript must open on a user turn: a leading tool result answers
+  // a call the model cannot see, and a leading assistant turn makes the model
+  // continue its own old sentence instead of answering the new question.
+  while (kept.length > 1 && (kept[0].tool || kept[0].role === "assistant")) {
+    kept.shift();
+    orphanTools++;
+    cut();
   }
-  parts.push(last);
+  if (stats) stats.omittedMessages = (stats.omittedMessages || 0) + dropped + orphanTools;
+  if (kept.length || dropped || orphanTools) {
+    const total = dropped + orphanTools;
+    const head = total
+      ? `[conversation so far — ${total} earlier message(s) omitted to fit Quick's 64 KB frame]\n`
+      : "[conversation so far]\n";
+    parts.push(head + kept.map(renderBlock).join("\n\n"));
+  }
+  parts.push(renderBlock(last));
   return parts.join("\n\n");
 }
 
@@ -435,5 +470,6 @@ export function renderDelta(delta, { maxBytes = Infinity, stats } = {}) {
   }
   if (!blocks.length) return "";
   const { kept, dropped } = fitBlocks(blocks, maxBytes - 48, cut);
-  return dropped ? `[${dropped} earlier message(s) omitted]\n` + kept.join("\n\n") : kept.join("\n\n");
+  if (stats && dropped) stats.omittedMessages = (stats.omittedMessages || 0) + dropped;
+  return dropped ? `[${dropped} earlier message(s) omitted to fit Quick's 64 KB frame]\n` + kept.map((b) => b.rendered).join("\n\n") : kept.map((b) => b.rendered).join("\n\n");
 }
