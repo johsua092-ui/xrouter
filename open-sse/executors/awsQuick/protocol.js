@@ -568,7 +568,10 @@ const socketRegistry = (globalThis.__awsQuickSockets ||= new Map());
 // A cached socket that has not served a request for 30 min is swept: the
 // connection was rotated/deleted, or the account is idle — either way the
 // socket and its ping timer should not outlive its usefulness.
-const SHARED_SOCKET_IDLE_MS = 30 * 60 * 1000;
+// Idle sockets hold their buffers and object graph for as long as they live;
+// rebuilding one costs ~1 s and a cold thread is safe (the executor retries),
+// so release them sooner than the old 30 min.
+const SHARED_SOCKET_IDLE_MS = Number(process.env.QUICK_SOCKET_IDLE_MS || 15 * 60 * 1000);
 
 function sweepSharedSockets(now = Date.now()) {
   for (const [key, socket] of socketRegistry) {
@@ -586,6 +589,29 @@ function sweepSharedSockets(now = Date.now()) {
  * session host changed or that was closed outright is replaced; idle entries
  * are swept on every call.
  */
+// Bound the pool: every live socket keeps a frame buffer and a JS object graph
+// for the life of the connection. 23 farmed accounts staying open forever is
+// wasted RSS on a box that only chats with a few at a time; the extra sockets
+// cost ~1 s to rebuild and a turn is never seated on an evicted socket.
+const MAX_SHARED_SOCKETS = Number(process.env.QUICK_MAX_SOCKETS || 12);
+
+function evictOverflowSockets() {
+  while (socketRegistry.size > MAX_SHARED_SOCKETS) {
+    let victimKey = null;
+    let victimAt = Infinity;
+    for (const [key, socket] of socketRegistry) {
+      // never evict a socket with a seated or queued turn
+      if (socket.waiters?.size) continue;
+      const at = socket.lastUsedAt || 0;
+      if (at < victimAt) { victimAt = at; victimKey = key; }
+    }
+    if (!victimKey) return; // everything is busy — let the pool overshoot briefly
+    const victim = socketRegistry.get(victimKey);
+    socketRegistry.delete(victimKey);
+    try { victim?.close?.().catch?.(() => {}); } catch {}
+  }
+}
+
 export function getSharedSocket(key, factory) {
   sweepSharedSockets();
   const existing = socketRegistry.get(key);
@@ -599,6 +625,7 @@ export function getSharedSocket(key, factory) {
   const socket = factory();
   socket.lastUsedAt = Date.now();
   socketRegistry.set(key, socket);
+  evictOverflowSockets();
   return socket;
 }
 
