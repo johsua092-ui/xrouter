@@ -17,6 +17,9 @@
 
 import { zcodeTlsFetch } from "./zcodeTlsClient.js";
 
+const FALLBACK_WARN_INTERVAL_MS = 30_000;
+let lastFallbackWarnAt = 0;
+
 function extractProxy(proxyOptions) {
   if (!proxyOptions) return "";
   if (typeof proxyOptions === "string") return proxyOptions;
@@ -43,10 +46,21 @@ export async function antigravityTlsFetch(url, init = {}, proxyOptions = null) {
       { signal, proxy }
     );
   } catch (error) {
+    // The caller cancelled this request — do not re-dispatch a dead request on
+    // the fallback path, regardless of proxy state.
+    if (signal?.aborted) throw error;
+
     // With a configured proxy the wreq session cannot bypass it — surface the error
     // so the base executor's retry logic can act. Direct (no proxy) fails open.
     if (proxy) throw error;
-    console.warn(`[AntigravityTLS] wreq fetch failed (${error?.message || error}), failing open to native fetch`);
+
+    // Rate-limit the warning: a wreq outage re-fails every in-flight request and
+    // an unconditional console.warn would flood the log.
+    const now = Date.now();
+    if (now - lastFallbackWarnAt > FALLBACK_WARN_INTERVAL_MS) {
+      lastFallbackWarnAt = now;
+      console.warn(`[AntigravityTLS] wreq fetch failed (${error?.message || error}), failing open to native fetch`);
+    }
     return fetch(url, {
       method: init.method || "GET",
       headers: init.headers,

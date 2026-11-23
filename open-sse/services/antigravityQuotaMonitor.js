@@ -14,6 +14,7 @@
  * so a quota-check outage never blocks live traffic.
  */
 
+import { createHash } from "node:crypto";
 import {
   ANTIGRAVITY_IDE_BASE_URL,
   ANTIGRAVITY_IDE_USER_AGENT,
@@ -30,6 +31,16 @@ const summaryCache = new Map();
 
 export function _clearQuotaMonitorCache() {
   summaryCache.clear();
+}
+
+/**
+ * Cache key binds the connection id to the token identity: accounts without a
+ * connectionId all map to the executor's "default", so without the token hash
+ * one account's quota summary would be served to another for up to 60s.
+ */
+function cacheKey(connectionId, accessToken) {
+  const tokenHash = createHash("sha256").update(String(accessToken)).digest("hex").slice(0, 12);
+  return `${connectionId}::${tokenHash}`;
 }
 
 /**
@@ -156,7 +167,7 @@ export async function isAntigravityQuotaDrained(accessToken, model, proxyOptions
   const failOpen = { isDrained: false, resetTime: null };
   if (!accessToken || !model) return failOpen;
 
-  const key = `${connectionId}`;
+  const key = cacheKey(connectionId, accessToken);
   const hit = summaryCache.get(key);
 
   if (hit?.promise) {
