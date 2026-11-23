@@ -398,8 +398,19 @@ export async function POST(request, { params }) {
       }
       try {
         const result = await pasteAwsQuickUrl(url);
+        // Diagnosable without leaking the code/state: host + path + which params.
+        try {
+          const u = new URL(url);
+          console.log(`[aws-quick oauth] paste ok (${result.status}) host=${u.host} path=${u.pathname} params=${[...u.searchParams.keys()].join(",")}`);
+        } catch {}
         return NextResponse.json(result);
       } catch (err) {
+        try {
+          const u = new URL(url);
+          console.log(`[aws-quick oauth] paste failed host=${u.host} path=${u.pathname} params=${[...u.searchParams.keys()].join(",")} : ${err.message}`);
+        } catch {
+          console.log(`[aws-quick oauth] paste failed (unparseable url) : ${err.message}`);
+        }
         return NextResponse.json({ error: err.message }, { status: 400 });
       }
     }

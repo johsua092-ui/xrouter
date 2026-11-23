@@ -1178,6 +1178,13 @@ export async function pasteAwsQuickUrl(pasted) {
       new Error("Not a completed-login address. Paste the full URL from the browser address bar after Amazon Quick sign-in finishes."),
       { kind: "paste" }
     );
+  // A vanished session is almost always a server restart (or a link from an
+  // earlier attempt) — say so instead of blaming the pasted URL.
+  const sessionGone = () =>
+    Object.assign(
+      new Error("Login session not found — it does not survive a gateway restart and links expire. Start the sign-in again (the pasted address stays valid only for the session that created it)."),
+      { kind: "paste" }
+    );
   const q = parseAwsQuickPastedQuery(pasted);
   if (!q) throw pasteError();
 
@@ -1185,7 +1192,7 @@ export async function pasteAwsQuickUrl(pasted) {
     // Hop 1 reached the browser but not our listener: keep the discovery
     // fields so the next attempt goes straight to the OIDC authorize URL.
     const session = findAwsQuickSessionByNonce(q.get("nonce"));
-    if (!session) throw pasteError();
+    if (!session) throw sessionGone();
     if (q.get("error")) {
       throw new Error(`Login failed: ${q.get("error")} ${q.get("error_description") || ""}`.trim());
     }
@@ -1197,7 +1204,7 @@ export async function pasteAwsQuickUrl(pasted) {
 
   if (q.has("code")) {
     const session = q.get("state") ? awsQuickRuntime.sessions.get(q.get("state")) : null;
-    if (!session) throw pasteError();
+    if (!session) throw sessionGone();
     try {
       const { tokens, userInfo } = await completeAwsQuickOidcExchange({ query: q, session });
       settleAwsQuickSession(session, { tokens, userInfo });
