@@ -1,5 +1,13 @@
 # v0.1.0 (2026-11-22)
 
+### Bug Fix — Antigravity 403 `USER_PROJECT_DENIED` From a Quota-Project Header It Should Never Send
+
+- **Every consumer Antigravity account was answering `403 USER_PROJECT_DENIED` out of `v1internal:generateContent`** — `"Caller does not have required permission to use project aicode-consumers. Grant the caller the roles/serviceusage.serviceUsageConsumer role"`. The call then tripped the breaker (`cooldown=45s`), parked the connection for 120s and locked `modelLock_<model>`, so the model read as *all accounts locked* while the token itself was perfectly fresh.
+- Cause was one header, not the credentials: `open-sse/executors/antigravity.js` sent `x-goog-user-project: aicode-consumers` on every request. `aicode-consumers` is Antigravity's **internal consumer identifier** (it still belongs in the request body as `project`) and not a Cloud project the caller can spend against, so Google IAM read the header as a quota-billing delegation and denied it.
+- `buildHeaders` now emits `x-goog-user-project` **only when a real, provisioned GCP project is present** — non-empty, not `aicode-consumers`, not a legacy fake pid (`useful-spark-a1b2c` and friends). Consumer requests go out with no quota-project header at all, which lets Google bill against the project bound to the OAuth token, exactly like the IDE does. The body's `project` field is unchanged.
+- **Regression suite** `tests/unit/antigravity-shield-protections.test.js` +2 cases: header absent for missing / canonical / legacy-fake project ids, and still forwarded verbatim for an authentic GCP project. 12/12 PASS on `node --test`.
+- Live after rebuild + `systemctl restart xrouter`: `ag/gemini-3.8-flash-high` completed `200` (TTFT 1600ms, IN 84571, OUT 49) and the journal has **zero** `USER_PROJECT_DENIED` / `permission or project error (403)` lines since the restart.
+
 ### Bug Fix — Antigravity 429 That Is a Prompt Refusal, Not Quota
 
 - **A bare `RESOURCE_EXHAUSTED` (generic message, no `details`) from Antigravity is a refusal of the request body, not a quota signal.** It repeats for the same body on every attempt while real quota errors carry `quotaResetTimeStamp` / `RetryInfo`. Until now that response armed a 2-minute account cooldown, locked `modelLock_<model>`, and surfaced as `503 … use another provider`, so a chat whose system prompt carried known third-party agent text could never succeed no matter how much quota was left.
