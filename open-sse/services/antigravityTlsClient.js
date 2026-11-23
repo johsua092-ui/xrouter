@@ -1,248 +1,75 @@
-// Hardened TLS-impersonating HTTP client for Google Antigravity / Gemini Code Assist.
-// Emulates Chrome 133+ BoringSSL / Post-Quantum TLS 1.3 with GREASE via wreq-js,
-// matching the official desktop IDE and language_server native TLS fingerprint with proxy awareness.
+/**
+ * antigravityTlsClient.js — BoringSSL TLS-impersonating fetch for Antigravity
+ * (cloudcode-pa.googleapis.com).
+ *
+ * The upstream executor commit references this module but it was never committed,
+ * which broke `next build`. This implementation delegates to the hardened wreq-js
+ * session client (same Chrome 133 ClientHello emulation used for ZCode) with
+ * fail-open to native fetch, so a missing wreq-js runtime degrades gracefully
+ * instead of hard-failing every Antigravity request.
+ *
+ * Contract (see open-sse/executors/base.js):
+ *   fetchFn(url, init, proxyOptions) → Response
+ * `proxyOptions` is only a connection proxy config object (or null); when
+ * connectionProxyEnabled is set the base executor routes through proxyAwareFetch
+ * instead, so any proxy hint here is best-effort.
+ */
 
-import fs from "node:fs";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { zcodeTlsFetch } from "./zcodeTlsClient.js";
 
-// BoringSSL/Google-family cipher list the upstream accepts, matching native BoringSSL client
-const ANTIGRAVITY_CIPHER_LIST = [
-  "TLS_AES_128_GCM_SHA256",
-  "TLS_AES_256_GCM_SHA384",
-  "TLS_CHACHA20_POLY1305_SHA256",
-  "ECDHE-ECDSA-AES128-GCM-SHA256",
-  "ECDHE-RSA-AES128-GCM-SHA256",
-  "ECDHE-ECDSA-AES256-GCM-SHA384",
-  "ECDHE-RSA-AES256-GCM-SHA384",
-  "ECDHE-ECDSA-CHACHA20-POLY1305",
-  "ECDHE-RSA-CHACHA20-POLY1305",
-  "ECDHE-ECDSA-AES128-SHA",
-  "ECDHE-RSA-AES128-SHA",
-  "ECDHE-ECDSA-AES256-SHA",
-  "ECDHE-RSA-AES256-SHA",
-  "AES128-GCM-SHA256",
-  "AES256-GCM-SHA384",
-  "AES128-SHA",
-  "AES256-SHA",
-].join(":");
+const FALLBACK_WARN_INTERVAL_MS = 30_000;
+let lastFallbackWarnAt = 0;
 
-const DEFAULT_TIMEOUT_MS = 180000;
-const sessionCache = new Map();
-const MAX_TLS_SESSIONS = 32;
-
-let cachedWreq = null;
-
-function getNativeRequire() {
-  if (typeof globalThis !== "undefined") {
-    if (typeof globalThis.__xrouter_native_require__ === "function") return globalThis.__xrouter_native_require__;
-    if (typeof globalThis.__non_webpack_require__ === "function") return globalThis.__non_webpack_require__;
+function extractProxy(proxyOptions) {
+  if (!proxyOptions) return "";
+  if (typeof proxyOptions === "string") return proxyOptions;
+  if (typeof proxyOptions !== "object") return "";
+  for (const key of ["proxyUrl", "proxy", "url", "connectionProxyUrl"]) {
+    const v = proxyOptions[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
   }
-  if (typeof __non_webpack_require__ === "function") return __non_webpack_require__;
-  try {
-    if (typeof process !== "undefined" && typeof process.getBuiltinModule === "function") {
-      const nodeModule = process.getBuiltinModule("module");
-      if (typeof nodeModule?.createRequire === "function") {
-        return nodeModule.createRequire(process.cwd() + "/package.json");
-      }
-    }
-  } catch {}
-  try {
-    const dynamicRequire = new Function("fromPath", "const m = typeof process !== 'undefined' && process.getBuiltinModule ? process.getBuiltinModule('module') : (typeof require !== 'undefined' ? require('module') : null); return m ? m.createRequire(fromPath) : null;");
-    const req = dynamicRequire(process.cwd() + "/package.json");
-    if (req) return req;
-  } catch {}
-  return null;
+  return "";
 }
 
-function isValidWreq(mod) {
-  return mod && (typeof mod.createSession === "function" || typeof mod.default?.createSession === "function");
-}
-
-function normalizeWreq(mod) {
-  if (!mod) return null;
-  return typeof mod.createSession === "function" ? mod : mod.default;
-}
-
-async function getWreqModule() {
-  if (cachedWreq) return cachedWreq;
-
-  if (typeof globalThis !== "undefined" && isValidWreq(globalThis.__xrouter_wreq__)) {
-    cachedWreq = normalizeWreq(globalThis.__xrouter_wreq__);
-    return cachedWreq;
-  }
-
-  const nativeReq = getNativeRequire();
-
-  if (nativeReq) {
-    try {
-      const mod = nativeReq("wreq-js");
-      if (isValidWreq(mod)) {
-        cachedWreq = normalizeWreq(mod);
-        return cachedWreq;
-      }
-    } catch {}
-  }
-
-  const cwd = process.cwd();
-  const candidates = [
-    path.resolve(cwd, "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
-    path.resolve(cwd, ".next", "standalone", "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
-    path.resolve(cwd, "..", "..", "node_modules", "wreq-js", "dist", "wreq-js.cjs"),
-    "/root/xrouter/.next/standalone/node_modules/wreq-js/dist/wreq-js.cjs",
-    "/root/xrouter/node_modules/wreq-js/dist/wreq-js.cjs",
-  ];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      try {
-        const fileUrl = pathToFileURL(candidate).href;
-        const mod = await import(fileUrl);
-        if (isValidWreq(mod)) {
-          cachedWreq = normalizeWreq(mod);
-          return cachedWreq;
-        }
-      } catch {}
-    }
-  }
+export async function antigravityTlsFetch(url, init = {}, proxyOptions = null) {
+  const proxy = extractProxy(proxyOptions) || init?.proxy || "";
+  const signal = init?.signal;
 
   try {
-    const mod = await import(/* webpackIgnore: true */ "wreq-js");
-    if (isValidWreq(mod)) {
-      cachedWreq = normalizeWreq(mod);
-      return cachedWreq;
-    }
-  } catch {}
-
-  throw new Error("wreq-js runtime missing createSession");
-}
-
-function normalizeProxyUrl(raw) {
-  if (!raw || typeof raw !== "string") return "";
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
-  try {
-    return new URL(trimmed).href;
-  } catch {
-    return trimmed;
-  }
-}
-
-function sessionKeyFor(proxyUrl = "") {
-  return normalizeProxyUrl(proxyUrl) || "direct";
-}
-
-function evictTlsSessionsOverCap(keepKey) {
-  while (sessionCache.size > MAX_TLS_SESSIONS) {
-    let victimKey = null;
-    for (const key of sessionCache.keys()) {
-      if (key !== keepKey) { victimKey = key; break; }
-    }
-    if (victimKey === null) break;
-    const promise = sessionCache.get(victimKey);
-    sessionCache.delete(victimKey);
-    promise?.then((s) => s?.close?.()).catch(() => {});
-  }
-}
-
-async function getSession(proxyUrl = "") {
-  const normalizedProxy = normalizeProxyUrl(proxyUrl);
-  const cacheKey = sessionKeyFor(proxyUrl);
-  if (sessionCache.has(cacheKey)) {
-    const hit = sessionCache.get(cacheKey);
-    sessionCache.delete(cacheKey);
-    sessionCache.set(cacheKey, hit);
-    return hit;
-  }
-
-  const promise = (async () => {
-    const wreq = await getWreqModule();
-    if (!wreq || typeof wreq.createSession !== "function") {
-      throw new Error("wreq-js runtime missing createSession");
-    }
-
-    const sessionOpts = {
-      profile: "chrome_133",
-      emulation: {
-        tlsOptions: { cipherList: ANTIGRAVITY_CIPHER_LIST },
+    return await zcodeTlsFetch(
+      url,
+      {
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
       },
-    };
+      { signal, proxy }
+    );
+  } catch (error) {
+    // The caller cancelled this request — do not re-dispatch a dead request on
+    // the fallback path, regardless of proxy state.
+    if (signal?.aborted) throw error;
 
-    if (normalizedProxy && !/workers\.dev|vercel\.app|pages\.dev|deno\.dev/i.test(normalizedProxy)) {
-      sessionOpts.proxy = normalizedProxy;
+    // With a configured proxy the wreq session cannot bypass it — surface the error
+    // so the base executor's retry logic can act. Direct (no proxy) fails open.
+    if (proxy) throw error;
+
+    // Rate-limit the warning: a wreq outage re-fails every in-flight request and
+    // an unconditional console.warn would flood the log.
+    const now = Date.now();
+    if (now - lastFallbackWarnAt > FALLBACK_WARN_INTERVAL_MS) {
+      lastFallbackWarnAt = now;
+      console.warn(`[AntigravityTLS] wreq fetch failed (${error?.message || error}), failing open to native fetch`);
     }
-
-    return await wreq.createSession(sessionOpts);
-  })().catch((err) => {
-    sessionCache.delete(cacheKey);
-    throw err;
-  });
-
-  sessionCache.set(cacheKey, promise);
-  evictTlsSessionsOverCap(cacheKey);
-  return promise;
+    return fetch(url, {
+      method: init.method || "GET",
+      headers: init.headers,
+      body: init.body,
+      signal,
+    });
+  }
 }
 
 export function resetAntigravityTlsSession() {
-  for (const [, promise] of sessionCache) {
-    promise.then((s) => s?.close?.()).catch(() => {});
-  }
-  sessionCache.clear();
+  // Sessions are owned by the shared zcodeTlsClient cache; nothing extra to clear here.
 }
-
-/**
- * Fetch through the BoringSSL-impersonated TLS session.
- * Emulates official Google BoringSSL TLS 1.3 ClientHello with GREASE extension.
- * Returns a standard Response object.
- */
-export async function antigravityTlsFetch(url, init = {}, { signal, timeoutMs = DEFAULT_TIMEOUT_MS, proxy } = {}) {
-  const proxyUrl = proxy || init.proxy || "";
-  const cacheKey = sessionKeyFor(proxyUrl);
-  let session;
-
-  try {
-    session = await getSession(proxyUrl);
-  } catch (error) {
-    // Fail-open to native fetch if wreq-js is uninstalled or broken
-    return fetch(url, {
-      method: init.method || "GET",
-      headers: init.headers,
-      body: init.body,
-      signal,
-    });
-  }
-
-  const options = {
-    method: init.method || "GET",
-    headers: init.headers,
-    redirect: "follow",
-    timeout: timeoutMs,
-  };
-  if (init.body !== undefined) options.body = init.body;
-  if (signal) options.signal = signal;
-
-  try {
-    const res = await session.fetch(url, options);
-    if (res.status === 429) {
-      sessionCache.delete(cacheKey);
-    }
-    const headers = {};
-    res.headers?.forEach?.((value, key) => {
-      headers[key] = value;
-    });
-    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
-  } catch (fetchErr) {
-    sessionCache.delete(cacheKey);
-    if (proxyUrl) {
-      throw fetchErr;
-    }
-    return fetch(url, {
-      method: init.method || "GET",
-      headers: init.headers,
-      body: init.body,
-      signal,
-    });
-  }
-}
-
-export const __test__ = { ANTIGRAVITY_CIPHER_LIST };

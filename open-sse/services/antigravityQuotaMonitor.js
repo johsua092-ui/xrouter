@@ -1,142 +1,214 @@
-// Antigravity Proactive Quota Monitor
-// Polls the official internal quota endpoint used by Antigravity CLI and Desktop IDE:
-// https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary
-// Caches quota summaries for 120 seconds to prevent rate-limiting while providing
-// proactive skipping of depleted accounts (remainingFraction <= 0.02) BEFORE hitting 429 errors.
+/**
+ * antigravityQuotaMonitor.js — proactive quota pre-check for Antigravity.
+ *
+ * The upstream executor commit references this module but it was never committed,
+ * which broke `next build`. Implements the contract consumed by
+ * open-sse/executors/antigravity.js:
+ *
+ *   isAntigravityQuotaDrained(accessToken, model, proxyOptions, connectionId)
+ *     → { isDrained: boolean, resetTime: string | null }
+ *
+ * Queries `v1internal:retrieveUserQuotaSummary`, resolves the model's family
+ * bucket (session 5h vs weekly), and reports drained when remaining fraction
+ * drops to <= 2%. Any transient/network failure fails OPEN ({ isDrained: false })
+ * so a quota-check outage never blocks live traffic.
+ */
 
-import { antigravityTlsFetch } from "./antigravityTlsClient.js";
+import { createHash } from "node:crypto";
+import {
+  ANTIGRAVITY_IDE_BASE_URL,
+  ANTIGRAVITY_IDE_USER_AGENT,
+  ANTIGRAVITY_IDE_VERSION,
+} from "../providers/shared.js";
+import { fetchWithTimeout } from "./usage/shared.js";
 
-const QUOTA_URL = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary";
-const QUOTA_TTL_MS = 120 * 1000; // 120s cache matching agy-acp-bridge standard
+const QUOTA_SUMMARY_URL = `${ANTIGRAVITY_IDE_BASE_URL}/v1internal:retrieveUserQuotaSummary`;
+const CACHE_TTL_MS = 60_000;
+const DRAINED_THRESHOLD = 0.02; // remaining <= 2% counts as depleted
 
-// cache: cacheKey -> { timestamp: number, data: object }
-const quotaCache = new Map();
+// connectionId → { result: raw fetch outcome { data, ok }, expiresAt } | { promise }
+const summaryCache = new Map();
 
-function getCacheKey(accessToken, connectionId = "") {
-  if (connectionId) return connectionId;
-  if (typeof accessToken === "string" && accessToken.length > 20) {
-    return accessToken.slice(-20);
-  }
-  return "default";
+export function _clearQuotaMonitorCache() {
+  summaryCache.clear();
 }
 
 /**
- * Fetch the latest quota summary for an Antigravity account using official CLI headers.
- * @param {string} accessToken
- * @param {object|null} proxyOptions
- * @param {string} connectionId
+ * Cache key binds the connection id to the token identity: accounts without a
+ * connectionId all map to the executor's "default", so without the token hash
+ * one account's quota summary would be served to another for up to 60s.
  */
-export async function fetchAntigravityQuota(accessToken, proxyOptions = null, connectionId = "") {
-  if (!accessToken) return null;
-  const key = getCacheKey(accessToken, connectionId);
-  const now = Date.now();
-  const hit = quotaCache.get(key);
-  if (hit && now - hit.timestamp < QUOTA_TTL_MS) {
-    return hit.data;
+function cacheKey(connectionId, accessToken) {
+  const tokenHash = createHash("sha256").update(String(accessToken)).digest("hex").slice(0, 12);
+  return `${connectionId}::${tokenHash}`;
+}
+
+/**
+ * Resolve the Antigravity family pattern for a model id.
+ * Mirrors getAntigravityModelFamily() in src/sse/services/antigravityQuota.js.
+ */
+function familyPatternFor(model) {
+  const clean = String(model || "").replace(/^ag\//, "").trim().toLowerCase();
+  if (clean.startsWith("claude-") || clean.startsWith("gpt-")) return /claude|gpt/i;
+  if (clean.includes("argon")) return /argon/i;
+  return /gemini/i;
+}
+
+function extractGroups(data) {
+  if (!data || typeof data !== "object") return null;
+  return (
+    (Array.isArray(data.groups) && data.groups) ||
+    (Array.isArray(data.quotaSummary?.groups) && data.quotaSummary.groups) ||
+    (Array.isArray(data.response?.groups) && data.response.groups) ||
+    null
+  );
+}
+
+function isSessionBucket(bucket) {
+  const windowType = String(bucket.window || "").toLowerCase();
+  const bucketText = `${bucket.bucketId || ""} ${bucket.displayName || ""}`.toLowerCase();
+  return (
+    windowType === "5h" ||
+    bucketText.includes("five hour") ||
+    bucketText.includes("5h") ||
+    bucketText.includes("daily") ||
+    windowType === "daily"
+  );
+}
+
+function isWeeklyBucket(bucket) {
+  const windowType = String(bucket.window || "").toLowerCase();
+  const bucketText = `${bucket.bucketId || ""} ${bucket.displayName || ""}`.toLowerCase();
+  return windowType === "weekly" || bucketText.includes("weekly");
+}
+
+/**
+ * Walk group buckets for the model's family and return the most restrictive
+ * remaining fraction plus its resetTime. Disabled weekly buckets are truly
+ * exhausted; disabled session buckets report 0 (weekly gate).
+ */
+export function parseMostRestrictiveBucket(data, model) {
+  const groups = extractGroups(data);
+  if (!groups) return null;
+
+  const pattern = familyPatternFor(model);
+  let worst = null; // { remainingFraction, resetTime }
+
+  for (const group of groups) {
+    if (!group || typeof group !== "object") continue;
+    if (!pattern.test(group.displayName || "")) continue;
+
+    const buckets = Array.isArray(group.buckets) ? group.buckets : [];
+    for (const bucket of buckets) {
+      if (!bucket || typeof bucket !== "object") continue;
+      const isWeekly = isWeeklyBucket(bucket);
+      const isSession = isSessionBucket(bucket);
+      if (!isWeekly && !isSession) continue;
+
+      // A session bucket disabled because weekly was hit still constrains usage.
+      if (bucket.disabled === true && isWeekly) continue;
+
+      const remainingFraction = bucket.disabled === true ? 0 : Number(bucket.remainingFraction);
+      if (!Number.isFinite(remainingFraction)) continue;
+
+      if (!worst || remainingFraction < worst.remainingFraction) {
+        worst = { remainingFraction, resetTime: bucket.resetTime || null };
+      }
+    }
   }
 
-  const proxyUrl = proxyOptions?.connectionProxyUrl || "";
-  try {
-    const res = await antigravityTlsFetch(QUOTA_URL, {
+  return worst;
+}
+
+async function fetchQuotaSummary(accessToken, proxyOptions) {
+  const response = await fetchWithTimeout(
+    QUOTA_SUMMARY_URL,
+    {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${accessToken}`,
+        Authorization: `Bearer ${accessToken}`,
+        "User-Agent": ANTIGRAVITY_IDE_USER_AGENT,
         "Content-Type": "application/json",
-        "User-Agent": "antigravity/cli",
+        "X-Client-Name": "antigravity",
+        "X-Client-Version": ANTIGRAVITY_IDE_VERSION,
       },
-      body: "{}",
-    }, {
-      timeoutMs: 15000,
-      proxy: proxyUrl,
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      const errData = { error: `HTTP ${res.status}: ${errText.slice(0, 100)}` };
-      // Cache transient error for 30s to avoid hammering
-      quotaCache.set(key, { timestamp: now - QUOTA_TTL_MS + 30000, data: errData });
-      return errData;
-    }
-
-    const data = await res.json();
-    quotaCache.set(key, { timestamp: now, data });
-    return data;
-  } catch (err) {
-    const errData = { error: String(err?.message || err) };
-    quotaCache.set(key, { timestamp: now - QUOTA_TTL_MS + 20000, data: errData });
-    return errData;
-  }
+      body: JSON.stringify({}),
+    },
+    10_000,
+    proxyOptions
+  );
+  if (!response.ok) return null;
+  const data = await response.json();
+  return extractGroups(data) ? data : null;
 }
 
 /**
- * Get lowest remainingFraction relevant to the requested model.
- * Third-party models (claude*, gpt*) check the third-party group.
- * Gemini models check the gemini/code assist group.
- * Returns 1.0 (fail-open) if quota data is missing or inaccessible.
+ * Compute { isDrained, resetTime } from a cached fetch outcome.
+ * Returns null when the outcome carries no parsable summary (caller fails open).
+ * resetTime is only surfaced when it parses to a finite date, so the executor's
+ * cooldown math never receives an unparseable value.
  */
-export function getAntigravityModelQuotaFraction(quotaData, modelId = "") {
-  if (!quotaData || !Array.isArray(quotaData.groups)) {
-    return 1.0;
-  }
-
-  const modelLower = String(modelId || "").toLowerCase();
-  const isThirdParty = modelLower.includes("claude") || modelLower.includes("gpt");
-
-  const fractions = [];
-  for (const group of quotaData.groups) {
-    const name = String(group?.displayName || "").toLowerCase();
-    const groupIs3P = name.includes("claude") || name.includes("gpt");
-
-    if (groupIs3P !== isThirdParty) {
-      continue;
-    }
-
-    for (const bucket of group.buckets || []) {
-      const fraction = bucket.remainingFraction;
-      if (typeof fraction === "number" && Number.isFinite(fraction)) {
-        fractions.push(fraction);
-      }
-    }
-  }
-
-  return fractions.length > 0 ? Math.min(...fractions) : 1.0;
+function computeDrained(outcome, model) {
+  if (!outcome?.ok || !outcome.data) return null;
+  const worst = parseMostRestrictiveBucket(outcome.data, model);
+  if (!worst) return null;
+  const resetMs = worst.resetTime ? new Date(worst.resetTime).getTime() : NaN;
+  return {
+    isDrained: worst.remainingFraction <= DRAINED_THRESHOLD,
+    resetTime: Number.isFinite(resetMs) ? worst.resetTime : null,
+  };
 }
 
 /**
- * Determine if the quota for a specific model is drained (remaining <= 2%).
- * Returns { isDrained: boolean, fraction: number, resetTime: string|null }
+ * Pre-check whether the model's family quota is drained for this connection.
+ * Cached per connection (60s) with in-flight dedup; never throws.
  */
-export async function isAntigravityQuotaDrained(accessToken, modelId = "", proxyOptions = null, connectionId = "") {
-  if (!accessToken) return { isDrained: false, fraction: 1.0, resetTime: null };
-  const quota = await fetchAntigravityQuota(accessToken, proxyOptions, connectionId);
-  if (!quota || quota.error) {
-    // Fail-open: do not block requests if quota API is temporarily unreachable
-    return { isDrained: false, fraction: 1.0, resetTime: null };
-  }
+export async function isAntigravityQuotaDrained(accessToken, model, proxyOptions = null, connectionId = "default") {
+  const failOpen = { isDrained: false, resetTime: null };
+  if (!accessToken || !model) return failOpen;
 
-  const fraction = getAntigravityModelQuotaFraction(quota, modelId);
-  const isDrained = fraction <= 0.02;
+  const key = cacheKey(connectionId, accessToken);
+  const hit = summaryCache.get(key);
 
-  let resetTime = null;
-  if (isDrained && Array.isArray(quota.groups)) {
-    const modelLower = String(modelId || "").toLowerCase();
-    const isThirdParty = modelLower.includes("claude") || modelLower.includes("gpt");
-    for (const group of quota.groups) {
-      const name = String(group?.displayName || "").toLowerCase();
-      if ((name.includes("claude") || name.includes("gpt")) === isThirdParty) {
-        for (const bucket of group.buckets || []) {
-          if (bucket.resetTime) {
-            resetTime = bucket.resetTime;
-            break;
-          }
-        }
-      }
+  if (hit?.promise) {
+    try {
+      const outcome = await hit.promise;
+      return computeDrained(outcome, model) || failOpen;
+    } catch {
+      return failOpen;
     }
   }
+  if (hit && hit.expiresAt > Date.now()) return computeDrained(hit.result, model) || failOpen;
 
-  return { isDrained, fraction, resetTime };
-}
+  const promise = (async () => {
+    try {
+      const data = await fetchQuotaSummary(accessToken, proxyOptions);
+      if (!data) return failOpen;
 
-export function clearAntigravityQuotaCache() {
-  quotaCache.clear();
+      // Only cache successful parses; unparsable shapes retry next request.
+      return { data, ok: true };
+    } catch {
+      return failOpen;
+    }
+  })();
+
+  summaryCache.set(key, { promise });
+
+  let outcome;
+  try {
+    outcome = await promise;
+  } catch {
+    summaryCache.delete(key);
+    return failOpen;
+  }
+
+  if (outcome?.ok) {
+    summaryCache.set(key, { result: outcome, expiresAt: Date.now() + CACHE_TTL_MS });
+  } else {
+    summaryCache.delete(key);
+  }
+
+  if (!outcome?.ok) return failOpen;
+
+  return computeDrained(outcome, model) || failOpen;
 }
