@@ -345,6 +345,17 @@ export const PROVIDER_CAPABILITIES = {
     // published efforts from low/high/xhigh to low/high/max.
     "deepseek-v4.1-flash": { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 1000000, maxOutput: 393216 },
   },
+  // Amazon Quick agent modes — server-routed Claude backends behind the bidi
+  // WS, all 1M context (verified via turn_usage.context_window). fast routes to
+  // claude-haiku-5-5 (reasoning off in its capabilities table); smart →
+  // claude-opus-5-5; balanced/advanced are server-routed. thinking is
+  // thinking_effort (off/low/medium/high/max) — openai format, can be disabled.
+  "aws-quick": {
+    fast:     { vision: true, reasoning: false, contextWindow: 1000000, maxOutput: 64000 },
+    balanced: { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 1000000, maxOutput: 64000 },
+    smart:    { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 1000000, maxOutput: 64000 },
+    advanced: { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 1000000, maxOutput: 64000 },
+  },
   // Poolside Laguna — OpenAI-compatible, all reasoning-capable (32K max output).
   "poolside": {
     "laguna-s-2.1":  { reasoning: true, thinkingFormat: "openai", contextWindow: 1000000, maxOutput: 32000 },
@@ -780,6 +791,16 @@ export function getCapabilitiesForModel(provider, model) {
     const providerCaps = PROVIDER_CAPABILITIES[provider];
     if (providerCaps?.[model]) return { ...DEFAULT_CAPABILITIES, ...providerCaps[model] };
     if (providerCaps?.[baseModel]) return { ...DEFAULT_CAPABILITIES, ...providerCaps[baseModel] };
+  }
+
+  // 1.5 AWS Quick agent modes (any openai-compatible node, model ids smart/balanced/fast):
+  // server-side routed Claude models (smart -> claude-opus-5-5, balanced -> sonnet-5-5,
+  // fast -> haiku-5-5), all 1M context (verified via turn_usage.context_window).
+  if (String(provider || "").startsWith("openai-compatible-") && ["smart", "balanced", "fast"].includes(baseModel)) {
+    return refine(
+      { vision: true, reasoning: baseModel !== "fast", thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 1000000, maxOutput: 64000 },
+      provider, model
+    );
   }
 
   // 2. Canonical exact, then catalog overlay so provider-scoped models.dev

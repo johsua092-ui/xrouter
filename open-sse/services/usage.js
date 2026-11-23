@@ -27,6 +27,7 @@ import { getGlmUsage, getGlmResetCards, redeemGlmResetCard, getGlmClaimablePlans
 import { getCommandCodeUsage } from "./usage/commandcode.js";
 import { getNousUsage } from "./usage/nous.js";
 import { getFreePiUsage } from "./usage/freepi.js";
+import { getAwsQuickUsage } from "./usage/aws-quick.js";
 import {
   getIflowUsage,
   getOllamaUsage,
@@ -88,6 +89,8 @@ const USAGE_HANDLERS = {
   cursor: (c) => getCursorUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
   nous: (c) => getNousUsage(c.accessToken || c.apiKey, c.proxyOptions, c),
   freepi: (c) => getFreePiUsage(c.accessToken || c.apiKey, c.proxyOptions),
+  // accessToken is the Quick id_token; tenantUrl/wsHost/awsAccountId ride psd
+  "aws-quick": (c) => getAwsQuickUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
 };
 
 // Qoder intl/CN share one usage path: PATs must be exchanged to a job token

@@ -33,6 +33,7 @@ import { MinimaxCodeExecutor } from "./minimax-code.js";
 import { AdcodeExecutor } from "./adcode.js";
 import { FreePiExecutor } from "./freepi.js";
 import { VeniceExecutor } from "./venice.js";
+import { AwsQuickExecutor } from "./aws-quick.js";
 
 const executors = {
   antigravity: new AntigravityExecutor(),
@@ -90,6 +91,8 @@ const executors = {
   venice: new VeniceExecutor(),
   "venice-ai": new VeniceExecutor(),
   veniceai: new VeniceExecutor(),
+  "aws-quick": new AwsQuickExecutor(),
+  aq: new AwsQuickExecutor(),
 };
 
 const defaultCache = new Map();
@@ -136,3 +139,4 @@ export { ZCodeExecutor } from "./zcode.js";
 export { AdcodeExecutor } from "./adcode.js";
 export { FreePiExecutor } from "./freepi.js";
 export { VeniceExecutor } from "./venice.js";
+export { AwsQuickExecutor } from "./aws-quick.js";
