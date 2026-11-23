@@ -66,14 +66,16 @@ export function tenantBaseUrl(psd) {
 }
 
 /**
- * Raw getAvailableEntitlementUnits probe. Returns the `…Response` object
- * (entitlements + subscriptionMetadata) or null; `onAuthError` flags 401/403.
+ * Raw getAvailableEntitlementUnits request — the Response is returned as-is
+ * (status intact) so callers can tell 401/403 apart from 429/5xx, and the
+ * request goes through proxyAwareFetch so the connection's proxy applies.
+ * Returns null when there is no token or no tenant base URL.
  */
-export async function probeAwsQuickEntitlements(accessToken, providerSpecificData, proxyOptions = null, { signal, onAuthError } = {}) {
+export async function probeAwsQuickEntitlementsResponse(accessToken, providerSpecificData, proxyOptions = null, { signal } = {}) {
   const base = tenantBaseUrl(providerSpecificData);
   if (!accessToken || !base) return null;
   const type = "getAvailableEntitlementUnits";
-  const r = await proxyAwareFetch(
+  return proxyAwareFetch(
     `${base}/integration/quick-work/qbs-event`,
     {
       method: "POST",
@@ -88,11 +90,21 @@ export async function probeAwsQuickEntitlements(accessToken, providerSpecificDat
     },
     proxyOptions
   );
+}
+
+/**
+ * Raw getAvailableEntitlementUnits probe. Returns the `…Response` object
+ * (entitlements + subscriptionMetadata) or null; `onAuthError` flags 401/403.
+ */
+export async function probeAwsQuickEntitlements(accessToken, providerSpecificData, proxyOptions = null, { signal, onAuthError } = {}) {
+  const r = await probeAwsQuickEntitlementsResponse(accessToken, providerSpecificData, proxyOptions, { signal });
+  if (!r) return null;
   if (r.status === 401 || r.status === 403) {
     onAuthError?.(r.status);
     return null;
   }
   const j = await r.json().catch(() => null);
+  const type = "getAvailableEntitlementUnits";
   const resp = j?.eventResponse?.[`${type}Response`];
   if (!r.ok || !resp) return null;
   return resp;

@@ -63,6 +63,9 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
   // (final /?code=…). AWS OIDC requires a loopback redirect for public clients,
   // so a remote browser always produces two address-bar URLs to paste.
   const [awsQuickPasteStep, setAwsQuickPasteStep] = useState("discovery");
+  // In-flight guard: /paste may take seconds (OIDC token exchange), so both
+  // Continue/Connect and the clipboard read are disabled while one runs.
+  const [awsQuickBusy, setAwsQuickBusy] = useState(false);
   const popupRef = useRef(null);
   const pollingAbortRef = useRef(false);
   const openedRef = useRef(false);
@@ -79,6 +82,9 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
   const onCloseRef = useRef(onClose);
   const isOpenRef = useRef(isOpen);
   const startOAuthFlowRef = useRef(null);
+  // aws-quick poll → /exchange: the poll effect must call the latest
+  // completeAwsQuickExchange without taking it as a dep (identity churn).
+  const completeAwsQuickExchangeRef = useRef(null);
   const { copied, copy } = useCopyToClipboard();
 
   // State for client-only values to avoid hydration mismatch
@@ -223,6 +229,14 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
 
   // Trae/Windsurf/Zed proxy OAuth flow: dynamic-port local callback → auto exchange.
   const startProxyFlow = useCallback(async (providerId) => {
+    // aws-quick: a new attempt (Try Again / retry) starts from a clean paste
+    // wizard — the previous attempt's step, pasted URL and error are stale.
+    if (providerId === "aws-quick") {
+      setAwsQuickPasteStep("discovery");
+      setAwsQuickPasteUrl("");
+      setError(null);
+      setAwsQuickBusy(false);
+    }
     // 1. Start the local callback server (returns a dynamic port + callback URL).
     const startRes = await fetch(`/api/oauth/${providerId}/start-proxy`);
     const startData = await startRes.json();
@@ -293,6 +307,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setStep("success");
+      setAwsQuickBusy(false);
       onSuccessRef.current?.();
     } catch (err) {
       setError(err.message);
@@ -305,6 +320,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
   // discovery fields and we re-authorize straight to the OIDC authorize URL —
   // or the final /?code&state URL, which completes the exchange.
   const submitAwsQuickPaste = useCallback(async (pasted) => {
+    setAwsQuickBusy(true);
     try {
       setError(null);
       const res = await fetch("/api/oauth/aws-quick/paste", {
@@ -316,6 +332,10 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       if (!res.ok) throw new Error(data.error);
       if (data.status === "discovery-saved") {
         setAwsQuickPasteStep("code");
+        // Step 1 is consumed: clear the pasted URL (the field now expects the
+        // final /?code=… address) and any stale message.
+        setAwsQuickPasteUrl("");
+        setError(null);
         // Attempt 2: reuse the session (state) — /authorize now skips the
         // discovery hop and returns the OIDC authorize URL.
         if (!authData?.redirectUri) throw new Error("Login session expired; restart the login flow");
@@ -339,12 +359,20 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       }
       throw new Error(data.error || "Unexpected paste-back result");
     } catch (err) {
-      setError(err.message);
-      setStep("error");
+      const message = err?.message || "Paste-back failed";
+      setError(message);
+      // Only a vanished session is unrecoverable in place — that one keeps the
+      // dedicated error step (with Try Again). Every other failure keeps the
+      // paste wizard mounted so the message renders inline and the user can
+      // correct the pasted URL.
+      setStep(String(message).includes("Login session not found") ? "error" : "input");
+    } finally {
+      setAwsQuickBusy(false);
     }
   }, [authData, completeAwsQuickExchange]);
 
   const pasteAwsQuickFromClipboard = useCallback(async () => {
+    setAwsQuickBusy(true);
     try {
       const text = (await navigator.clipboard.readText()).trim();
       if (!text) return;
@@ -352,6 +380,8 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       await submitAwsQuickPaste(text);
     } catch {
       setError("Clipboard access was blocked — click the field and paste with Ctrl/Cmd+V.");
+    } finally {
+      setAwsQuickBusy(false);
     }
   }, [submitAwsQuickPaste]);
 
@@ -582,6 +612,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     onCloseRef.current = onClose;
     isOpenRef.current = isOpen;
     startOAuthFlowRef.current = startOAuthFlow;
+    completeAwsQuickExchangeRef.current = completeAwsQuickExchange;
   });
 
   // Reset state and start OAuth when modal opens — exactly once per open.
@@ -600,6 +631,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     setPasteToken("");
     setAwsQuickPasteUrl("");
     setAwsQuickPasteStep("discovery");
+    setAwsQuickBusy(false);
     setIdeStatus(null);
     pollingAbortRef.current = false;
     flowRef.current = { proxyStarted: false, proxyProvider: null, stopSent: false };
@@ -643,6 +675,9 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     let attempts = 0;
 
     const tick = async () => {
+      // A closed modal (or a stopped flow) must never resolve into a success
+      // step or fire onSuccess after the user dismissed the dialog.
+      if (!isOpenRef.current || pollingAbortRef.current) return;
       if (cancelled || callbackProcessedRef.current) return;
       attempts += 1;
       try {
@@ -651,6 +686,13 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         if (cancelled || callbackProcessedRef.current) return;
         if (data.status === "done") {
           callbackProcessedRef.current = true;
+          if (pollProvider === "aws-quick") {
+            // Quick settles tokens in memory only — POST /exchange is what
+            // creates the connection. The generic success path would leave the
+            // provider unconnected. completeAwsQuickExchange sets step/onSuccess.
+            await completeAwsQuickExchangeRef.current?.(authData.state);
+            return;
+          }
           setStep("success");
           onSuccessRef.current?.();
           return;
@@ -674,7 +716,9 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     };
     setTimeout(tick, POLL_INTERVAL_MS);
     return () => { cancelled = true; };
-  }, [authData]);
+    // isOpen is a dep so closing the modal tears the loop down (tick also
+    // guards on isOpenRef for a tick already in flight).
+  }, [authData, isOpen]);
 
   // Listen for OAuth callback via multiple methods
   useEffect(() => {
@@ -900,24 +944,24 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
             {authMode === "browser" && (
               <>
                 {step === "waiting" && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
-                      <span className="material-symbols-outlined text-base text-primary animate-spin">progress_activity</span>
-                      <span className="text-sm">Waiting for browser authorization…</span>
-                    </div>
-                    {provider === "aws-quick" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const u = authData?.authUrl || authData?.authorizeUrl;
-                          if (u) window.open(u, "_blank", "noopener,noreferrer");
-                        }}
-                        className="w-full text-xs text-text-muted hover:text-primary underline"
-                      >
-                        Popup blank or blocked? Open the sign-in page manually
-                      </button>
-                    )}
+                  <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
+                    <span className="material-symbols-outlined text-base text-primary animate-spin">progress_activity</span>
+                    <span className="text-sm">Waiting for browser authorization…</span>
                   </div>
+                )}
+                {/* Rendered for both states: the popup can come back blank on
+                    "input" too, and that state has no visible sign-in link. */}
+                {provider === "aws-quick" && (step === "waiting" || step === "input") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const u = authData?.authUrl || authData?.authorizeUrl;
+                      if (u) window.open(u, "_blank", "noopener,noreferrer");
+                    }}
+                    className="w-full text-xs text-text-muted hover:text-primary underline"
+                  >
+                    Popup blank or blocked? Open the sign-in page manually
+                  </button>
                 )}
                 {step === "input" && (
                   <div className="space-y-3">
@@ -979,6 +1023,10 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
                   className="font-mono text-xs"
                 />
 
+                {/* Paste failures keep the wizard mounted and surface here —
+                    the error step would destroy the entered URL. */}
+                {error && <p className="text-xs text-danger">{error}</p>}
+
                 {awsQuickPasteUrl && /[?&]code=/.test(awsQuickPasteUrl) && awsQuickPasteStep === "discovery" && (
                   <p className="text-[11px] text-amber-500">
                     This looks like the final URL (code=…). If the sign-in page was reached on this machine the server may
@@ -987,10 +1035,14 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
                 )}
 
                 <div className="flex gap-2">
-                  <Button onClick={pasteAwsQuickFromClipboard} variant="ghost" fullWidth>
+                  <Button onClick={pasteAwsQuickFromClipboard} variant="ghost" fullWidth disabled={awsQuickBusy}>
                     Paste from clipboard
                   </Button>
-                  <Button onClick={() => submitAwsQuickPaste(awsQuickPasteUrl)} fullWidth disabled={!awsQuickPasteUrl}>
+                  <Button
+                    onClick={() => submitAwsQuickPaste(awsQuickPasteUrl)}
+                    fullWidth
+                    disabled={awsQuickBusy || !awsQuickPasteUrl}
+                  >
                     {awsQuickPasteStep === "discovery" ? "Continue" : "Connect"}
                   </Button>
                 </div>

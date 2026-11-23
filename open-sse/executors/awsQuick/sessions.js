@@ -20,6 +20,8 @@ import { textOf, canonRole } from "./translate.js";
 
 // 24h idle TTL: real agent sessions pause far longer than 30min between turns.
 // A stale threadId is safe — the handler retries once on a fresh thread.
+// `max` is per identity shard (see shardFor): a single global cap let one busy
+// connection evict every other connection's continuations.
 export const SESSION_DEFAULTS = Object.freeze({ ttlMs: 24 * 60 * 60 * 1000, max: 200 });
 
 const sha = (s) => createHash("sha256").update(s).digest("hex");
@@ -125,11 +127,26 @@ export function createSessionStore({ ttlMs = SESSION_DEFAULTS.ttlMs, max = SESSI
   };
 }
 
-// Process-wide store, globalThis-cached so hot reload can't fork it.
-const storeHolder = (globalThis.__awsQuickSessionStore ||= {});
-function sharedStore() {
-  if (!storeHolder.store) storeHolder.store = createSessionStore();
-  return storeHolder.store;
+// Process-wide stores, globalThis-cached so hot reload can't fork them.
+// Sharded per identity (connection): a single global LRU let one busy
+// connection evict every other connection's threads, which silently turned
+// their continuations into fresh (expensive) threads.
+const storeHolder = (globalThis.__awsQuickSessionStores ||= new Map());
+const DEFAULT_SHARD = "default";
+
+function shardFor(identity) {
+  const key = identity ? String(identity) : DEFAULT_SHARD;
+  let store = storeHolder.get(key);
+  if (!store) {
+    store = createSessionStore();
+    storeHolder.set(key, store);
+  }
+  return store;
+}
+
+/** Every shard, for lookups that were not given an identity. */
+function allShards() {
+  return storeHolder.values();
 }
 
 /**
@@ -149,23 +166,35 @@ export function findContinuation(store, hashes, convo) {
   return undefined;
 }
 
-/** The gateway's process-wide session store (all aws-quick connections). */
-export function sharedFindContinuation(hashes, convo) {
-  return findContinuation(sharedStore(), hashes, convo);
+/** The gateway's per-identity session store; identity defaults to one shard. */
+export function sharedFindContinuation(hashes, convo, identity) {
+  return findContinuation(shardFor(identity), hashes, convo);
 }
 
-export function sharedSet(key, entry) {
-  sharedStore().set(key, entry);
+export function sharedSet(key, entry, identity) {
+  shardFor(identity).set(key, entry);
 }
 
-export function sharedHas(key) {
-  return sharedStore().has(key);
+export function sharedHas(key, identity) {
+  if (identity) return shardFor(identity).has(key);
+  for (const store of allShards()) if (store.has(key)) return true;
+  return false;
 }
 
-export function sharedTake(key) {
-  return sharedStore().take(key);
+export function sharedTake(key, identity) {
+  if (identity) return shardFor(identity).take(key);
+  for (const store of allShards()) {
+    const entry = store.take(key);
+    if (entry) return entry;
+  }
+  return undefined;
 }
 
-export function sharedFindEntry(pred) {
-  return sharedStore().findEntry(pred);
+export function sharedFindEntry(pred, identity) {
+  if (identity) return shardFor(identity).findEntry(pred);
+  for (const store of allShards()) {
+    const hit = store.findEntry(pred);
+    if (hit) return hit;
+  }
+  return undefined;
 }

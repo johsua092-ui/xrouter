@@ -110,18 +110,32 @@ export async function GET(request, { params }) {
       // the local proxy handles both hops. redirect_uri is the proxy
       // callback URL returned by start-proxy.
       if (provider === "aws-quick") {
-        const redirectUri = searchParams.get("redirect_uri");
-        if (!redirectUri) {
-          return NextResponse.json({ error: "Missing redirect_uri (call start-proxy first)" }, { status: 400 });
-        }
-        let port;
-        try { port = new URL(redirectUri).port; } catch { port = null; }
-        if (!port) {
-          return NextResponse.json({ error: "redirect_uri must be a loopback URL with a port" }, { status: 400 });
-        }
         const state = searchParams.get("state") || crypto.randomUUID();
         const stage = searchParams.get("stage") || "prod";
-        registerAwsQuickSession({ state, port: Number(port), redirectUri, stage });
+        // (Re)start the loopback listener: a retry after the 10-minute idle
+        // timeout, a hop failure, or another tab's stop-proxy closes it, and a
+        // client registered against a dead port can never receive the callback.
+        const proxy = await startAwsQuickProxy();
+        if (!proxy?.success || !proxy.callbackUrl) {
+          return NextResponse.json(
+            { error: `Could not start the loopback callback server: ${proxy?.reason || "unknown"}` },
+            { status: 500 },
+          );
+        }
+        // The live listener's port wins over any redirect_uri the client sends
+        // (its value may come from an earlier attempt on a different port).
+        const redirectUri = proxy.callbackUrl;
+        // Validates + normalizes the loopback origin to http://<host>:<port>
+        // (AWS OIDC public clients reject redirect URIs with a path).
+        if (!registerAwsQuickSession({ state, redirectUri, stage })) {
+          return NextResponse.json(
+            {
+              error:
+                "redirect_uri must be a loopback URL with an explicit port: http://127.0.0.1:<port>, http://localhost:<port> or http://[::1]:<port>",
+            },
+            { status: 400 },
+          );
+        }
         const authData = await resolveAwsQuickAuthorizeUrl({ state, redirectUri, stage });
         return NextResponse.json(authData);
       }

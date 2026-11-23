@@ -233,6 +233,10 @@ export async function fetchQuickWorkUserInfo({ accessToken, tenantUrl, stage }) 
  * @returns {Promise<{tokens: object, userInfo: object}>}
  */
 export async function completeAwsQuickExchange({ query, session }) {
+  // Idempotent: a replay (duplicate hop-2 landing, re-pasted address) must not
+  // re-run the token exchange against an already-settled session — AWS rotates
+  // the refresh token, and the code is single-use.
+  if (session?.status === "done" && session.result) return session.result;
   const q = query;
   const state = q.get("state");
   if (!state || !session || state !== session.state) {
@@ -259,48 +263,6 @@ export async function completeAwsQuickExchange({ query, session }) {
     stage: session.stage,
   });
   return { tokens, userInfo };
-}
-
-/**
- * Refresh a stored aws-quick OAuth session via the refresh_token grant.
- * AWS rotates the refresh token on EVERY refresh — the caller must persist
- * the returned refreshToken.
- * @param {object} p
- * @param {string} p.refreshToken  current refresh token
- * @param {string} p.clientId      dynamic client id
- * @param {string} p.clientSecret  dynamic client secret
- * @param {string} [p.idcRegion]   IDC region (default us-east-1)
- * @param {string} [p.issuerUrl]   issuer URL — discovery doc is consulted first
- * @returns {Promise<{accessToken: string, refreshToken: string, idToken: string, expiresIn: number}>}
- */
-export async function refreshAwsQuickSession({ refreshToken, clientId, clientSecret, idcRegion, issuerUrl }) {
-  if (!refreshToken) throw new Error("no refresh_token; log in again");
-  const region = idcRegion || "us-east-1";
-  assertValidAwsRegion(region);
-  // Discovery doc first, regional fallback (magpie's tokenEndpointFor).
-  let endpoint = `https://oidc.${region}.amazonaws.com/token`;
-  if (issuerUrl) {
-    try {
-      const r = await fetch(`${issuerUrl}/.well-known/openid-configuration`);
-      const ep = r.ok ? (await r.json())?.token_endpoint : null;
-      if (ep) endpoint = ep;
-    } catch { /* regional fallback */ }
-  }
-  const tok = await postJson(endpoint, {
-    clientId: clientId || "",
-    clientSecret: clientSecret || "",
-    grantType: "refresh_token",
-    refreshToken,
-  });
-  const access = tok.accessToken || tok.access_token || "";
-  if (!access) throw new Error("refresh returned no accessToken; log in again");
-  return {
-    accessToken: access,
-    // Rotated refresh token MUST be persisted by the caller.
-    refreshToken: tok.refreshToken || tok.refresh_token || refreshToken,
-    idToken: tok.idToken || tok.id_token || "",
-    expiresIn: Number(tok.expiresIn ?? tok.expires_in ?? 0),
-  };
 }
 
 /**

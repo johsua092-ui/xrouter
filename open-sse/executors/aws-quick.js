@@ -198,7 +198,7 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
   const identity = options?.identity || "aws-quick";
   const scope = sessionScope(identity, `${mode}|${effort ?? ""}`, systemText, tools.map((t) => t.name));
   const hashes = chainHashes(scope, convo);
-  const cont = sharedFindContinuation(hashes, convo);
+  const cont = sharedFindContinuation(hashes, convo, identity);
   // Fuzzy resume: context extensions (pi-magic-context, rewind hooks, …) can
   // prune or rewrite old messages, breaking the strict prefix chain. Anchor on
   // our last reply echo + its 3 predecessors — content hashes survive the
@@ -216,11 +216,11 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
     if (a >= 3) {
       const rk = replyAnchor(scope, convo[a]);
       const tk = tailAnchor(scope, convo.slice(a - 3, a));
-      const hit = sharedFindEntry((e) => e.replyKey === rk && e.tailKey === tk);
+      const hit = sharedFindEntry((e) => e.replyKey === rk && e.tailKey === tk, identity);
       if (hit) {
         const delta = convo.slice(a + 1);
         if (delta.length && delta.every((m) => ["user", "tool", "function"].includes(canonRole(m.role)))) {
-          sharedTake(hit.key);
+          sharedTake(hit.key, identity);
           fuzzy = { entry: hit.entry, delta };
         }
       }
@@ -291,7 +291,9 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
   if (!upstreamText.trim()) upstreamText = "(empty)";
 
   const state = { text: "", reasoning: "", usage: null, calls: [] };
-  const parser = tools.length ? createToolCallParser() : null;
+  // `let`: a retry starts a brand-new turn, so a partially-consumed <tool_call>
+  // from the failed attempt must not corrupt it.
+  let parser = tools.length ? createToolCallParser() : null;
   let fedText = false;
   let sawOutput = false;
 
@@ -383,15 +385,19 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
   if (stats.truncated) yield { type: "note", text: "Context exceeded Quick's 64KB frame cap; earlier content was truncated" };
 
   const produced = () => state.text.length > 0 || state.calls.length > 0 || state.reasoning.length > 0;
-  const release = await acquireTurn(socket);
+  // Bounded wait: a request queued behind a wedged holder must fail cleanly
+  // (503) instead of hanging forever, and a client abort drops it at once.
+  const release = await acquireTurn(socket, { signal });
   try {
     try {
       for await (const o of consume(socket.turn(threadId, payload, { signal }))) yield o;
     } catch (e) {
-      if (!(reuse) || produced() || e?.kind === "auth" || signal?.aborted) throw e;
-      // Cached thread may be gone server-side: retry once on a fresh thread with
-      // the full transcript (same policy as the reference implementation).
-      const fresh = crypto.randomUUID();
+      // Retry once when nothing was produced: a cached thread may be gone
+      // server-side, and a 1006/timeout on a fresh thread means the server never
+      // got the message (same threadId is safe to re-send).
+      if (produced() || signal?.aborted || e?.kind === "auth") throw e;
+      if (!(reuse || e?.kind === "ws" || e?.kind === "timeout" || e?.code === 1006)) throw e;
+      const fresh = reuse ? crypto.randomUUID() : threadId;
       const full = renderTranscript(convo, "", { maxBytes: turnBudget, stats }) + imageNote;
       const fullPreamble = tools.length ? fitPreamble() : "";
       const fullText = fullPreamble ? `${fullPreamble}\n\n${full}` : full;
@@ -402,6 +408,7 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
       state.calls = [];
       fedText = false;
       sawOutput = false;
+      parser = tools.length ? createToolCallParser() : null;
       threadId = fresh;
       reused = false;
       yield { type: "meta", threadId: fresh, reused: false, mode };
@@ -419,11 +426,15 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
   if (state.text || state.calls.length) {
     const reply = replyMessage(state.text, state.calls);
     const key = extendHash(hashes[convo.length], reply);
-    sharedSet(key, {
-      threadId,
-      replyKey: replyAnchor(scope, reply),
-      tailKey: tailAnchor(scope, convo.slice(-3)),
-    });
+    sharedSet(
+      key,
+      {
+        threadId,
+        replyKey: replyAnchor(scope, reply),
+        tailKey: tailAnchor(scope, convo.slice(-3)),
+      },
+      identity
+    );
   }
   yield { type: "done", threadId, text: state.text, reasoning: state.reasoning, usage: state.usage };
 }
@@ -463,6 +474,10 @@ export class AwsQuickExecutor extends BaseExecutor {
       transformedBody: body,
       responseFormat: FORMATS.OPENAI,
     });
+
+    // Client already gone: nothing to connect for, and a turn started here
+    // would hold the per-socket mutex with nobody reading it.
+    if (signal?.aborted) return fail(499, "Request aborted by client", "api_error");
 
     if (!psd.wsHost) {
       return fail(401, "Amazon Quick connection is missing providerSpecificData.wsHost — reconnect the provider", "authentication_error");
@@ -514,12 +529,42 @@ export class AwsQuickExecutor extends BaseExecutor {
     // Pull up to the first real output before answering so auth/session failures
     // surface as real HTTP statuses (chatCore refresh-retries 401/403) instead of
     // a 200 stream that dies immediately.
+    // The client can vanish mid-handshake: abort the generator and make the
+    // pre-pull abortable, or a dead request parks here holding the mutex.
+    const onAbort = () => {
+      try {
+        Promise.resolve(it.return?.()).catch(() => {});
+      } catch {}
+    };
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+    const cleanupAbort = () => {
+      if (signal) signal.removeEventListener("abort", onAbort);
+    };
+    const next = () => {
+      const p = it.next();
+      if (!signal) return p;
+      return new Promise((resolve, reject) => {
+        const onSig = () => reject(new QuickWsError("aborted", { kind: "abort" }));
+        signal.addEventListener("abort", onSig, { once: true });
+        p.then(
+          (v) => {
+            signal.removeEventListener("abort", onSig);
+            resolve(v);
+          },
+          (e) => {
+            signal.removeEventListener("abort", onSig);
+            reject(e);
+          }
+        );
+      });
+    };
+
     const pre = [];
     let done = false;
     let meta;
     try {
       for (;;) {
-        const r = await it.next();
+        const r = await next();
         if (r.done) {
           done = true;
           break;
@@ -528,11 +573,14 @@ export class AwsQuickExecutor extends BaseExecutor {
           meta = r.value;
           continue;
         }
-        if (r.value.type === "note") continue; // notes ride inside the stream
+        // Notes (e.g. the 64 KB truncation warning) are real output — keep them
+        // even when they are the first thing the turn emits.
         pre.push(r.value);
+        if (r.value.type === "note") continue;
         break;
       }
     } catch (e) {
+      cleanupAbort();
       if (e instanceof QuickWsError && e.kind === "auth") socket.close().catch(() => {});
       return fail(httpStatus(e), e?.message ?? String(e), errorType(e));
     }
@@ -541,7 +589,7 @@ export class AwsQuickExecutor extends BaseExecutor {
       yield* pre;
       if (done) return;
       for (;;) {
-        const r = await it.next();
+        const r = await next();
         if (r.done) return;
         yield r.value;
       }
@@ -565,6 +613,8 @@ export class AwsQuickExecutor extends BaseExecutor {
         }
       } catch (e) {
         return fail(httpStatus(e), e?.message ?? String(e), errorType(e));
+      } finally {
+        cleanupAbort();
       }
       const message = { role: "assistant", content: text };
       if (reasoning) message.reasoning_content = reasoning;
@@ -599,6 +649,9 @@ export class AwsQuickExecutor extends BaseExecutor {
           ...(usage ? { usage } : {}),
         })}\n\n`
       );
+    // OpenAI semantics: streaming usage is opt-in and rides a trailing chunk
+    // with an empty choices array (mirrors the reference handler).
+    const includeUsage = !!bodyObj.stream_options?.include_usage;
     const readable = new ReadableStream({
       async start(controller) {
         let sentRole = false;
@@ -630,7 +683,21 @@ export class AwsQuickExecutor extends BaseExecutor {
             }
           }
           role();
-          controller.enqueue(sseChunk({}, toolIndex > 0 ? "tool_calls" : "stop", usage ?? undefined));
+          controller.enqueue(sseChunk({}, toolIndex > 0 ? "tool_calls" : "stop"));
+          if (includeUsage) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  id,
+                  object: "chat.completion.chunk",
+                  created,
+                  model: wireModel,
+                  choices: [],
+                  usage: usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+                })}\n\n`
+              )
+            );
+          }
           controller.enqueue(encoder.encode(SSE_DONE));
         } catch (e) {
           controller.enqueue(
@@ -638,12 +705,15 @@ export class AwsQuickExecutor extends BaseExecutor {
           );
           controller.enqueue(encoder.encode(SSE_DONE));
         } finally {
+          cleanupAbort();
           controller.close();
         }
       },
       cancel() {
-        items.return?.();
-        it.return?.();
+        cleanupAbort();
+        // Fire-and-forget: a generator torn down mid-flight may reject.
+        Promise.resolve(items.return?.()).catch(() => {});
+        Promise.resolve(it.return?.()).catch(() => {});
       },
     });
     return {
