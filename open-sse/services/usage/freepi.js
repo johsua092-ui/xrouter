@@ -32,7 +32,13 @@ export async function getFreePiUsage(token, proxyOptions = null) {
     );
 
     if (res.status === 401 || res.status === 403) {
-      return { plan: "FreePI", message: "FreePI authentication failed. Check token or sign in again." };
+      // FreePI rejects CLI tokens on /me/stats even while chat completions succeed
+      // (verified: same token 200 on /v1/chat/completions, 401 here). Reporting
+      // "authentication failed" made healthy accounts look dead.
+      return {
+        plan: "FreePI",
+        message: "FreePI does not expose quota to CLI tokens (/me/stats returns 401). Daily credits: 4000 total, free models unlimited.",
+      };
     }
 
     if (!res.ok) {

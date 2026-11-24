@@ -84,6 +84,12 @@ export const ERROR_RULES = [
   // FreePI specific rules: model refusal & conversation ownership are request-scoped, not fatal to the account
   { provider: "freepi", text: "belongs to another free-pi account", cooldownMs: 0, lock: false },
   { provider: "freepi", text: "model_requires_credits", cooldownMs: 0, lock: false },
+  // Our own admission control. A full queue or an expired wait says nothing about
+  // the account: locking it here turned a client-side backpressure signal into a
+  // 503 "provider down" plus a 2s cooldown on a perfectly healthy token. Rotate to
+  // another account (or fail as 429) and leave the account alone.
+  { provider: "freepi", text: "queue_overflow", cooldownMs: 0, lock: false },
+  { provider: "freepi", text: "queue_timeout", cooldownMs: 0, lock: false },
   { provider: "codex", text: "model is not supported when using codex with a chatgpt account", cooldownMs: MAX_RATE_LIMIT_COOLDOWN_MS },
   // Intl gateway blocks affect the account/IP, so let the connection back off.
   { provider: "codebuddy-intl", text: "request illegal", backoff: true },

@@ -27,7 +27,10 @@ export default {
   },
   transport: {
     baseUrl: "https://api.freepi.ai/v1/chat/completions",
-    validateUrl: "https://api.freepi.ai/me/stats",
+    // No GET validateUrl on purpose: /me and /me/stats reject CLI tokens with 401
+    // "invalid or expired token" even when chat completions succeed (verified), so
+    // any GET-based probe marks a healthy account dead. Validation is a 1-token
+    // completion in app/api/providers/[id]/test/testUtils.js.
     headers: {
       "x-client-version": "0.6.25",
     },

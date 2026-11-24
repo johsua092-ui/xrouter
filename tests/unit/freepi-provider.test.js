@@ -20,7 +20,9 @@ test("FreePI Provider Integration Tests", async (t) => {
   assert.equal(freepiRegistry.hasFree, true);
   assert.equal(freepiRegistry.features?.usage, true);
   assert.equal(freepiRegistry.transport.baseUrl, "https://api.freepi.ai/v1/chat/completions");
-  assert.equal(freepiRegistry.transport.validateUrl, "https://api.freepi.ai/me/stats");
+  // No GET validateUrl: /me/stats 401s for CLI tokens while chat works, so the
+  // health probe is a 1-token completion in testUtils instead.
+  assert.equal(freepiRegistry.transport.validateUrl, undefined);
   assert.ok(Array.isArray(freepiRegistry.models) && freepiRegistry.models.length > 0);
 
   // 2. Main registry inclusion
@@ -67,7 +69,7 @@ test("FreePI Provider Integration Tests", async (t) => {
   const testUtilsPath = path.join(rootDir, "src/app/api/providers/[id]/test/testUtils.js");
   const testUtilsContent = fs.readFileSync(testUtilsPath, "utf8");
   assert.ok(testUtilsContent.includes("freepi: {"), "OAUTH_TEST_CONFIG must configure freepi");
-  assert.ok(testUtilsContent.includes('url: "https://api.freepi.ai/me/stats"'), "freepi test config must target /me/stats");
+  assert.ok(testUtilsContent.includes("probeFreePi"), "freepi must be health-checked with a real completion, not /me/stats");
 
   // 8. Usage fetcher validation
   const freepiUsageModule = await import("../../open-sse/services/usage/freepi.js");
@@ -316,5 +318,263 @@ test("FreePI identity resolution (duplicate-free re-login)", async (t) => {
     const mapped = freepiOAuth.mapTokens({ access_token: "tok" }, extra);
     assert.equal(mapped.email, undefined);
     assert.equal(mapped.displayName, "FreePI User");
+  });
+});
+
+// The per-token maps are process-lifetime state: FreePI has no refresh, so every
+// re-login mints a new token and adds entries nobody removes. Measured before
+// the sweep: 1.12 KB per token across these maps (≈110 MB per 100k logins), and
+// a queue whose stream never closed kept an account "busy" forever.
+test("FreePI per-token state hygiene", async (t) => {
+  const {
+    getSessionId,
+    acquireFreePiQueueLock,
+    sweepFreePiState,
+    getFreePiStateStats,
+    wrapStreamWithQueueLock,
+  } = await import("../../open-sse/executors/freepi.js");
+
+  await t.test("session id is stable per token and distinct across tokens", () => {
+    const a1 = getSessionId("hygiene-a");
+    const a2 = getSessionId("hygiene-a");
+    const b = getSessionId("hygiene-b");
+    assert.equal(a1, a2);
+    assert.notEqual(a1, b);
+  });
+
+  await t.test("sessions older than the TTL are dropped", () => {
+    getSessionId("ttl-a");
+    getSessionId("ttl-b");
+    assert.ok(getFreePiStateStats().sessions >= 2);
+    sweepFreePiState(Date.now() + 7 * 60 * 60 * 1000);
+    assert.equal(getFreePiStateStats().sessions, 0, "6h-idle sessions must not survive the sweep");
+  });
+
+  await t.test("a held queue survives the sweep, an idle one does not", async () => {
+    const token = `hygiene-queue-${Date.now()}`;
+    const before = getFreePiStateStats().queues;
+
+    const release = await acquireFreePiQueueLock(token);
+    assert.equal(getFreePiStateStats().queues, before + 1);
+
+    sweepFreePiState(Date.now() + 7 * 60 * 60 * 1000);
+    assert.equal(getFreePiStateStats().queues, before + 1, "a running slot must never be swept");
+
+    await release();
+    sweepFreePiState(Date.now() + 7 * 60 * 60 * 1000);
+    assert.equal(getFreePiStateStats().queues, before, "an idle slot is not worth keeping");
+  });
+
+  await t.test("the per-token maps stay bounded", () => {
+    for (let i = 0; i < 700; i++) getSessionId(`bounded-${i}`);
+    const stats = getFreePiStateStats();
+    assert.ok(stats.sessions <= stats.limit, `sessions=${stats.sessions} limit=${stats.limit}`);
+  });
+
+  await t.test("the lock is released when the body cannot be wrapped", () => {
+    let releases = 0;
+    const bomb = {
+      body: { pipeThrough() { throw new Error("boom"); } },
+      status: 200,
+      statusText: "OK",
+      headers: new Headers(),
+    };
+    assert.throws(() => wrapStreamWithQueueLock(bomb, () => { releases++; }), /boom/);
+    assert.equal(releases, 1, "a failed wrap must not strand the account as BUSY");
+  });
+
+  await t.test("release fires once on EOF", async () => {
+    let releases = 0;
+    const source = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("hello"));
+          controller.close();
+        },
+      }),
+      { status: 200 },
+    );
+    const wrapped = wrapStreamWithQueueLock(source, () => { releases++; });
+    await new Response(wrapped.body).text();
+    assert.equal(releases, 1);
+  });
+
+  await t.test("release fires once on cancel", async () => {
+    let releases = 0;
+    const source = new Response(
+      new ReadableStream({
+        pull(controller) { controller.enqueue(new TextEncoder().encode("chunk")); },
+      }),
+      { status: 200 },
+    );
+    const wrapped = wrapStreamWithQueueLock(source, () => { releases++; });
+    const reader = wrapped.body.getReader();
+    await reader.read();
+    await reader.cancel();
+    assert.equal(releases, 1);
+  });
+
+  await t.test("a body-less response releases immediately", () => {
+    let releases = 0;
+    const res = new Response(null, { status: 204 });
+    wrapStreamWithQueueLock(res, () => { releases++; });
+    assert.equal(releases, 1);
+  });
+});
+
+test("FreePI queue admission control", async (t) => {
+  const { acquireFreePiQueueLock, getFreePiQueuePressure, reserveFreePiSlot, getFreePiMetrics } = await import(
+    "../../open-sse/executors/freepi.js"
+  );
+  const { checkFallbackError } = await import("../../open-sse/services/accountFallback.js");
+
+  await t.test("pressure reports idle, then running, then waiting", async () => {
+    const token = `pressure-${Date.now()}`;
+    assert.equal(getFreePiQueuePressure(token).idle, true, "an unknown token has no queue");
+
+    const release = await acquireFreePiQueueLock(token);
+    assert.equal(getFreePiQueuePressure(token).running, 1);
+
+    const queued = acquireFreePiQueueLock(token);
+    assert.deepEqual(
+      { ...getFreePiQueuePressure(token) },
+      { running: 1, waiting: 1, reserved: 0, total: 2, idle: false },
+      "slot-aware routing needs the waiting count, not just the running flag",
+    );
+
+    await release();
+    const releaseNext = await queued;
+    assert.equal(getFreePiQueuePressure(token).running, 1, "the handed-off request owns the slot");
+    await releaseNext();
+    assert.equal(getFreePiQueuePressure(token).idle, true, "an idle queue must look idle again");
+  });
+
+  await t.test("a selection reservation makes the slot look taken", async () => {
+    const token = `reserve-${Date.now()}`;
+    assert.equal(getFreePiQueuePressure(token).idle, true);
+
+    const undo = reserveFreePiSlot(token, 40);
+    const during = getFreePiQueuePressure(token);
+    assert.equal(during.reserved, 1);
+    assert.equal(during.total, 1);
+    assert.equal(during.idle, false, "two selects in the same tick must not both see a free account");
+
+    reserveFreePiSlot(token, 40);
+    assert.equal(getFreePiQueuePressure(token).total, 2);
+
+    undo();
+    assert.equal(getFreePiQueuePressure(token).reserved, 1, "releasing one reservation keeps the other");
+
+    await new Promise((r) => setTimeout(r, 90));
+    assert.equal(getFreePiQueuePressure(token).idle, true, "an unused reservation must expire on its own");
+  });
+
+  await t.test("acquiring the real lock clears the reservation", async () => {
+    const token = `reserve-clear-${Date.now()}`;
+    reserveFreePiSlot(token);
+    assert.equal(getFreePiQueuePressure(token).reserved, 1);
+
+    const release = await acquireFreePiQueueLock(token);
+    const during = getFreePiQueuePressure(token);
+    assert.equal(during.reserved, 0, "the lock supersedes the hint");
+    assert.equal(during.running, 1);
+    await release();
+    assert.equal(getFreePiQueuePressure(token).idle, true);
+  });
+
+  await t.test("a full queue fails fast with QUEUE_OVERFLOW", async () => {
+    const token = `overflow-${Date.now()}`;
+    const release = await acquireFreePiQueueLock(token);
+
+    const controllers = [];
+    const waiting = [];
+    for (let i = 0; i < 10; i++) {
+      const ac = new AbortController();
+      controllers.push(ac);
+      waiting.push(acquireFreePiQueueLock(token, ac.signal).catch((e) => e));
+    }
+    assert.equal(getFreePiQueuePressure(token).waiting, 10);
+
+    await assert.rejects(
+      acquireFreePiQueueLock(token),
+      (err) => err.code === "QUEUE_OVERFLOW" && /QUEUE_OVERFLOW/.test(err.message),
+    );
+
+    controllers.forEach((c) => c.abort());
+    await Promise.all(waiting);
+    await release();
+
+    assert.ok(getFreePiMetrics().queueOverflow >= 1, "the pool panel must be able to count refusals");
+  });
+
+  await t.test("a queued request times out instead of waiting forever", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const token = `timeout-${Date.now()}`;
+    const release = await acquireFreePiQueueLock(token);
+    const queued = acquireFreePiQueueLock(token);
+
+    t.mock.timers.tick(119000);
+    let settled = null;
+    queued.then(() => { settled = "resolved"; }, (e) => { settled = e.code; });
+    await Promise.resolve();
+    assert.equal(settled, null, "must still be waiting before the deadline");
+
+    t.mock.timers.tick(2000);
+    await assert.rejects(queued, (err) => err.code === "QUEUE_TIMEOUT");
+
+    const released = release();
+    t.mock.timers.tick(600); // drain the post-stream settling delay
+    await released;
+  });
+
+  await t.test("our own queue refusals never cool the account down", () => {
+    const overflow = checkFallbackError(
+      429,
+      "FreePI queue full: too many concurrent requests queued for this account (QUEUE_OVERFLOW)",
+      0,
+      "freepi",
+    );
+    assert.equal(overflow.shouldLock, false, "a local admission decision is not account illness");
+    assert.equal(overflow.cooldownMs, 0);
+
+    const timeout = checkFallbackError(
+      429,
+      "FreePI queue wait exceeded 120000ms (QUEUE_TIMEOUT)",
+      0,
+      "freepi",
+    );
+    assert.equal(timeout.shouldLock, false);
+    assert.equal(timeout.cooldownMs, 0);
+  });
+
+  await t.test("the pool snapshot is exposed and countable", async () => {
+    const metrics = getFreePiMetrics();
+    for (const key of ["requests", "queueOverflow", "queueTimeout", "upstream429", "authFailures", "adsCycles", "handshakes", "queues", "reservations"]) {
+      assert.equal(typeof metrics[key], "number", `${key} must be a gauge or counter`);
+    }
+
+    const routeSrc = fs.readFileSync(
+      path.join(rootDir, "src/app/api/providers/freepi/stats/route.js"), "utf8");
+    assert.ok(routeSrc.includes("validateApiKey"), "monitors must be able to scrape with an API key");
+    assert.ok(routeSrc.includes("collectFreePiStats"), "route must serve the shared snapshot");
+
+    const collectorSrc = fs.readFileSync(path.join(rootDir, "src/lib/freepiStats.js"), "utf8");
+    assert.ok(collectorSrc.includes("getFreePiQueuePressure"), "per-account queue depth comes from the executor");
+    assert.ok(collectorSrc.includes("needs_reauth"), "dead tokens must be visible as their own state");
+  });
+
+  await t.test("routing exposes a slot-aware strategy for FreePI", () => {
+    const authSrc = fs.readFileSync(path.join(rootDir, "src/sse/services/auth.js"), "utf8");
+    assert.ok(authSrc.includes('strategy === "least-loaded"'), "auth.js must handle least-loaded");
+    assert.ok(authSrc.includes("getFreePiQueuePressure"), "selection must read live queue depth");
+    assert.ok(authSrc.includes("reserveFreePiSlot"), "selection must claim the slot it picked");
+
+    const registry = fs.readFileSync(path.join(rootDir, "open-sse/providers/registry/freepi.js"), "utf8");
+    assert.ok(!/validateUrl:\s*"https:\/\/api\.freepi\.ai\/me\/stats"/.test(registry),
+      "/me/stats 401s for CLI tokens and must not be used as a health probe");
+
+    const testUtils = fs.readFileSync(
+      path.join(rootDir, "src/app/api/providers/[id]/test/testUtils.js"), "utf8");
+    assert.ok(testUtils.includes('case "freepi"'), "connection test needs a real completion probe");
   });
 });

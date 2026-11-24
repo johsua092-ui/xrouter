@@ -404,16 +404,21 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <h2 className="text-lg font-semibold">Connections</h2>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-text-muted font-medium">Round Robin</span>
-            <Toggle
-              checked={providerStrategy === "round-robin"}
-              onChange={(enabled) => {
-                const strategy = enabled ? "round-robin" : null;
+            <span className="text-xs text-text-muted font-medium">Strategy</span>
+            <select
+              value={providerStrategy || "fill-first"}
+              onChange={(e) => {
+                const value = e.target.value;
+                const strategy = value === "fill-first" ? null : value;
                 setProviderStrategy(strategy);
-                if (enabled && !providerStickyLimit) setProviderStickyLimit("1");
-                saveStrategy(strategy, enabled ? (providerStickyLimit || "1") : providerStickyLimit);
+                saveStrategy(strategy, providerStickyLimit || "1");
               }}
-            />
+              className="px-2 py-1 text-xs border border-border rounded-md bg-background focus:outline-none focus:border-primary"
+            >
+              <option value="fill-first">Fill first</option>
+              <option value="round-robin">Round robin</option>
+              <option value="least-loaded">Slot-aware (least loaded)</option>
+            </select>
             {providerStrategy === "round-robin" && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-text-muted">Sticky:</span>

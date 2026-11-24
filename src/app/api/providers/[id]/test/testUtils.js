@@ -29,6 +29,49 @@ import {
 } from "@/lib/oauth/constants/oauth";
 import { buildClineHeaders } from "@/shared/utils/clineAuth";
 
+/**
+ * FreePI health probe.
+ * /me and /me/stats reject CLI tokens with 401 "invalid or expired token" even
+ * while /v1/chat/completions serves traffic, so any GET-based check reports a
+ * healthy account as dead. The only honest signal is one token of real output.
+ */
+async function probeFreePi(connection, effectiveProxy = null) {
+  const token = connection?.accessToken || connection?.apiKey;
+  if (!token) return { valid: false, error: "Missing FreePI token", refreshed: false };
+  try {
+    const res = await fetchWithConnectionProxy(
+      "https://api.freepi.ai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "x-client-version": "0.6.25",
+          "x-session-id": crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          model: "particle",
+          messages: [{ role: "user", content: "ping" }],
+          max_tokens: 1,
+          stream: false,
+        }),
+      },
+      effectiveProxy,
+    );
+    if (res.ok) return { valid: true, error: null, refreshed: false };
+    const text = await res.text().catch(() => "");
+    return {
+      valid: false,
+      refreshed: false,
+      error: text.includes("invalid or expired token")
+        ? "FreePI token expired — sign in again"
+        : `FreePI responded ${res.status}`,
+    };
+  } catch (err) {
+    return { valid: false, refreshed: false, error: `FreePI probe failed: ${err.message}` };
+  }
+}
+
 // OAuth provider test endpoints
 const OAUTH_TEST_CONFIG = {
   adcode: {
@@ -265,11 +308,12 @@ const OAUTH_TEST_CONFIG = {
     },
   },
   freepi: {
-    url: "https://api.freepi.ai/me/stats",
-    method: "GET",
-    authHeader: "Authorization",
-    authPrefix: "Bearer ",
+    // /me/stats answers 401 "invalid or expired token" for CLI tokens even while
+    // chat completions work (verified against the live account), so a GET probe
+    // marked every healthy FreePI account as expired. Probe the real endpoint.
+    checkExpiry: false,
     refreshable: false,
+    customTest: (connection, effectiveProxy) => probeFreePi(connection, effectiveProxy),
   },
   nous: {
     refreshable: true,
@@ -1077,6 +1121,12 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
           headers: { Authorization: `Bearer ${connection.apiKey}` },
         }, effectiveProxy);
         return { valid: res.ok, error: res.ok ? null : "Invalid API key" };
+      }
+      case "freepi": {
+        // apiKey-mode connections land here (OAuth ones go through customTest);
+        // same reason: a GET probe on /me/stats lies about healthy tokens.
+        const checked = await probeFreePi(connection, effectiveProxy);
+        return { valid: checked.valid, error: checked.error };
       }
       case "blackbox": {
         const baseUrl = PROVIDERS["blackbox"]?.baseUrl?.replace(/\/chat\/completions$/, "") || "https://api.blackbox.ai/v1";

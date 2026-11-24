@@ -523,6 +523,7 @@ export default function ProviderDetailPage() {
     fetchDisabledModels();
   }, [fetchConnections, fetchAliases, fetchCustomModels, fetchDisabledModels]);
 
+
   // Live per-connection catalogs (cursor, zed, antigravity): the static
   // registry carries no usable list (or one the account may not serve), so
   // resolve from the active connection. Fires only when the provider id or
@@ -1718,13 +1719,23 @@ export default function ProviderDetailPage() {
                 )}
               </div>
 
-              {/* Round Robin toggle */}
+              {/* Account rotation strategy */}
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-text-muted font-medium">Round Robin</span>
-                <Toggle
-                  checked={providerStrategy === "round-robin"}
-                  onChange={handleRoundRobinToggle}
-                />
+                <span className="text-xs text-text-muted font-medium">Strategy</span>
+                <select
+                  value={providerStrategy || "fill-first"}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const strategy = value === "fill-first" ? null : value;
+                    setProviderStrategy(strategy);
+                    saveProviderStrategy(strategy, providerStickyLimit || "1");
+                  }}
+                  className="py-1 px-2 text-xs text-text-main bg-background border border-border rounded-md focus:outline-none focus:border-primary"
+                >
+                  <option value="fill-first">Fill first</option>
+                  <option value="round-robin">Round robin</option>
+                  <option value="least-loaded">Slot-aware (least loaded)</option>
+                </select>
                 {providerStrategy === "round-robin" && (
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-text-muted">Sticky:</span>

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import os from "node:os";
 import { DefaultExecutor } from "./default.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
@@ -6,8 +6,25 @@ import { proxyAwareFetch } from "../utils/proxyFetch.js";
 const CLI_VERSION = "0.6.25";
 const ADS_INTERVAL_MS = 60 * 1000;
 const LAUNCH_HANDSHAKE_TTL_MS = 55 * 60 * 1000; // 55m TTL (official FreePI CLI launch grace is 60m)
-const SETTLING_DELAY_MS = 500; // 500ms post-stream grace settling delay for upstream socket reset
+// Post-stream grace before the slot is handed to the next request. 500ms is the
+// safe default (upstream needs a moment to release the session socket); it is
+// also ~47% of the per-account cadence, so it is tunable for operators who would
+// rather trade a little safety for throughput. Clamped to [0, 2000].
+const SETTLING_ENV = process.env.FREEPI_SETTLING_DELAY_MS;
+const SETTLING_DELAY_MS = Math.min(
+  2000,
+  Math.max(0, SETTLING_ENV === undefined || SETTLING_ENV === "" ? 500 : Number(SETTLING_ENV) || 0),
+);
 const MAX_QUEUE_SIZE = 10;
+// A request that cannot get the slot within this budget fails with QUEUE_TIMEOUT
+// instead of hanging: the queue used to wait until the client aborted, which on a
+// 1200-token stream ahead of it means tens of seconds of silence.
+const QUEUE_MAX_WAIT_MS = Number(process.env.FREEPI_QUEUE_MAX_WAIT_MS || 120000);
+
+// Housekeeping for the per-token maps below.
+const SESSION_TTL_MS = 6 * 60 * 60 * 1000; // session id is cosmetic; drop after 6h idle
+const MAX_TRACKED_TOKENS = 500; // hard ceiling per map, oldest-first
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
 // Track last impression timestamp, launch handshake timestamp, and session ID per token/connection
 const sessionMap = new Map();
@@ -17,13 +34,104 @@ const launchHandshakeMap = new Map();
 // Per-token FIFO Queue for strict single concurrency (limit = 1)
 const tokenQueues = new Map();
 
-export function getSessionId(token) {
-  let sid = sessionMap.get(token);
-  if (!sid) {
-    sid = randomUUID();
-    sessionMap.set(token, sid);
+// Selections made by routing that have not reached acquireFreePiQueueLock yet.
+// Without this, two requests arriving in the same millisecond both see a free
+// account, both pick it, and one waits behind the other although a second account
+// sat idle — measured as 2 simultaneous streams serialising on one account.
+const selectionReservations = new Map(); // tokenKey -> { count, expiresAt }
+const RESERVATION_TTL_MS = 5000;
+
+/**
+ * Map keys are hashed, never the raw credential: a FreePI token is ~477 bytes,
+ * so keying on it directly costs ~600 B per entry per map (measured: 1.12 KB
+ * per token across these maps), and any heap snapshot would carry every
+ * account token in cleartext.
+ */
+function tokenKey(token) {
+  return createHash("sha256").update(String(token)).digest("base64url").slice(0, 22);
+}
+
+/** Keep the per-token maps bounded: a token that is never seen again must not pin memory forever. */
+function stamp(map, key, value) {
+  map.set(key, value);
+  while (map.size > MAX_TRACKED_TOKENS) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
   }
-  return sid;
+}
+
+/**
+ * Drop state for tokens that are gone or idle. FreePI has no refresh endpoint:
+ * every re-login mints a NEW token, so without this the maps grow for the
+ * lifetime of the process (and a slot entry whose stream never closed would
+ * stay "busy" forever).
+ */
+export function sweepFreePiState(now = Date.now()) {
+  let dropped = 0;
+
+  for (const [key, entry] of sessionMap) {
+    if (!entry || now - entry.ts > SESSION_TTL_MS) { sessionMap.delete(key); dropped++; }
+  }
+  for (const [key, ts] of lastImpressionMap) {
+    if (now - ts > ADS_INTERVAL_MS * 2) { lastImpressionMap.delete(key); dropped++; }
+  }
+  for (const [key, ts] of launchHandshakeMap) {
+    if (now - ts > LAUNCH_HANDSHAKE_TTL_MS) { launchHandshakeMap.delete(key); dropped++; }
+  }
+  // A queue with no owner and no waiters carries no state worth keeping; a
+  // waiting item can only exist while running is true.
+  for (const [key, queue] of tokenQueues) {
+    if (!queue.running && queue.waiting.length === 0) { tokenQueues.delete(key); dropped++; }
+  }
+
+  return dropped;
+}
+
+/** Sizes of the in-process state (tests + debugging hooks). */
+// Counters for the pool panel: they are process-lifetime and monotonic, which is
+// what a scraper wants (rate() over time), while the map sizes above are gauges.
+const counters = {
+  requests: 0,
+  queueOverflow: 0,
+  queueTimeout: 0,
+  upstream429: 0,
+  adsCycles: 0,
+  adsFailures: 0,
+  handshakes: 0,
+  authFailures: 0,
+};
+
+export function getFreePiMetrics() {
+  return { ...counters, ...getFreePiStateStats(), reservations: selectionReservations.size };
+}
+
+export function getFreePiStateStats() {
+  return {
+    sessions: sessionMap.size,
+    impressions: lastImpressionMap.size,
+    launches: launchHandshakeMap.size,
+    queues: tokenQueues.size,
+    limit: MAX_TRACKED_TOKENS,
+  };
+}
+
+const sweepTimer = setInterval(() => {
+  try { sweepFreePiState(); } catch { /* housekeeping must never throw */ }
+}, SWEEP_INTERVAL_MS);
+// Never hold the process open (tests, CLI, short-lived workers).
+sweepTimer.unref?.();
+
+export function getSessionId(token) {
+  const key = tokenKey(token);
+  let entry = sessionMap.get(key);
+  if (!entry) {
+    entry = { sid: randomUUID(), ts: Date.now() };
+    stamp(sessionMap, key, entry);
+  } else {
+    entry.ts = Date.now();
+  }
+  return entry.sid;
 }
 
 function resolveLocaleHeaders() {
@@ -44,14 +152,14 @@ function resolveLocaleHeaders() {
  * 1. Fetch banner ad with x-ad-trigger: "launch"
  * 2. Ping TryGravity / upstream tracking pixel if imp_url present
  * 3. Report impression to /ads/impression
- * 4. Sync profile & meter via GET /me
  * Guarantees that upstream FreePI marks the token as warm & ad-satisfied for up to 60 minutes.
  */
 export async function launchSessionHandshake(token, sessionId = null, proxyOptions = null) {
   if (!token || typeof token !== "string" || !token.trim()) return false;
   const cleanToken = token.trim();
+  const key = tokenKey(cleanToken);
   const now = Date.now();
-  const lastLaunch = launchHandshakeMap.get(cleanToken) || 0;
+  const lastLaunch = launchHandshakeMap.get(key) || 0;
   if (now - lastLaunch < LAUNCH_HANDSHAKE_TTL_MS) {
     return true; // Still within launch grace period
   }
@@ -112,23 +220,14 @@ export async function launchSessionHandshake(token, sessionId = null, proxyOptio
       }
     }
 
-    // Official CLI calls GET /me after launch banner to synchronize quota allowance and reward state
-    await proxyAwareFetch(
-      "https://api.freepi.ai/me",
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${cleanToken}`,
-          "Content-Type": "application/json",
-          "x-session-id": sid,
-        },
-        signal: AbortSignal.timeout(5000),
-      },
-      proxyOptions
-    ).catch(() => {});
+    // NOTE: the official CLI also calls GET /me after the launch banner to sync
+    // quota. FreePI rejects CLI tokens on /me (and /me/stats) with 401
+    // "invalid or expired token" even when chat completions work, so that call is
+    // a guaranteed no-op — dropped instead of burning a round-trip per handshake.
 
-    launchHandshakeMap.set(cleanToken, Date.now());
-    lastImpressionMap.set(cleanToken, Date.now());
+    stamp(launchHandshakeMap, key, Date.now());
+    stamp(lastImpressionMap, key, Date.now());
+    counters.handshakes += 1;
     return true;
   } catch {
     return false;
@@ -141,6 +240,7 @@ export async function launchSessionHandshake(token, sessionId = null, proxyOptio
 async function fireAdCycle(token, sessionId, turnId, proxyOptions) {
   if (!token || typeof token !== "string" || !token.trim()) return;
   const cleanToken = token.trim();
+  const key = tokenKey(cleanToken);
   const localeHeaders = resolveLocaleHeaders();
   try {
     const res = await proxyAwareFetch(
@@ -193,7 +293,7 @@ async function fireAdCycle(token, sessionId, turnId, proxyOptions) {
       proxyOptions
     );
 
-    lastImpressionMap.set(cleanToken, Date.now());
+    stamp(lastImpressionMap, key, Date.now());
   } catch {
     // Non-blocking catch
   }
@@ -208,11 +308,15 @@ export async function acquireFreePiQueueLock(token, signal) {
     return () => Promise.resolve();
   }
   const cleanToken = token.trim();
+  const key = tokenKey(cleanToken);
 
-  let queue = tokenQueues.get(cleanToken);
+  // The real lock supersedes any routing reservation for this token.
+  selectionReservations.delete(key);
+
+  let queue = tokenQueues.get(key);
   if (!queue) {
     queue = { running: false, waiting: [] };
-    tokenQueues.set(cleanToken, queue);
+    tokenQueues.set(key, queue);
   }
 
   const createReleaseFn = () => {
@@ -242,52 +346,140 @@ export async function acquireFreePiQueueLock(token, signal) {
     return createReleaseFn();
   }
 
-  // Reject early if queue capacity is overwhelmed
+  // Reject early if queue capacity is overwhelmed. The error carries a code so
+  // the classifier can tell "our own admission control said no" from "the
+  // upstream account is unhealthy" — the first must never cool the account down.
   if (queue.waiting.length >= MAX_QUEUE_SIZE) {
-    throw new Error("FreePI queue full: too many concurrent requests queued for this account");
+    counters.queueOverflow += 1;
+    const err = new Error("FreePI queue full: too many concurrent requests queued for this account (QUEUE_OVERFLOW)");
+    err.code = "QUEUE_OVERFLOW";
+    err.retryAfterMs = 2000;
+    throw err;
   }
 
   // Wait in FIFO queue
   return new Promise((resolve, reject) => {
     const item = {
-      resolve,
-      reject,
       aborted: false,
+      // The abort listener used to stay attached after the hang-off, keeping
+      // this closure (and the whole request) reachable from the signal.
+      resolve: (releaseFn) => {
+        clearTimeout(item.timer);
+        if (signal && typeof signal.removeEventListener === "function") {
+          signal.removeEventListener("abort", onAbort);
+        }
+        resolve(releaseFn);
+      },
+      reject,
     };
+
+    function onAbort() {
+      item.aborted = true;
+      clearTimeout(item.timer);
+      const idx = queue.waiting.indexOf(item);
+      if (idx !== -1) queue.waiting.splice(idx, 1);
+      reject(new Error("Request aborted while in FreePI queue"));
+    }
 
     if (signal) {
       if (signal.aborted) {
         return reject(new Error("Request aborted before acquiring FreePI queue slot"));
       }
-      signal.addEventListener("abort", () => {
-        item.aborted = true;
-        const idx = queue.waiting.indexOf(item);
-        if (idx !== -1) queue.waiting.splice(idx, 1);
-        reject(new Error("Request aborted while in FreePI queue"));
-      }, { once: true });
+      signal.addEventListener("abort", onAbort, { once: true });
     }
 
     queue.waiting.push(item);
+
+    // Deadline: a queued request must never wait forever just because the slot
+    // ahead of it never closes. Unref'd so a pending wait cannot hold the process.
+    item.timer = setTimeout(() => {
+      item.aborted = true;
+      const idx = queue.waiting.indexOf(item);
+      if (idx !== -1) queue.waiting.splice(idx, 1);
+      if (signal && typeof signal.removeEventListener === "function") {
+        signal.removeEventListener("abort", onAbort);
+      }
+      counters.queueTimeout += 1;
+      const err = new Error(`FreePI queue wait exceeded ${QUEUE_MAX_WAIT_MS}ms (QUEUE_TIMEOUT)`);
+      err.code = "QUEUE_TIMEOUT";
+      err.retryAfterMs = 5000;
+      reject(err);
+    }, QUEUE_MAX_WAIT_MS);
+    if (item.timer && typeof item.timer.unref === "function") item.timer.unref();
   });
+}
+
+/**
+ * Current load of a token's queue, for slot-aware account selection: routing reads
+ * this to prefer an idle account over one that already has requests waiting.
+ */
+export function getFreePiQueuePressure(token) {
+  const key = token && typeof token === "string" && token.trim() ? tokenKey(token.trim()) : "";
+  const queue = key ? tokenQueues.get(key) : null;
+  const running = queue?.running ? 1 : 0;
+  const waiting = queue?.waiting?.length || 0;
+  const reserved = key ? pendingReservations(key) : 0;
+  const total = running + waiting + reserved;
+  return { running, waiting, reserved, total, idle: total === 0 };
+}
+
+function pendingReservations(key) {
+  const entry = selectionReservations.get(key);
+  if (!entry) return 0;
+  if (entry.expiresAt <= Date.now()) {
+    selectionReservations.delete(key);
+    return 0;
+  }
+  return entry.count;
+}
+
+/**
+ * Claim an account for a request that routing just picked. The reservation is a
+ * short-lived hint so the next selection sees this slot as taken; the real lock
+ * supersedes it on acquire and it expires on its own if the request never lands.
+ */
+export function reserveFreePiSlot(token, ttlMs = RESERVATION_TTL_MS) {
+  const key = token && typeof token === "string" && token.trim() ? tokenKey(token.trim()) : "";
+  if (!key) return () => {};
+  const now = Date.now();
+  const entry = selectionReservations.get(key);
+  if (!entry || entry.expiresAt <= now) {
+    selectionReservations.set(key, { count: 1, expiresAt: now + ttlMs });
+  } else {
+    entry.count += 1;
+    entry.expiresAt = now + ttlMs;
+  }
+  return () => {
+    const current = selectionReservations.get(key);
+    if (!current) return;
+    current.count -= 1;
+    if (current.count <= 0) selectionReservations.delete(key);
+  };
 }
 
 /**
  * Wraps a streaming response body so that the queue release lock is held
  * throughout the entire token streaming lifecycle until EOF, flush, or abort.
+ * Exported for tests: the release paths are the difference between a slot that
+ * frees up and an account that looks busy for the life of the process.
  */
-function wrapStreamWithQueueLock(response, releaseLock) {
-  if (!response?.body || typeof response.body.pipeThrough !== "function") {
-    releaseLock();
-    return response;
-  }
-
+export function wrapStreamWithQueueLock(response, releaseLock) {
+  // Release must be idempotent and non-throwing: it is called from four paths
+  // (body-less, flush, cancel, and the failure path below) and a rejected
+  // release would surface as an unhandled rejection.
   let released = false;
   const safeRelease = () => {
-    if (!released) {
-      released = true;
-      releaseLock();
-    }
+    if (released) return;
+    released = true;
+    try {
+      Promise.resolve(releaseLock()).catch(() => {});
+    } catch { /* a throwing release must not mask the response */ }
   };
+
+  if (!response?.body || typeof response.body.pipeThrough !== "function") {
+    safeRelease();
+    return response;
+  }
 
   const transform = new TransformStream({
     transform(chunk, controller) {
@@ -301,12 +493,18 @@ function wrapStreamWithQueueLock(response, releaseLock) {
     },
   });
 
-  const pipedBody = response.body.pipeThrough(transform);
-  return new Response(pipedBody, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
-  });
+  try {
+    const pipedBody = response.body.pipeThrough(transform);
+    return new Response(pipedBody, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  } catch (err) {
+    // Without this the lock outlived the request and the account stayed BUSY.
+    safeRelease();
+    throw err;
+  }
 }
 
 export class FreePiExecutor extends DefaultExecutor {
@@ -332,12 +530,14 @@ export class FreePiExecutor extends DefaultExecutor {
     const { credentials, proxyOptions, log, signal } = params;
     const token = credentials?.accessToken || credentials?.apiKey;
     const cleanToken = token?.trim?.() || "";
+    const tokenStateKey = cleanToken ? tokenKey(cleanToken) : "";
     const sessionId = cleanToken ? getSessionId(cleanToken) : randomUUID();
     const turnId = randomUUID();
+    counters.requests += 1;
 
     // 1. Session Launch Handshake: pre-warm account if not yet performed or expired
     if (cleanToken) {
-      const lastLaunch = launchHandshakeMap.get(cleanToken) || 0;
+      const lastLaunch = launchHandshakeMap.get(tokenStateKey) || 0;
       if (Date.now() - lastLaunch >= LAUNCH_HANDSHAKE_TTL_MS) {
         launchSessionHandshake(cleanToken, sessionId, proxyOptions).catch(() => {});
       }
@@ -345,24 +545,47 @@ export class FreePiExecutor extends DefaultExecutor {
 
     // 2. Heartbeat: fire ad impression in background if older than 60s
     if (cleanToken) {
-      const lastImpression = lastImpressionMap.get(cleanToken) || 0;
+      const lastImpression = lastImpressionMap.get(tokenStateKey) || 0;
       if (Date.now() - lastImpression > ADS_INTERVAL_MS) {
-        lastImpressionMap.set(cleanToken, Date.now()); // optimistic debounce
-        fireAdCycle(cleanToken, sessionId, turnId, proxyOptions).catch(() => {});
+        stamp(lastImpressionMap, tokenStateKey, Date.now()); // optimistic debounce
+        fireAdCycle(cleanToken, sessionId, turnId, proxyOptions)
+          .then(() => { counters.adsCycles += 1; })
+          .catch(() => { counters.adsFailures += 1; });
       }
     }
 
     // 3. Acquire Stream Queue Lock (Strict single concurrency = 1 per account)
     let releaseLock = () => Promise.resolve();
+    let queueWaitMs = 0;
     if (cleanToken) {
+      const queueStartedAt = Date.now();
       try {
         releaseLock = await acquireFreePiQueueLock(cleanToken, signal);
+        queueWaitMs = Date.now() - queueStartedAt;
+        if (queueWaitMs >= 1000) {
+          // The route handler does not forward custom response headers, so the wait
+          // is reported here rather than as x-freepi-queue-ms.
+          log?.info?.("FREEPI", `Waited ${queueWaitMs}ms for the account slot`);
+        }
       } catch (queueErr) {
         log?.warn?.("FREEPI", `Queue acquisition error: ${queueErr.message}`);
         return {
           response: new Response(
-            JSON.stringify({ error: { message: queueErr.message, code: "QUEUE_OVERFLOW" } }),
-            { status: 429, headers: { "Content-Type": "application/json" } }
+            JSON.stringify({
+              error: {
+                message: queueErr.message,
+                code: queueErr.code || "QUEUE_OVERFLOW",
+              },
+            }),
+            {
+              status: 429,
+              headers: {
+                "Content-Type": "application/json",
+                // Retry-After is honest here: the client asked for more
+                // concurrency than the account can serve.
+                "Retry-After": String(Math.max(1, Math.ceil((queueErr.retryAfterMs || 2000) / 1000))),
+              },
+            }
           ),
           url: this.buildUrl(params.model, params.stream, 0, credentials),
           headers: {},
@@ -382,6 +605,7 @@ export class FreePiExecutor extends DefaultExecutor {
             const cloned = result.response.clone();
             const text = await cloned.text();
             if (text.includes("concurrent") || text.includes("one request at a time")) {
+              counters.upstream429 += 1;
               log?.info?.("FREEPI", `Detected concurrent lock (429: one request at a time). Waiting 2.1s before retry (${attempt}/2)...`);
               await new Promise((r) => setTimeout(r, 2100));
               result = await super.execute(params);
@@ -413,6 +637,8 @@ export class FreePiExecutor extends DefaultExecutor {
           // Fall through to original result
         }
       }
+
+      if (result?.response?.status === 401) counters.authFailures += 1;
 
       // 4. If streaming response is successful, wrap stream so lock is held until stream completion
       if (result?.response?.ok && result.response.body) {

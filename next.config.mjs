@@ -235,6 +235,11 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        // FreePI pool snapshot for monitors (API-key authed, like the rest of /v1)
+        source: "/v1/freepi/stats",
+        destination: "/api/v1/freepi/stats"
+      },
+      {
         source: "/v1/models/:path*",
         destination: "/api/v1/models/:path*"
       },
