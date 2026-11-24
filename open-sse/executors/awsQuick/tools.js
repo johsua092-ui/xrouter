@@ -172,6 +172,23 @@ export function buildToolPreamble(tools, toolChoice, { lite = false, namesOnly =
 const OPEN_RE = new RegExp(TOOL_CALL_OPEN_TAG, "g");
 const CLOSE_RE = new RegExp(TOOL_CALL_CLOSE_TAG, "g");
 
+/**
+ * Hard ceiling on the JSON buffered for one `<tool_call>` block.
+ *
+ * A model that opens a block and never closes it (or streams a runaway
+ * argument blob) used to grow `blockJson` until the turn ended — a single
+ * unterminated block was observed holding 4 MB. Past this limit the block is
+ * abandoned: it is never emitted as a call, `dropped` is reported, and the
+ * buffered text is released immediately, so a bad stream costs ~1 MB instead
+ * of an unbounded buffer. 1 MB is ~100× the largest realistic tool call
+ * (file writes go through the client, not this channel).
+ */
+const MAX_TOOL_BLOCK_BYTES = (() => {
+  const raw = typeof process !== "undefined" && process.env ? Number(process.env.QUICK_MAX_TOOL_BLOCK_BYTES) : NaN;
+  return Number.isFinite(raw) && raw > 0 ? raw : 1024 * 1024;
+})();
+export const QUICK_MAX_TOOL_BLOCK_BYTES = MAX_TOOL_BLOCK_BYTES;
+
 /** Longest suffix of `buf` that is a proper prefix of `tag` (0 if none). */
 function heldPrefixLen(buf, tag) {
   const max = Math.min(buf.length, tag.length - 1);
@@ -186,18 +203,55 @@ function heldPrefixLen(buf, tag) {
  * completed tool calls. Blocks split across deltas are handled — including a
  * tag split mid-token (`<` + `tool_call>…`), which is held back rather than
  * flushed. A dangling open tag at end() is reported via `dropped`.
+ *
+ * `maxBlockBytes` (default QUICK_MAX_TOOL_BLOCK_BYTES, 1 MB) bounds the JSON
+ * buffered for one block: a block that exceeds it is abandoned — no call is
+ * emitted, `dropped` is set — so an unterminated block can't buffer forever.
  */
-export function createToolCallParser() {
+export function createToolCallParser({ maxBlockBytes = MAX_TOOL_BLOCK_BYTES } = {}) {
   let buf = "";
   let inBlock = false;
   let blockJson = "";
+  let blockBytes = 0; // UTF-8 bytes buffered for the block being read
+  let overflow = false; // block blew the cap: discard until its close tag
   let dropped = false;
   const pending = []; // parsed calls waiting for id assignment
+
+  /**
+   * Append to the block being read. Returns false when this chunk pushes the
+   * block past `maxBlockBytes` — the caller then abandons the block instead of
+   * buffering it. Measured per chunk (never a re-scan of the whole block), so
+   * the cap costs one pass over the deltas, not quadratic work.
+   */
+  const appendBlock = (chunk) => {
+    const cb = byteLen(chunk);
+    if (blockBytes + cb > maxBlockBytes) {
+      blockJson = "";
+      blockBytes = 0;
+      return false;
+    }
+    blockJson += chunk;
+    blockBytes += cb;
+    return true;
+  };
 
   const drain = () => {
     const text = [];
     const calls = [];
     for (;;) {
+      if (overflow) {
+        // Abandoned block: swallow everything up to its close tag (or the rest
+        // of this delta) so the text after it parses normally again.
+        CLOSE_RE.lastIndex = 0;
+        const m = CLOSE_RE.exec(buf);
+        if (!m) {
+          buf = "";
+          break;
+        }
+        buf = buf.slice(m.index + m[0].length);
+        overflow = false;
+        continue;
+      }
       if (!inBlock) {
         OPEN_RE.lastIndex = 0;
         const m = OPEN_RE.exec(buf);
@@ -212,6 +266,7 @@ export function createToolCallParser() {
         buf = buf.slice(m.index + m[0].length);
         inBlock = true;
         blockJson = "";
+        blockBytes = 0;
         continue;
       }
       CLOSE_RE.lastIndex = 0;
@@ -219,17 +274,28 @@ export function createToolCallParser() {
       if (!m) {
         // Same holdback for a split close tag — keep it out of blockJson.
         const hold = heldPrefixLen(buf, TOOL_CALL_CLOSE_TAG);
-        blockJson += buf.slice(0, buf.length - hold);
+        if (!appendBlock(buf.slice(0, buf.length - hold))) {
+          // Block too big and still growing: stop buffering it.
+          inBlock = false;
+          overflow = true;
+          dropped = true;
+        }
         buf = buf.slice(buf.length - hold);
+        if (overflow) continue; // handle the abandoned block at the top
         break;
       }
-      blockJson += buf.slice(0, m.index);
+      const closed = appendBlock(buf.slice(0, m.index));
       buf = buf.slice(m.index + m[0].length);
       inBlock = false;
+      if (!closed) {
+        dropped = true; // over the cap: report the failure, emit no call
+        continue;
+      }
       const call = parseCall(blockJson);
       if (call) calls.push(call);
       else dropped = true;
       blockJson = "";
+      blockBytes = 0;
     }
     return { text: text.join(""), calls };
   };
@@ -248,11 +314,13 @@ export function createToolCallParser() {
       const r = drain();
       for (const c of r.calls) pending.push(c);
       let tail = r.text;
-      if (inBlock) {
-        // unterminated block → not shown to the user
+      if (inBlock || overflow) {
+        // unterminated / over-long block → not shown to the user
         dropped = true;
         inBlock = false;
+        overflow = false;
         blockJson = "";
+        blockBytes = 0;
         buf = "";
       } else if (buf) {
         // held-back tag prefix at EOS is just literal text

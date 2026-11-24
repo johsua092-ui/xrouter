@@ -16,8 +16,9 @@ function getTimeString() {
  * @param {object} options.log - Logger instance
  * @param {string} options.provider - Provider name
  * @param {string} options.model - Model name
+ * @param {AbortSignal} [options.signal] - Client request signal (HTTP hang-up)
  */
-export function createStreamController({ onDisconnect, onError, log, provider, model, reqTag = "" } = {}) {
+export function createStreamController({ onDisconnect, onError, log, provider, model, reqTag = "", signal: clientSignal = null } = {}) {
   const abortController = new AbortController();
   const startTime = Date.now();
   let disconnected = false;
@@ -31,6 +32,36 @@ export function createStreamController({ onDisconnect, onError, log, provider, m
     else console.log(`[${getTimeString()}] ${symbol} ${provider}/${model} · ${status} · ${duration}ms`);
   };
 
+  // A client hang-up has to abort upstream work exactly like a stream disconnect:
+  // a non-streaming turn, or an executor still pre-pulling before its Response
+  // exists, has no stream to cancel and would otherwise run to completion while
+  // holding the per-connection turn mutex. Detached on every terminal path so the
+  // listener cannot accumulate on a long-lived request object.
+  const onClientAbort = () => handleDisconnect("client_aborted");
+  const detachClientSignal = () => {
+    if (clientSignal) clientSignal.removeEventListener("abort", onClientAbort);
+  };
+
+  const handleDisconnect = (reason = "client_closed") => {
+    if (disconnected) return;
+    disconnected = true;
+    detachClientSignal();
+
+    // Debug-only: Responses API has no [DONE] sentinel, so codex/droid close the
+    // socket on every completed request. "[done]" is the authoritative outcome line.
+    dbg("CTRL", `${provider}/${model} | disconnect=${reason} | dur=${Date.now() - startTime}ms`);
+
+    // Stop upstream work before running disconnect observers (#4914).
+    abortController.abort();
+
+    onDisconnect?.({ reason, duration: Date.now() - startTime });
+  };
+
+  if (clientSignal) {
+    if (clientSignal.aborted) handleDisconnect("client_aborted");
+    else clientSignal.addEventListener("abort", onClientAbort, { once: true });
+  }
+
   return {
     signal: abortController.signal,
     startTime,
@@ -38,30 +69,20 @@ export function createStreamController({ onDisconnect, onError, log, provider, m
     isConnected: () => !disconnected,
 
     // Call when client disconnects
-    handleDisconnect: (reason = "client_closed") => {
-      if (disconnected) return;
-      disconnected = true;
-
-      // Debug-only: Responses API has no [DONE] sentinel, so codex/droid close the
-      // socket on every completed request. "[done]" is the authoritative outcome line.
-      dbg("CTRL", `${provider}/${model} | disconnect=${reason} | dur=${Date.now() - startTime}ms`);
-
-      // Stop upstream work before running disconnect observers (#4914).
-      abortController.abort();
-
-      onDisconnect?.({ reason, duration: Date.now() - startTime });
-    },
+    handleDisconnect,
 
     // Call on stream complete
     handleComplete: () => {
       if (disconnected) return;
       disconnected = true;
+      detachClientSignal();
     },
 
     // Call on error
     handleError: (error) => {
       if (disconnected) return;
       disconnected = true;
+      detachClientSignal();
 
       if (error.name === "AbortError") {
         logStream("⚡", "ABORTED");

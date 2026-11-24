@@ -31,6 +31,7 @@ import {
   textOf,
   byteLen,
   capText,
+  capMiddle,
   canonRole,
   pickImages,
   UPSTREAM_TEXT_LIMIT,
@@ -59,6 +60,13 @@ const SYSTEM_PROMPT_CAP = 32 * 1024;
 // Text room kept free when inline images claim the frame.
 const IMAGE_TEXT_RESERVE = 8 * 1024;
 
+// SSE producer backpressure. The queue holds at most QUICK_STREAM_HWM_BYTES of
+// encoded chunks (the producer parks at the high-water mark); the hard budget is
+// a safety net so a misconfigured mark can never turn one stalled client into an
+// unbounded buffer. Both overridable by env for operators.
+const QUICK_STREAM_HWM_BYTES = 256 * 1024;
+const QUICK_STREAM_MAX_QUEUED_BYTES = 8 * 1024 * 1024;
+
 const encoder = new TextEncoder();
 
 function errorResponse(status, message, type = "api_error") {
@@ -70,6 +78,7 @@ function errorResponse(status, message, type = "api_error") {
 
 function errorType(err) {
   if (err?.kind === "auth") return "authentication_error";
+  if (err?.kind === "guardrail") return "invalid_request_error";
   if (err?.status === 429 || err?.kind === "quota") return "rate_limit_error";
   if (String(err?.code || "").match(/limitexceeded|throttl/i)) return "rate_limit_error";
   return "api_error";
@@ -78,9 +87,13 @@ function errorType(err) {
 function httpStatus(err) {
   if (err instanceof QuickWsError || err?.kind) {
     if (err.kind === "auth") return 401;
+    // 400 keeps a content-filter refusal request-scoped: checkFallbackError hands
+    // 4xx (non-401/402/403/429) back to the caller without cooling the account.
+    if (err.kind === "guardrail") return 400;
     if (err.kind === "quota") return 429;
     if (err.kind === "abort") return 499;
     if (err.kind === "timeout") return 503;
+    if (err.kind === "backpressure") return 503;
   }
   if (String(err?.code || "").match(/limitexceeded|throttl/i)) return 429;
   return err?.status && err.status >= 400 && err.status < 600 ? err.status : 502;
@@ -181,7 +194,9 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
   // even at ~54 KB). It shares the same ~64 KB frame budget as `text`, so both
   // are capped together — the transcript budget shrinks by whatever the system
   // prompt occupies.
-  const systemPrompt = systemText ? capText(systemText, SYSTEM_PROMPT_CAP) : "";
+  // Head+tail: an operating spec keeps hard rules first and format/attribution
+  // rules last, so a plain head cut silently drops half of them.
+  const systemPrompt = systemText ? capMiddle(systemText, SYSTEM_PROMPT_CAP) : "";
   const stats = {};
   if (systemText && byteLen(systemText) > SYSTEM_PROMPT_CAP) stats.truncated = true;
   // custom_prompt is a real per-turn instruction channel (verified live). Use
@@ -379,7 +394,12 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
         const detail = p.message || p.reason || p.error || evt.message || evt.reason || evt.error || evt.code;
         const extra = detail ? "" : ` ${JSON.stringify(evt).slice(0, 400)}`;
         const quota = String(evt.code || "").match(/limitexceeded|throttl|toomanyrequests/i);
-        throw new QuickWsError(`${detail || `quick ${t}`}${extra}`, { kind: quota ? "quota" : "stream", code: evt.code });
+        // Quick's own guardrail/content filter is a verdict on THIS request, not a
+        // broken account: 502 made chatCore lock the model for 30 s and rotate to
+        // the next account, so one refusal cascaded through the whole pool.
+        const guardrail = /content filter|guardrail|blocked this reply|safety/i.test(String(detail || ""));
+        const kind = quota ? "quota" : guardrail ? "guardrail" : "stream";
+        throw new QuickWsError(`${detail || `quick ${t}`}${extra}`, { kind, code: evt.code });
       }
       // tool_start/tool_arguments/tool_progress/tool_result, runs_updated,
       // task_list_update, title_generated, session_sync … are agent-internal;
@@ -403,7 +423,15 @@ async function* runTurn({ credentials, socket, body, options, signal }) {
   }
 
   yield { type: "meta", threadId, reused, mode };
-  if (stats.truncated) yield { type: "note", text: "Context exceeded Quick's 64KB frame cap; earlier content was truncated" };
+  if (stats.truncated) {
+    const shed = stats.omittedMessages || 0;
+    yield {
+      type: "note",
+      text: shed
+        ? `Context exceeded Quick's 64 KB frame cap: ${shed} earlier message(s) omitted and long tool output shortened (newest turns kept intact)`
+        : "Context exceeded Quick's 64 KB frame cap; long content was shortened (newest turns kept intact)",
+    };
+  }
 
   const produced = () => state.text.length > 0 || state.calls.length > 0 || state.reasoning.length > 0;
   // Bounded wait: a request queued behind a wedged holder must fail cleanly
@@ -674,40 +702,102 @@ export class AwsQuickExecutor extends BaseExecutor {
     // OpenAI semantics: streaming usage is opt-in and rides a trailing chunk
     // with an empty choices array (mirrors the reference handler).
     const includeUsage = !!bodyObj.stream_options?.include_usage;
+    // Backpressure. The producer used to enqueue as fast as the socket delivered,
+    // so one stalled client buffered the whole turn in the stream queue (182 B of
+    // JSON envelope per 4 B delta). It now parks at the queue's high-water mark
+    // and refuses to buffer past a hard byte budget instead of growing forever.
+    const queueHwmBytes = Math.max(1024, Number(process.env.QUICK_STREAM_HWM_BYTES) || QUICK_STREAM_HWM_BYTES);
+    const maxQueuedBytes = Math.max(1024, Number(process.env.QUICK_STREAM_MAX_QUEUED_BYTES) || QUICK_STREAM_MAX_QUEUED_BYTES);
+    // Shared with cancel(): a cancelled consumer has to wake a parked producer
+    // even when no abort signal fires (a direct ReadableStream consumer).
+    let consumerGone = false;
+    let wakeProducer = null;
+    const wake = () => {
+      const w = wakeProducer;
+      wakeProducer = null;
+      w?.();
+    };
     const readable = new ReadableStream({
       async start(controller) {
+        // Bytes enqueued but not yet pulled; desiredSize is hwm - queue size.
+        const queuedBytes = () => queueHwmBytes - (controller.desiredSize ?? 0);
+        const isAbort = (e) => e instanceof QuickWsError && e.kind === "abort";
+        const abortError = () => new QuickWsError("aborted", { kind: "abort" });
+        // Park while the consumer is not pulling. A cancel or abort wakes us at
+        // once; the timeout only covers a consumer that pulled without signalling.
+        // (Not unref'd: while parked the turn is still live work.)
+        const park = () =>
+          new Promise((resolve) => {
+            wakeProducer = resolve;
+            setTimeout(() => {
+              if (wakeProducer === resolve) wakeProducer = null;
+              resolve();
+            }, 20);
+          });
+        const emit = async (bytes) => {
+          for (;;) {
+            const queued = queuedBytes();
+            if (queued > 0 && queued + bytes.byteLength > maxQueuedBytes) {
+              throw new QuickWsError(
+                `stream buffer would reach ${queued + bytes.byteLength} bytes with no consumer read ` +
+                  `(limit ${maxQueuedBytes}B, QUICK_STREAM_MAX_QUEUED_BYTES) — aborting the turn instead of buffering it`,
+                { kind: "backpressure" }
+              );
+            }
+            if (consumerGone) throw abortError();
+            if (signal?.aborted) throw abortError();
+            if (controller.desiredSize === null || controller.desiredSize > 0) break;
+            await park();
+          }
+          try {
+            controller.enqueue(bytes);
+          } catch {
+            // A cancel closes the controller underneath us; that is a dead
+            // consumer, not an upstream error (its enqueue message is noise).
+            throw abortError();
+          }
+        };
+        // Terminal frame for a live consumer: never throttled, so the reason the
+        // turn stopped still reaches the client even when the queue is full.
+        const failFrame = (bytes) => {
+          try {
+            controller.enqueue(bytes);
+          } catch { /* consumer gone */ }
+        };
+        const onAbortWake = () => wake();
+        signal?.addEventListener("abort", onAbortWake, { once: true });
         let sentRole = false;
-        const role = () => {
+        const role = async () => {
           if (sentRole) return;
           sentRole = true;
-          controller.enqueue(sseChunk({ role: "assistant", content: "" }));
+          await emit(sseChunk({ role: "assistant", content: "" }));
         };
         let toolIndex = 0;
         let usage;
         try {
           for await (const o of items) {
             if (o.type === "text") {
-              role();
-              controller.enqueue(sseChunk({ content: o.text }));
+              await role();
+              await emit(sseChunk({ content: o.text }));
             } else if (o.type === "reasoning") {
-              role();
-              controller.enqueue(sseChunk({ reasoning_content: o.text }));
+              await role();
+              await emit(sseChunk({ reasoning_content: o.text }));
             } else if (o.type === "tool_call") {
-              role();
-              controller.enqueue(
+              await role();
+              await emit(
                 sseChunk({ tool_calls: [{ index: toolIndex++, id: o.id, type: "function", function: { name: o.name, arguments: o.arguments } }] })
               );
             } else if (o.type === "usage") {
               usage = addUsage(usage, o.usage);
             } else if (o.type === "note") {
-              role();
-              controller.enqueue(sseChunk({ content: `\n\n> ${o.text}` }));
+              await role();
+              await emit(sseChunk({ content: `\n\n> ${o.text}` }));
             }
           }
-          role();
-          controller.enqueue(sseChunk({}, toolIndex > 0 ? "tool_calls" : "stop"));
+          await role();
+          await emit(sseChunk({}, toolIndex > 0 ? "tool_calls" : "stop"));
           if (includeUsage) {
-            controller.enqueue(
+            await emit(
               encoder.encode(
                 `data: ${JSON.stringify({
                   id,
@@ -720,24 +810,38 @@ export class AwsQuickExecutor extends BaseExecutor {
               )
             );
           }
-          controller.enqueue(encoder.encode(SSE_DONE));
+          await emit(encoder.encode(SSE_DONE));
         } catch (e) {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ error: { message: e?.message ?? String(e), type: errorType(e), code: httpStatus(e) } })}\n\n`)
-          );
-          controller.enqueue(encoder.encode(SSE_DONE));
+          // A dead consumer gets no in-band frame; a live one still sees the
+          // real upstream error instead of a controller-state exception.
+          if (!isAbort(e)) {
+            failFrame(
+              encoder.encode(`data: ${JSON.stringify({ error: { message: e?.message ?? String(e), type: errorType(e), code: httpStatus(e) } })}\n\n`)
+            );
+            failFrame(encoder.encode(SSE_DONE));
+          }
         } finally {
+          signal?.removeEventListener("abort", onAbortWake);
           cleanupAbort();
-          controller.close();
+          // Stop the turn itself: `items` drives runTurn through next(), so
+          // closing `items` alone would leave runTurn — and the per-socket turn
+          // mutex it holds — suspended forever.
+          Promise.resolve(items.return?.()).catch(() => {});
+          Promise.resolve(it.return?.()).catch(() => {});
+          try {
+            controller.close();
+          } catch { /* already closed by a cancel */ }
         }
       },
       cancel() {
+        consumerGone = true;
+        wake();
         cleanupAbort();
         // Fire-and-forget: a generator torn down mid-flight may reject.
         Promise.resolve(items.return?.()).catch(() => {});
         Promise.resolve(it.return?.()).catch(() => {});
       },
-    });
+    }, { highWaterMark: queueHwmBytes, size: (chunk) => chunk?.byteLength ?? 0 });
     return {
       response: new Response(readable, { status: 200, headers: { ...SSE_HEADERS } }),
       url: "wss://aws-quick",
