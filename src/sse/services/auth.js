@@ -283,6 +283,29 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
 
     if (connection) {
       // skip strategy
+    } else if (strategy === "least-loaded" && resolveProviderId(providerId) === "freepi") {
+      // FreePI allows exactly one in-flight request per token, so recency is the
+      // wrong signal — each account's own queue depth is. Pick the account nobody
+      // is waiting on; when all are busy, take the shortest queue instead of
+      // landing behind a long stream the way blind rotation does.
+      const { getFreePiQueuePressure } = await import("open-sse/executors/freepi.js");
+      let best = null;
+      let bestLoad = Infinity;
+      for (const candidate of availableConnections) {
+        const pressure = getFreePiQueuePressure(candidate.accessToken || candidate.apiKey || "");
+        if (pressure.total < bestLoad) {
+          best = candidate;
+          bestLoad = pressure.total;
+        }
+      }
+      connection = best || availableConnections[0];
+      if (bestLoad > 0) {
+        log.info("AUTH", `${provider} | all accounts busy (shortest queue ${bestLoad}) → least-loaded ${connection.id?.slice(0, 8)}`);
+      }
+      await updateProviderConnection(connection.id, {
+        lastUsedAt: new Date().toISOString(),
+        consecutiveUseCount: (connection.consecutiveUseCount || 0) + 1,
+      });
     } else if (strategy === "round-robin") {
       const stickyLimit = providerOverride.stickyRoundRobinLimit || settings.stickyRoundRobinLimit || 3;
 
