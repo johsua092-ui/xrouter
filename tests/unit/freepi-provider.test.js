@@ -423,7 +423,7 @@ test("FreePI per-token state hygiene", async (t) => {
 });
 
 test("FreePI queue admission control", async (t) => {
-  const { acquireFreePiQueueLock, getFreePiQueuePressure } = await import(
+  const { acquireFreePiQueueLock, getFreePiQueuePressure, reserveFreePiSlot } = await import(
     "../../open-sse/executors/freepi.js"
   );
   const { checkFallbackError } = await import("../../open-sse/services/accountFallback.js");
@@ -438,7 +438,7 @@ test("FreePI queue admission control", async (t) => {
     const queued = acquireFreePiQueueLock(token);
     assert.deepEqual(
       { ...getFreePiQueuePressure(token) },
-      { running: 1, waiting: 1, total: 2, idle: false },
+      { running: 1, waiting: 1, reserved: 0, total: 2, idle: false },
       "slot-aware routing needs the waiting count, not just the running flag",
     );
 
@@ -447,6 +447,39 @@ test("FreePI queue admission control", async (t) => {
     assert.equal(getFreePiQueuePressure(token).running, 1, "the handed-off request owns the slot");
     await releaseNext();
     assert.equal(getFreePiQueuePressure(token).idle, true, "an idle queue must look idle again");
+  });
+
+  await t.test("a selection reservation makes the slot look taken", async () => {
+    const token = `reserve-${Date.now()}`;
+    assert.equal(getFreePiQueuePressure(token).idle, true);
+
+    const undo = reserveFreePiSlot(token, 40);
+    const during = getFreePiQueuePressure(token);
+    assert.equal(during.reserved, 1);
+    assert.equal(during.total, 1);
+    assert.equal(during.idle, false, "two selects in the same tick must not both see a free account");
+
+    reserveFreePiSlot(token, 40);
+    assert.equal(getFreePiQueuePressure(token).total, 2);
+
+    undo();
+    assert.equal(getFreePiQueuePressure(token).reserved, 1, "releasing one reservation keeps the other");
+
+    await new Promise((r) => setTimeout(r, 90));
+    assert.equal(getFreePiQueuePressure(token).idle, true, "an unused reservation must expire on its own");
+  });
+
+  await t.test("acquiring the real lock clears the reservation", async () => {
+    const token = `reserve-clear-${Date.now()}`;
+    reserveFreePiSlot(token);
+    assert.equal(getFreePiQueuePressure(token).reserved, 1);
+
+    const release = await acquireFreePiQueueLock(token);
+    const during = getFreePiQueuePressure(token);
+    assert.equal(during.reserved, 0, "the lock supersedes the hint");
+    assert.equal(during.running, 1);
+    await release();
+    assert.equal(getFreePiQueuePressure(token).idle, true);
   });
 
   await t.test("a full queue fails fast with QUEUE_OVERFLOW", async () => {
@@ -516,6 +549,7 @@ test("FreePI queue admission control", async (t) => {
     const authSrc = fs.readFileSync(path.join(rootDir, "src/sse/services/auth.js"), "utf8");
     assert.ok(authSrc.includes('strategy === "least-loaded"'), "auth.js must handle least-loaded");
     assert.ok(authSrc.includes("getFreePiQueuePressure"), "selection must read live queue depth");
+    assert.ok(authSrc.includes("reserveFreePiSlot"), "selection must claim the slot it picked");
 
     const registry = fs.readFileSync(path.join(rootDir, "open-sse/providers/registry/freepi.js"), "utf8");
     assert.ok(!/validateUrl:\s*"https:\/\/api\.freepi\.ai\/me\/stats"/.test(registry),

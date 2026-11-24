@@ -26,6 +26,13 @@ const launchHandshakeMap = new Map();
 // Per-token FIFO Queue for strict single concurrency (limit = 1)
 const tokenQueues = new Map();
 
+// Selections made by routing that have not reached acquireFreePiQueueLock yet.
+// Without this, two requests arriving in the same millisecond both see a free
+// account, both pick it, and one waits behind the other although a second account
+// sat idle — measured as 2 simultaneous streams serialising on one account.
+const selectionReservations = new Map(); // tokenKey -> { count, expiresAt }
+const RESERVATION_TTL_MS = 5000;
+
 /**
  * Map keys are hashed, never the raw credential: a FreePI token is ~477 bytes,
  * so keying on it directly costs ~600 B per entry per map (measured: 1.12 KB
@@ -277,6 +284,9 @@ export async function acquireFreePiQueueLock(token, signal) {
   const cleanToken = token.trim();
   const key = tokenKey(cleanToken);
 
+  // The real lock supersedes any routing reservation for this token.
+  selectionReservations.delete(key);
+
   let queue = tokenQueues.get(key);
   if (!queue) {
     queue = { running: false, waiting: [] };
@@ -380,7 +390,43 @@ export function getFreePiQueuePressure(token) {
   const queue = key ? tokenQueues.get(key) : null;
   const running = queue?.running ? 1 : 0;
   const waiting = queue?.waiting?.length || 0;
-  return { running, waiting, total: running + waiting, idle: running + waiting === 0 };
+  const reserved = key ? pendingReservations(key) : 0;
+  const total = running + waiting + reserved;
+  return { running, waiting, reserved, total, idle: total === 0 };
+}
+
+function pendingReservations(key) {
+  const entry = selectionReservations.get(key);
+  if (!entry) return 0;
+  if (entry.expiresAt <= Date.now()) {
+    selectionReservations.delete(key);
+    return 0;
+  }
+  return entry.count;
+}
+
+/**
+ * Claim an account for a request that routing just picked. The reservation is a
+ * short-lived hint so the next selection sees this slot as taken; the real lock
+ * supersedes it on acquire and it expires on its own if the request never lands.
+ */
+export function reserveFreePiSlot(token, ttlMs = RESERVATION_TTL_MS) {
+  const key = token && typeof token === "string" && token.trim() ? tokenKey(token.trim()) : "";
+  if (!key) return () => {};
+  const now = Date.now();
+  const entry = selectionReservations.get(key);
+  if (!entry || entry.expiresAt <= now) {
+    selectionReservations.set(key, { count: 1, expiresAt: now + ttlMs });
+  } else {
+    entry.count += 1;
+    entry.expiresAt = now + ttlMs;
+  }
+  return () => {
+    const current = selectionReservations.get(key);
+    if (!current) return;
+    current.count -= 1;
+    if (current.count <= 0) selectionReservations.delete(key);
+  };
 }
 
 /**

@@ -288,7 +288,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       // wrong signal — each account's own queue depth is. Pick the account nobody
       // is waiting on; when all are busy, take the shortest queue instead of
       // landing behind a long stream the way blind rotation does.
-      const { getFreePiQueuePressure } = await import("open-sse/executors/freepi.js");
+      const { getFreePiQueuePressure, reserveFreePiSlot } = await import("open-sse/executors/freepi.js");
       let best = null;
       let bestLoad = Infinity;
       for (const candidate of availableConnections) {
@@ -299,6 +299,9 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
         }
       }
       connection = best || availableConnections[0];
+      // Claim it immediately: two requests selecting in the same tick would
+      // otherwise both see "idle" and pile onto one account.
+      reserveFreePiSlot(connection.accessToken || connection.apiKey || "");
       if (bestLoad > 0) {
         log.info("AUTH", `${provider} | all accounts busy (shortest queue ${bestLoad}) → least-loaded ${connection.id?.slice(0, 8)}`);
       }
