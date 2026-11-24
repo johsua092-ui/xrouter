@@ -74,7 +74,6 @@ export default function ProviderDetailPage() {
   const [bulkProxyPoolId, setBulkProxyPoolId] = useState("__none__");
   const [bulkUpdatingProxy, setBulkUpdatingProxy] = useState(false);
   const [providerStrategy, setProviderStrategy] = useState(null);
-  const [poolStats, setPoolStats] = useState(null);
   const [providerStickyLimit, setProviderStickyLimit] = useState("1");
   const [providerProxyRotation, setProviderProxyRotation] = useState("none");
   const [thinkingMode, setThinkingMode] = useState("auto");
@@ -524,23 +523,6 @@ export default function ProviderDetailPage() {
     fetchDisabledModels();
   }, [fetchConnections, fetchAliases, fetchCustomModels, fetchDisabledModels]);
 
-  // FreePI pool snapshot: queue pressure lives in the server process, so the only
-  // way to see which account is holding a slot is to poll it.
-  useEffect(() => {
-    if (providerId !== "freepi") { setPoolStats(null); return undefined; }
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/providers/freepi/stats", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled) setPoolStats(data);
-      } catch { /* diagnostic panel: never break the page */ }
-    };
-    load();
-    const timer = setInterval(load, 5000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [providerId]);
 
   // Live per-connection catalogs (cursor, zed, antigravity): the static
   // registry carries no usable list (or one the account may not serve), so
@@ -1770,58 +1752,6 @@ export default function ProviderDetailPage() {
               </div>
             </div>
           </div>
-
-          {providerId === "freepi" && poolStats && (
-            <Card>
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <h2 className="text-lg font-semibold">FreePI pool</h2>
-                <span className="text-xs text-text-muted">
-                  {poolStats.totals.accounts} accounts · {poolStats.totals.idle} idle · {poolStats.totals.inFlight} in flight · {poolStats.totals.waiting} waiting
-                </span>
-              </div>
-
-              {poolStats.alerts?.length > 0 && (
-                <div className="mb-3 rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-xs text-danger-fg">
-                  {poolStats.alerts.join(" · ")}
-                </div>
-              )}
-
-              <div className="flex flex-col gap-1.5">
-                {poolStats.accounts.map((account) => (
-                  <div key={account.id} className="flex items-center justify-between gap-2 text-xs">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="font-mono truncate">{account.name}</span>
-                      <span
-                        className={
-                          account.status === "busy" ? "text-warning-fg"
-                            : account.status === "idle" ? "text-text-muted"
-                              : "text-danger-fg"
-                        }
-                      >
-                        {account.status === "needs_reauth" ? "needs re-auth"
-                          : account.status === "rate_limited" ? "rate limited"
-                            : account.status}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-text-muted">
-                      {account.waiting > 0 ? `${account.waiting} waiting` : ""}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 text-xs text-text-muted">
-                <span>requests {poolStats.metrics.requests}</span>
-                <span>overflow {poolStats.metrics.queueOverflow}</span>
-                <span>timeout {poolStats.metrics.queueTimeout}</span>
-                <span>429 upstream {poolStats.metrics.upstream429}</span>
-                <span>401 {poolStats.metrics.authFailures}</span>
-                <span>ads {poolStats.metrics.adsCycles}/{poolStats.metrics.adsFailures}</span>
-                <span>handshakes {poolStats.metrics.handshakes}</span>
-                <span>queues {poolStats.metrics.queues}</span>
-              </div>
-            </Card>
-          )}
 
           {connections.length === 0 ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
