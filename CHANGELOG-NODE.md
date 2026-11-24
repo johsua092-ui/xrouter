@@ -1,3 +1,18 @@
+# v0.1.1 (2026-11-24)
+
+### Fixed — Antigravity Prompt Guard False-Positive on Plain Requests
+
+- **A bare `RESOURCE_EXHAUSTED` (generic 429 message with no details) was unconditionally mapped to `HTTP 400` with `ANTIGRAVITY_PROMPT_REJECTED_MESSAGE`**, claiming the system prompt carried third-party agent fingerprints, even when the request carried no `systemInstruction` at all (such as model test pings from the dashboard or basic user turns).
+- `isAntigravityPromptRejection` now checks `hasSystemInstruction`. Plain requests preserve true upstream rate-limit status (`429`).
+
+### Refactored — OpenCode Daemon Deprecation
+
+- Removed the obsolete "Use Local Service Daemon" toggle from UI and cleaned up unused daemon bridge branches in executor. OpenCode routes natively via proxy pool.
+
+### Features — Decolua Core Integrations
+
+- Integrated AWS Quick protocol constants, Kiro CreateResponse protocol adapter, Gemini long decode, and hardened proxyFetch.
+
 # v0.1.0 (2026-11-14)
 
 ### Changed — Runtime upgraded to Next.js 16.4.2 / React 19.2.4

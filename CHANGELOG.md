@@ -1,3 +1,26 @@
+# v0.1.1 (2026-11-24)
+
+### Bug Fix — Antigravity Prompt Guard False-Positive on Plain Requests
+
+- **A bare `RESOURCE_EXHAUSTED` (generic 429 message with no details) was unconditionally mapped to `HTTP 400` with `ANTIGRAVITY_PROMPT_REJECTED_MESSAGE`**, claiming the system prompt carried third-party agent fingerprints, even when the request carried no `systemInstruction` at all (such as model test pings from the dashboard or basic user turns).
+- `open-sse/executors/antigravityPromptGuard.js`: `isAntigravityPromptRejection(status, bodyText, hasSystemInstruction)` now returns `false` if `hasSystemInstruction` is `false`.
+- `open-sse/executors/antigravity.js`: Track `this._hasSystemInstruction` during `transformRequest()` and verify `hasSystemInstruction` in `parseError()` and `computeRetryDelay()`. Plain requests without system instructions preserve true upstream rate-limit / quota status (`429: Resource has been exhausted (e.g. check quota)`), eliminating misleading error banners.
+- Unit tests in `tests/unit/antigravity-prompt-rejection.test.js` updated and passing.
+
+### Refactor — OpenCode Daemon Deprecation & Proxy Pool Routing
+
+- Removed the obsolete "Use Local Service Daemon" toggle and state from `src/shared/components/NoAuthProxyCard.js`.
+- Cleaned up daemon bridge handling and fallback formatting from `open-sse/executors/opencode.js` and `src/sse/services/auth.js`.
+- Requests for OpenCode now cleanly route through native proxy pool endpoints with automatic rotation and failover.
+
+### Features & Parity — Decolua Core Integrations & Network Hardening
+
+- **AWS Quick & SigV4 Protocol**: Added `open-sse/config/awsConstants.js` and hardened SSE backpressure, frame budget planning, and pool cleanup.
+- **Kiro Protocol Adapter**: Added `open-sse/utils/kiroCreateResponse.js` and enhanced conversation state translation and model normalization for Kiro `/v1/responses`.
+- **Gemini Long Decode**: Added `open-sse/utils/geminiLongDecode.js` supporting multi-hop REST chunked decoding over Cloud Code and Gemini REST endpoints.
+- **ProxyFetch & Network Resilience**: Enhanced proxy-aware fetch handling in `open-sse/utils/proxyFetch.js` with improved timeout and socket pooling.
+- **MITM Identity Normalization**: Aligned `src/mitm/antigravityIdeVersion.js` with upstream 9router standards for chat generation endpoints.
+
 # v0.1.0 (2026-11-22)
 
 ### Bug Fix — Antigravity 403 `USER_PROJECT_DENIED` From a Quota-Project Header It Should Never Send

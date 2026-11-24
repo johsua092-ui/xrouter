@@ -73,6 +73,10 @@ describe("isAntigravityPromptRejection", () => {
     expect(isAntigravityPromptRejection(429, BARE)).toBe(true);
   });
 
+  it("returns false when request has no system instruction", () => {
+    expect(isAntigravityPromptRejection(429, BARE, false)).toBe(false);
+  });
+
   it.each([
     ["one with RetryInfo details", 429, WITH_RETRY_INFO],
     ["a real quota error", 429, REAL_QUOTA],
@@ -128,6 +132,14 @@ describe("Antigravity executor handling", () => {
     expect(parsed.message).toBe(ANTIGRAVITY_PROMPT_REJECTED_MESSAGE);
     // No reset timestamp: nothing may arm a cooldown or lock the account.
     expect(parsed.resetsAtMs).toBeUndefined();
+  });
+
+  it("leaves a bare 429 as 429 when request has no system instruction", async () => {
+    const agWithoutSys = new AntigravityExecutor();
+    agWithoutSys._hasSystemInstruction = false;
+    const parsed = await parseUpstreamError(response(429, BARE), agWithoutSys);
+    expect(parsed.statusCode).toBe(429);
+    expect(parsed.message).toContain("Resource has been exhausted");
   });
 
   it("leaves a real quota 429 as a 429", async () => {

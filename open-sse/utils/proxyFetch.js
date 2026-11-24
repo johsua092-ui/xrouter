@@ -1,24 +1,68 @@
 import { Readable } from "stream";
-import { MEMORY_CONFIG, ALLOW_INSECURE_TLS_FALLBACK } from "../config/runtimeConfig.js";
+import {
+  MEMORY_CONFIG,
+  ALLOW_INSECURE_TLS_FALLBACK,
+  FRESH_RETRY_KEEPALIVE_TIMEOUT_MS,
+  STALE_SOCKET_ERROR_CODES,
+  NON_STALE_SOCKET_ERROR_CODES,
+  STALE_SOCKET_ERROR_SUBSTRINGS,
+  resolveKeepAliveTimeouts,
+  isFreshSocketReplayEnabled,
+} from "../config/runtimeConfig.js";
 import { dbg } from "./debugLog.js";
 import { createProxyDispatcher } from "./proxyDispatcher.js";
 import { TLS_ECDH_CURVE } from "../config/tlsConfig.js";
 
 const originalFetch = globalThis.fetch;
 const proxyDispatchers = new Map();
+const directDispatchers = new Map();
 
-let directDispatcher = null;
-export async function getDirectDispatcher() {
-  if (!directDispatcher) {
-    const { Agent } = await import("undici");
-    directDispatcher = new Agent({
-      maxHeaderSize: 64 * 1024,
-      connect: { ecdhCurve: TLS_ECDH_CURVE },
-    });
-  }
-  return directDispatcher;
+export function isStaleSocketError(error) {
+  if (!error || error.name === "AbortError" || isTlsCertError(error)) return false;
+  const code = error?.cause?.code || error?.code || "";
+  if (NON_STALE_SOCKET_ERROR_CODES.has(code)) return false;
+  if (STALE_SOCKET_ERROR_CODES.has(code)) return true;
+  const msg = `${error?.message || ""} ${error?.cause?.message || ""}`.toLowerCase();
+  return STALE_SOCKET_ERROR_SUBSTRINGS.some((sub) => msg.includes(sub));
 }
-export function resetDirectDispatchersForTests() { directDispatcher = null; }
+
+async function getOrCreateDirectAgent(key, insecure, keepAliveTimeout, keepAliveMaxTimeout) {
+  const cached = directDispatchers.get(key);
+  if (cached) return cached;
+  const { Agent } = await import("undici");
+  if (directDispatchers.size >= (MEMORY_CONFIG.proxyDispatchersMaxSize || 50)) {
+    directDispatchers.delete(directDispatchers.keys().next().value);
+  }
+  const agent = new Agent({
+    maxHeaderSize: 64 * 1024,
+    connect: { ecdhCurve: TLS_ECDH_CURVE, ...(insecure ? { rejectUnauthorized: false } : {}) },
+    keepAliveTimeout,
+    keepAliveMaxTimeout,
+  });
+  directDispatchers.set(key, agent);
+  return agent;
+}
+
+export function getDirectDispatcher(insecure = false) {
+  const { keepAliveTimeout, keepAliveMaxTimeout } = resolveKeepAliveTimeouts();
+  const key = `direct::${insecure ? "insecure" : "secure"}::${keepAliveTimeout}::${keepAliveMaxTimeout}`;
+  return getOrCreateDirectAgent(key, insecure, keepAliveTimeout, keepAliveMaxTimeout);
+}
+
+export function getFreshRetryDispatcher(insecure = false) {
+  const key = `fresh::${insecure ? "insecure" : "secure"}`;
+  return getOrCreateDirectAgent(
+    key,
+    insecure,
+    FRESH_RETRY_KEEPALIVE_TIMEOUT_MS,
+    FRESH_RETRY_KEEPALIVE_TIMEOUT_MS
+  );
+}
+
+export function resetDirectDispatchersForTests() {
+  directDispatchers.clear();
+  proxyDispatchers.clear();
+}
 
 
 // ─── TLS fingerprinting via got-scraping (browser-like JA3) ───────────────
@@ -557,8 +601,25 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
 
   // got-scraping disabled — use native fetch with enlarged maxHeaderSize (64KB)
   // to avoid UND_ERR_HEADERS_OVERFLOW from Google / Cloudflare responses with massive Set-Cookie headers.
-  const dispatcher = options.dispatcher || (await getDirectDispatcher().catch(() => null));
-  return originalFetch(url, dispatcher ? { ...options, dispatcher } : options);
+  const forceFreshSocket = proxyOptions?.forceFreshSocket === true || options?.forceFreshSocket === true;
+  const dispatcher = options.dispatcher || (await (forceFreshSocket ? getFreshRetryDispatcher() : getDirectDispatcher()).catch(() => null));
+  try {
+    return await originalFetch(url, dispatcher ? { ...options, dispatcher } : options);
+  } catch (err) {
+    if (
+      !proxyUrl
+      && !forceFreshSocket
+      && !options.signal?.aborted
+      && !(options?.body && typeof options.body.getReader === "function" && options.body.locked)
+      && isFreshSocketReplayEnabled()
+      && isStaleSocketError(err)
+    ) {
+      dbg("FETCH", `stale keep-alive socket (${err.cause?.code || err.code || err.message}), retrying on fresh socket: ${url}`);
+      const freshDispatcher = await getFreshRetryDispatcher().catch(() => null);
+      return await originalFetch(url, freshDispatcher ? { ...options, dispatcher: freshDispatcher } : options);
+    }
+    throw err;
+  }
 }
 
 /**

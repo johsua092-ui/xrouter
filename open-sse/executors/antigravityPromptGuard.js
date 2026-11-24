@@ -18,10 +18,13 @@ export const ANTIGRAVITY_PROMPT_REJECTED_MESSAGE =
   + "refused.";
 
 /**
- * True only for a 429 whose body is the bare RESOURCE_EXHAUSTED with no structured detail.
+ * True only for a 429 whose body is the bare RESOURCE_EXHAUSTED with no structured detail,
+ * AND where the request actually contained a system prompt/instruction that could be rejected.
  * A real quota 429 carries ErrorInfo/RetryInfo/quotaResetTimeStamp and is left untouched.
+ * Without systemInstruction (e.g. test ping or plain user prompt), bare 429 is true upstream rate limiting.
  */
-export function isAntigravityPromptRejection(status, bodyText) {
+export function isAntigravityPromptRejection(status, bodyText, hasSystemInstruction = true) {
+  if (!hasSystemInstruction) return false;
   if (status !== HTTP_STATUS.RATE_LIMITED || !bodyText) return false;
   let error;
   try {
