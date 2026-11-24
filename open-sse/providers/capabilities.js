@@ -392,6 +392,17 @@ export const PROVIDER_CAPABILITIES = {
     "poolside/laguna-xs-2.1:free":      { tools: true, reasoning: true, thinkingFormat: "nous", contextWindow: 262144, maxOutput: 32768 },
     "stealth/missingno":                { tools: true, reasoning: true, thinkingFormat: "nous", contextWindow: 262144, maxOutput: 131072 },
   },
+  // Mistral (probed live 2026-11-24 against api.mistral.ai): the chat schema is
+  // strict — a `thinking` object is a 422 extra_forbidden — so every reasoning
+  // model here rides the "mistral" format (top-level reasoning_effort, clamped to
+  // the model's own set). Large is a genuine reasoning model; medium/small and the
+  // catalog's third-party ids stay untouched because they advertise no effort knob.
+  "mistral": {
+    "mistral-large-latest":       { reasoning: true, thinkingFormat: "mistral", thinkingCanDisable: false, contextWindow: 256000, maxOutput: 64000 },
+    "mistral-large-4":            { reasoning: true, thinkingFormat: "mistral", thinkingCanDisable: false, contextWindow: 256000, maxOutput: 64000 },
+    "mistral-large-4-0":          { reasoning: true, thinkingFormat: "mistral", thinkingCanDisable: false, contextWindow: 256000, maxOutput: 64000 },
+    "mistral-large-2512":         { reasoning: true, thinkingFormat: "mistral", thinkingCanDisable: false, contextWindow: 256000, maxOutput: 64000 },
+  },
 };
 
 // Qoder CN serves the identical model catalog from the CN gateway, so it shares

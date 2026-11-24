@@ -275,6 +275,55 @@ describe("applyThinking per provider format", () => {
   });
 });
 
+describe("Mistral provider (strict chat schema)", () => {
+  // Regression: mistral/deepseek-v4-1-flash-1017 went out with the DeepSeek-shaped
+  // `thinking` block and api.mistral.ai answered 422 extra_forbidden (body.thinking).
+  // Mistral only accepts top-level reasoning_effort, and only the model's own set.
+  const M = "deepseek-v4-1-flash-1017";
+
+  it("never puts a thinking block on the wire", () => {
+    const out = apply("openai", M, { reasoning_effort: "high" }, "mistral");
+    expect(out.thinking).toBeUndefined();
+    expect(out.reasoning_effort).toBe("high");
+  });
+
+  it("rewrites a client-sent thinking block into reasoning_effort", () => {
+    const out = apply("openai", M, { thinking: { type: "enabled", budget_tokens: 2048 } }, "mistral");
+    expect(out.thinking).toBeUndefined();
+    expect(["low", "high"]).toContain(out.reasoning_effort);
+  });
+
+  it("clamps an unsupported level into the model's live set (medium is a 400 upstream)", () => {
+    const out = apply("openai", M, { reasoning_effort: "medium" }, "mistral");
+    expect(out.thinking).toBeUndefined();
+    expect(out.reasoning_effort).not.toBe("medium");
+    expect(["none", "low", "high", "xhigh"]).toContain(out.reasoning_effort);
+  });
+
+  it("maps max down to xhigh (Mistral has no max)", () => {
+    const out = apply("openai", M, { reasoning_effort: "max" }, "mistral");
+    expect(out.reasoning_effort).toBe("xhigh");
+  });
+
+  it("passes none through only where the model can disable thinking", () => {
+    const out = apply("openai", M, { reasoning_effort: "none" }, "mistral");
+    expect(out.thinking).toBeUndefined();
+    expect(out.reasoning_effort).toBe("none");
+  });
+
+  it("sends nothing for a model without a reasoned level set", () => {
+    const out = apply("openai", "mistral-medium-latest", { reasoning_effort: "high", thinking: { type: "enabled" } }, "mistral");
+    expect(out.thinking).toBeUndefined();
+    expect(out.reasoning_effort).toBeUndefined();
+  });
+
+  it("keeps Mistral's own large-model levels (low|medium|high)", () => {
+    const out = apply("openai", "mistral-large-latest", { reasoning_effort: "medium" }, "mistral");
+    expect(out.thinking).toBeUndefined();
+    expect(out.reasoning_effort).toBe("medium");
+  });
+});
+
 describe("extractReasoningText (response shapes)", () => {
   it("reasoning_content (GLM/Qwen/DeepSeek)", () => {
     expect(extractReasoningText({ reasoning_content: "abc" })).toBe("abc");
