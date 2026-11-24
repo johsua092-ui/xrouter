@@ -8,6 +8,10 @@ const ADS_INTERVAL_MS = 60 * 1000;
 const LAUNCH_HANDSHAKE_TTL_MS = 55 * 60 * 1000; // 55m TTL (official FreePI CLI launch grace is 60m)
 const SETTLING_DELAY_MS = 500; // 500ms post-stream grace settling delay for upstream socket reset
 const MAX_QUEUE_SIZE = 10;
+// A request that cannot get the slot within this budget fails with QUEUE_TIMEOUT
+// instead of hanging: the queue used to wait until the client aborted, which on a
+// 1200-token stream ahead of it means tens of seconds of silence.
+const QUEUE_MAX_WAIT_MS = Number(process.env.FREEPI_QUEUE_MAX_WAIT_MS || 120000);
 
 // Housekeeping for the per-token maps below.
 const SESSION_TTL_MS = 6 * 60 * 60 * 1000; // session id is cosmetic; drop after 6h idle
@@ -116,7 +120,6 @@ function resolveLocaleHeaders() {
  * 1. Fetch banner ad with x-ad-trigger: "launch"
  * 2. Ping TryGravity / upstream tracking pixel if imp_url present
  * 3. Report impression to /ads/impression
- * 4. Sync profile & meter via GET /me
  * Guarantees that upstream FreePI marks the token as warm & ad-satisfied for up to 60 minutes.
  */
 export async function launchSessionHandshake(token, sessionId = null, proxyOptions = null) {
@@ -185,20 +188,10 @@ export async function launchSessionHandshake(token, sessionId = null, proxyOptio
       }
     }
 
-    // Official CLI calls GET /me after launch banner to synchronize quota allowance and reward state
-    await proxyAwareFetch(
-      "https://api.freepi.ai/me",
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${cleanToken}`,
-          "Content-Type": "application/json",
-          "x-session-id": sid,
-        },
-        signal: AbortSignal.timeout(5000),
-      },
-      proxyOptions
-    ).catch(() => {});
+    // NOTE: the official CLI also calls GET /me after the launch banner to sync
+    // quota. FreePI rejects CLI tokens on /me (and /me/stats) with 401
+    // "invalid or expired token" even when chat completions work, so that call is
+    // a guaranteed no-op — dropped instead of burning a round-trip per handshake.
 
     stamp(launchHandshakeMap, key, Date.now());
     stamp(lastImpressionMap, key, Date.now());
@@ -317,9 +310,14 @@ export async function acquireFreePiQueueLock(token, signal) {
     return createReleaseFn();
   }
 
-  // Reject early if queue capacity is overwhelmed
+  // Reject early if queue capacity is overwhelmed. The error carries a code so
+  // the classifier can tell "our own admission control said no" from "the
+  // upstream account is unhealthy" — the first must never cool the account down.
   if (queue.waiting.length >= MAX_QUEUE_SIZE) {
-    throw new Error("FreePI queue full: too many concurrent requests queued for this account");
+    const err = new Error("FreePI queue full: too many concurrent requests queued for this account (QUEUE_OVERFLOW)");
+    err.code = "QUEUE_OVERFLOW";
+    err.retryAfterMs = 2000;
+    throw err;
   }
 
   // Wait in FIFO queue
@@ -329,6 +327,7 @@ export async function acquireFreePiQueueLock(token, signal) {
       // The abort listener used to stay attached after the hang-off, keeping
       // this closure (and the whole request) reachable from the signal.
       resolve: (releaseFn) => {
+        clearTimeout(item.timer);
         if (signal && typeof signal.removeEventListener === "function") {
           signal.removeEventListener("abort", onAbort);
         }
@@ -339,6 +338,7 @@ export async function acquireFreePiQueueLock(token, signal) {
 
     function onAbort() {
       item.aborted = true;
+      clearTimeout(item.timer);
       const idx = queue.waiting.indexOf(item);
       if (idx !== -1) queue.waiting.splice(idx, 1);
       reject(new Error("Request aborted while in FreePI queue"));
@@ -352,7 +352,35 @@ export async function acquireFreePiQueueLock(token, signal) {
     }
 
     queue.waiting.push(item);
+
+    // Deadline: a queued request must never wait forever just because the slot
+    // ahead of it never closes. Unref'd so a pending wait cannot hold the process.
+    item.timer = setTimeout(() => {
+      item.aborted = true;
+      const idx = queue.waiting.indexOf(item);
+      if (idx !== -1) queue.waiting.splice(idx, 1);
+      if (signal && typeof signal.removeEventListener === "function") {
+        signal.removeEventListener("abort", onAbort);
+      }
+      const err = new Error(`FreePI queue wait exceeded ${QUEUE_MAX_WAIT_MS}ms (QUEUE_TIMEOUT)`);
+      err.code = "QUEUE_TIMEOUT";
+      err.retryAfterMs = 5000;
+      reject(err);
+    }, QUEUE_MAX_WAIT_MS);
+    if (item.timer && typeof item.timer.unref === "function") item.timer.unref();
   });
+}
+
+/**
+ * Current load of a token's queue, for slot-aware account selection: routing reads
+ * this to prefer an idle account over one that already has requests waiting.
+ */
+export function getFreePiQueuePressure(token) {
+  const key = token && typeof token === "string" && token.trim() ? tokenKey(token.trim()) : "";
+  const queue = key ? tokenQueues.get(key) : null;
+  const running = queue?.running ? 1 : 0;
+  const waiting = queue?.waiting?.length || 0;
+  return { running, waiting, total: running + waiting, idle: running + waiting === 0 };
 }
 
 /**
@@ -451,15 +479,36 @@ export class FreePiExecutor extends DefaultExecutor {
 
     // 3. Acquire Stream Queue Lock (Strict single concurrency = 1 per account)
     let releaseLock = () => Promise.resolve();
+    let queueWaitMs = 0;
     if (cleanToken) {
+      const queueStartedAt = Date.now();
       try {
         releaseLock = await acquireFreePiQueueLock(cleanToken, signal);
+        queueWaitMs = Date.now() - queueStartedAt;
+        if (queueWaitMs >= 1000) {
+          // The route handler does not forward custom response headers, so the wait
+          // is reported here rather than as x-freepi-queue-ms.
+          log?.info?.("FREEPI", `Waited ${queueWaitMs}ms for the account slot`);
+        }
       } catch (queueErr) {
         log?.warn?.("FREEPI", `Queue acquisition error: ${queueErr.message}`);
         return {
           response: new Response(
-            JSON.stringify({ error: { message: queueErr.message, code: "QUEUE_OVERFLOW" } }),
-            { status: 429, headers: { "Content-Type": "application/json" } }
+            JSON.stringify({
+              error: {
+                message: queueErr.message,
+                code: queueErr.code || "QUEUE_OVERFLOW",
+              },
+            }),
+            {
+              status: 429,
+              headers: {
+                "Content-Type": "application/json",
+                // Retry-After is honest here: the client asked for more
+                // concurrency than the account can serve.
+                "Retry-After": String(Math.max(1, Math.ceil((queueErr.retryAfterMs || 2000) / 1000))),
+              },
+            }
           ),
           url: this.buildUrl(params.model, params.stream, 0, credentials),
           headers: {},
