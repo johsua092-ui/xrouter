@@ -1,6 +1,9 @@
 const FREEPI_API_BASE = "https://api.freepi.ai";
 const CONSENT_VERSION = "4";
 const CONSENT_ATTEMPTS = 2;
+const CONSENT_TIMEOUT_MS = 6000;
+const DEVICE_CODE_TIMEOUT_MS = 10000;
+const CONSENT_RETRY_DELAY_MS = 300;
 
 /**
  * Record consent for a device session. This is a hard prerequisite of the
@@ -24,6 +27,10 @@ async function submitConsent(consentUrl, sessionId) {
           session_id: sessionId,
           consent_version: CONSENT_VERSION,
         }),
+        // Bounded: a hung consent call would otherwise stall the entire
+        // device-code request (undici only aborts headers after minutes) and
+        // the user would stare at a spinner before the browser step even starts.
+        signal: AbortSignal.timeout(CONSENT_TIMEOUT_MS),
       });
       if (res.ok) return;
       const body = await res.text().catch(() => "");
@@ -36,6 +43,9 @@ async function submitConsent(consentUrl, sessionId) {
       lastError = new Error(
         `FreePI consent request failed: ${err?.message || err}`
       );
+    }
+    if (attempt < CONSENT_ATTEMPTS) {
+      await new Promise((r) => setTimeout(r, CONSENT_RETRY_DELAY_MS));
     }
   }
   throw lastError;
@@ -58,6 +68,9 @@ const freepi = {
         Accept: "application/json",
       },
       body: JSON.stringify({}),
+      // Upstream answers in <1s; a black-holed connection must not hold the
+      // dashboard request open for undici's default header timeout.
+      signal: AbortSignal.timeout(DEVICE_CODE_TIMEOUT_MS),
     });
 
     if (!res.ok) {
