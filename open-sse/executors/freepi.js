@@ -6,7 +6,15 @@ import { proxyAwareFetch } from "../utils/proxyFetch.js";
 const CLI_VERSION = "0.6.25";
 const ADS_INTERVAL_MS = 60 * 1000;
 const LAUNCH_HANDSHAKE_TTL_MS = 55 * 60 * 1000; // 55m TTL (official FreePI CLI launch grace is 60m)
-const SETTLING_DELAY_MS = 500; // 500ms post-stream grace settling delay for upstream socket reset
+// Post-stream grace before the slot is handed to the next request. 500ms is the
+// safe default (upstream needs a moment to release the session socket); it is
+// also ~47% of the per-account cadence, so it is tunable for operators who would
+// rather trade a little safety for throughput. Clamped to [0, 2000].
+const SETTLING_ENV = process.env.FREEPI_SETTLING_DELAY_MS;
+const SETTLING_DELAY_MS = Math.min(
+  2000,
+  Math.max(0, SETTLING_ENV === undefined || SETTLING_ENV === "" ? 500 : Number(SETTLING_ENV) || 0),
+);
 const MAX_QUEUE_SIZE = 10;
 // A request that cannot get the slot within this budget fails with QUEUE_TIMEOUT
 // instead of hanging: the queue used to wait until the client aborted, which on a
