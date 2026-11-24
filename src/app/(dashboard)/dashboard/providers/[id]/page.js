@@ -1789,11 +1789,8 @@ export default function ProviderDetailPage() {
               <div className="flex flex-col gap-1.5">
                 {poolStats.accounts.map((account) => (
                   <div key={account.id} className="flex items-center justify-between gap-2 text-xs">
-                    <span className="font-mono truncate">{account.name}</span>
-                    <span className="flex items-center gap-2 shrink-0">
-                      {account.waiting > 0 && (
-                        <span className="text-text-muted">{account.waiting} waiting</span>
-                      )}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="font-mono truncate">{account.name}</span>
                       <Badge
                         size="sm"
                         dot
@@ -1807,6 +1804,9 @@ export default function ProviderDetailPage() {
                           : account.status === "rate_limited" ? "rate limited"
                             : account.status}
                       </Badge>
+                    </span>
+                    <span className="shrink-0 text-text-muted">
+                      {account.waiting > 0 ? `${account.waiting} waiting` : ""}
                     </span>
                   </div>
                 ))}
