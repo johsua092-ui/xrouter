@@ -439,19 +439,17 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
               <div key={account.id} className="flex items-center justify-between gap-2 text-xs">
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="font-mono truncate">{account.name}</span>
-                  <Badge
-                    size="sm"
-                    dot
-                    variant={
-                      account.status === "idle" ? "success"
-                        : account.status === "busy" ? "warning"
-                          : "error"
+                  <span
+                    className={
+                      account.status === "busy" ? "text-warning-fg"
+                        : account.status === "idle" ? "text-text-muted"
+                          : "text-danger-fg"
                     }
                   >
                     {account.status === "needs_reauth" ? "needs re-auth"
                       : account.status === "rate_limited" ? "rate limited"
                         : account.status}
-                  </Badge>
+                  </span>
                 </span>
                 <span className="shrink-0 text-text-muted">
                   {account.waiting > 0 ? `${account.waiting} waiting` : ""}
