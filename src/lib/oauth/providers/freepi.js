@@ -4,6 +4,17 @@ const CONSENT_ATTEMPTS = 2;
 const CONSENT_TIMEOUT_MS = 6000;
 const DEVICE_CODE_TIMEOUT_MS = 10000;
 const CONSENT_RETRY_DELAY_MS = 300;
+const IDENTITY_ATTEMPTS = 2;
+const IDENTITY_TIMEOUT_MS = 4000;
+const IDENTITY_RETRY_DELAY_MS = 200;
+const AUTH_SCHEME = "Bearer";
+
+const authHeaders = (token) => ({
+  Authorization: `${AUTH_SCHEME} ${token}`,
+  Accept: "application/json",
+});
+
+const handleEmail = (handle) => (handle ? `${handle}@github` : undefined);
 
 /**
  * Record consent for a device session. This is a hard prerequisite of the
@@ -49,6 +60,52 @@ async function submitConsent(consentUrl, sessionId) {
     }
   }
   throw lastError;
+}
+
+async function fetchJson(url, token, timeoutMs) {
+  const res = await fetch(url, {
+    headers: authHeaders(token),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) {
+    const err = new Error(`HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+/**
+ * Resolve the account identity behind a freshly issued token.
+ *
+ * The handle becomes the connection's email (`<handle>@github`), which is also
+ * the dedup key createProviderConnection uses for oauth rows. A single hiccup
+ * here used to store a row with no email, and the next login for the same
+ * account could not match it — so every retry grew the pool by one duplicate
+ * entry (same account, same 1-concurrency limit, half the requests throttled).
+ */
+async function resolveIdentity(token) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= IDENTITY_ATTEMPTS; attempt++) {
+    try {
+      return await fetchJson(`${FREEPI_API_BASE}/me/stats`, token, IDENTITY_TIMEOUT_MS);
+    } catch (err) {
+      lastError = err;
+      // 401/403 is the token itself being rejected — /me answers the same.
+      if (err.status === 401 || err.status === 403) return null;
+      if (attempt < IDENTITY_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, IDENTITY_RETRY_DELAY_MS));
+      }
+    }
+  }
+  // Older/newer API revisions expose the same handle from /me instead.
+  try {
+    return await fetchJson(`${FREEPI_API_BASE}/me`, token, IDENTITY_TIMEOUT_MS);
+  } catch (err) {
+    lastError = err;
+  }
+  console.warn("[freepi oauth] identity lookup failed:", lastError?.message);
+  return null;
 }
 
 const freepi = {
@@ -172,34 +229,29 @@ const freepi = {
       launchSessionHandshake(token, tokenData.session_id).catch(() => {});
     } catch {}
 
-    try {
-      const res = await fetch(`${FREEPI_API_BASE}/me/stats`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (res.ok) {
-        const stats = await res.json();
-        return {
-          handle: stats.handle,
-          tier: stats.tier,
-          email: stats.handle ? `${stats.handle}@github` : undefined,
-        };
-      }
-    } catch (e) {
-      console.warn("[freepi oauth] postExchange warning:", e?.message);
-    }
-    return {};
+    // The token response may already carry the handle; only ask upstream when
+    // it does not, so a /me outage cannot strip the connection's identity.
+    const identity = tokenData.handle ? null : await resolveIdentity(token);
+    const handle = tokenData.handle || identity?.handle;
+    if (!handle) return {};
+
+    return {
+      handle,
+      tier: tokenData.tier || identity?.tier,
+      email: handleEmail(handle),
+    };
   },
 
   mapTokens: (data, extra = {}) => {
     const token = data.access_token || data.token;
+    const handle = extra?.handle || data.handle || undefined;
     return {
       accessToken: token,
       tokenType: "Bearer",
-      email: extra?.email || (data.handle ? `${data.handle}@github` : undefined),
-      displayName: extra?.handle ? `@${extra.handle}` : "FreePI User",
+      email: extra?.email || handleEmail(handle),
+      displayName: handle ? `@${handle}` : "FreePI User",
       providerSpecificData: {
-        handle: extra?.handle || data.handle || undefined,
+        handle,
         tier: extra?.tier || data.tier || undefined,
       },
     };

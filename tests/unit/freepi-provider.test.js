@@ -233,3 +233,88 @@ test("FreePI OAuth error surfacing", async (t) => {
     assert.equal(result.data.access_token, "jwt-1");
   });
 });
+
+// A login whose identity lookup fails stores a row with no email; the next
+// login for the same account cannot match it, so the pool grows one duplicate
+// (same account, same single-concurrency limit) per retry. Identity is now
+// retried, backed by /me, and short-circuited when the token body carries it.
+test("FreePI identity resolution (duplicate-free re-login)", async (t) => {
+  const realFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = realFetch; });
+
+  const { default: freepiOAuth } = await import("../../src/lib/oauth/providers/freepi.js");
+
+  // The launch handshake also fires a background request; only identity calls
+  // are asserted, so filter them out.
+  const stub = (routes) => {
+    const calls = [];
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      const path = u.replace("https://api.freepi.ai", "");
+      calls.push(path);
+      for (const [suffix, reply] of Object.entries(routes)) {
+        if (u.endsWith(suffix)) return reply();
+      }
+      throw new Error(`unexpected fetch: ${u}`);
+    };
+    return {
+      meCalls: () => calls.filter((p) => p.startsWith("/me")),
+    };
+  };
+
+  await t.test("/me/stats resolves the handle and the dedup email", async () => {
+    stub({ "/me/stats": () => Response.json({ handle: "octo", tier: "young" }) });
+    const extra = await freepiOAuth.postExchange({ access_token: "tok" });
+    assert.equal(extra.handle, "octo");
+    assert.equal(extra.tier, "young");
+    assert.equal(extra.email, "octo@github");
+
+    const mapped = freepiOAuth.mapTokens({ access_token: "tok" }, extra);
+    assert.equal(mapped.email, "octo@github");
+    assert.equal(mapped.displayName, "@octo");
+    assert.equal(mapped.providerSpecificData.handle, "octo");
+  });
+
+  await t.test("transient stats failures fall back to /me instead of losing identity", async () => {
+    let statsCalls = 0;
+    const probe = stub({
+      "/me/stats": () => {
+        statsCalls++;
+        return new Response("upstream boom", { status: 503 });
+      },
+      "/me": () => Response.json({ handle: "octo", tier: "young" }),
+    });
+    const extra = await freepiOAuth.postExchange({ access_token: "tok" });
+    assert.equal(statsCalls, 2, "stats is retried once before the fallback endpoint");
+    assert.equal(extra.handle, "octo");
+    assert.equal(extra.email, "octo@github");
+    assert.deepEqual(probe.meCalls(), ["/me/stats", "/me/stats", "/me"]);
+  });
+
+  await t.test("a rejected token is terminal and fabricates no identity", async () => {
+    const probe = stub({
+      "/me/stats": () => new Response('{"code":"unauthorized"}', { status: 401 }),
+    });
+    const extra = await freepiOAuth.postExchange({ access_token: "tok" });
+    assert.deepEqual(extra, {});
+    assert.deepEqual(probe.meCalls(), ["/me/stats"], "401 must not be retried or fall back");
+  });
+
+  await t.test("a handle in the token response skips the identity call entirely", async () => {
+    const probe = stub({});
+    const extra = await freepiOAuth.postExchange({ access_token: "tok", handle: "octo", tier: "young" });
+    assert.equal(extra.email, "octo@github");
+    assert.deepEqual(probe.meCalls(), []);
+  });
+
+  await t.test("no handle anywhere leaves email undefined instead of a bogus one", async () => {
+    stub({
+      "/me/stats": () => Response.json({}),
+    });
+    const extra = await freepiOAuth.postExchange({ access_token: "tok" });
+    assert.deepEqual(extra, {});
+    const mapped = freepiOAuth.mapTokens({ access_token: "tok" }, extra);
+    assert.equal(mapped.email, undefined);
+    assert.equal(mapped.displayName, "FreePI User");
+  });
+});
