@@ -348,6 +348,7 @@ export async function GET(request, { params }) {
         "glm",
         "zcode",
         "nous",
+        "freepi",
       ];
       let deviceData;
       if (noPkceDeviceProviders.includes(provider)) {
@@ -726,6 +727,9 @@ export async function POST(request, { params }) {
         error: result.error,
         errorDescription: result.errorDescription,
         pending: isPending,
+        // Server-side back-off (freepi): seconds the client must wait before
+        // polling again. Dropping it makes the poll loop hammer the upstream.
+        ...(result.retryAfter ? { retryAfter: result.retryAfter } : {}),
         // fatal: unrecoverable (e.g. post-exchange failure) — client must stop polling and show it
         ...(result.fatal ? { fatal: true } : {}),
       });

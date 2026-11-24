@@ -1,5 +1,45 @@
 const FREEPI_API_BASE = "https://api.freepi.ai";
 const CONSENT_VERSION = "4";
+const CONSENT_ATTEMPTS = 2;
+
+/**
+ * Record consent for a device session. This is a hard prerequisite of the
+ * upstream flow: until /auth/consent succeeds, every /auth/token poll answers
+ * 403 {"code":"consent_required"} and the device session can never be
+ * exchanged. Swallowing a failure here used to leave the user on a spinner for
+ * the full device-code lifetime (899s) and then report a bare "Authorization
+ * timeout" — the session was already dead before the browser even opened.
+ */
+async function submitConsent(consentUrl, sessionId) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= CONSENT_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(consentUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          consent_version: CONSENT_VERSION,
+        }),
+      });
+      if (res.ok) return;
+      const body = await res.text().catch(() => "");
+      lastError = new Error(
+        `FreePI consent not recorded (${res.status}): ${body || "empty response"}`
+      );
+      // 4xx is deterministic (bad/expired session) — retrying cannot help.
+      if (res.status < 500) break;
+    } catch (err) {
+      lastError = new Error(
+        `FreePI consent request failed: ${err?.message || err}`
+      );
+    }
+  }
+  throw lastError;
+}
 
 const freepi = {
   config: {
@@ -27,19 +67,9 @@ const freepi = {
 
     const data = await res.json();
 
-    // Submit consent automatically for this device session
-    try {
-      await fetch(config.consentUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: data.session_id,
-          consent_version: CONSENT_VERSION,
-        }),
-      });
-    } catch (e) {
-      console.warn("[freepi oauth] consent submission warning:", e?.message);
-    }
+    // Consent is mandatory upstream (see submitConsent). Fail the device-code
+    // request instead of handing out a session that can only ever answer 403.
+    await submitConsent(config.consentUrl, data.session_id);
 
     return {
       device_code: data.session_id,
@@ -84,18 +114,38 @@ const freepi = {
     if (data.status === "pending" || data.error === "authorization_pending") {
       return {
         ok: true,
-        data: { error: "authorization_pending" },
+        data: {
+          error: "authorization_pending",
+          error_description: data.message,
+          // Upstream asks the client to slow down via retry_after (it grows
+          // while the browser step is in progress); ignoring it earns a hard
+          // rate limit, so it has to survive to the poll loop.
+          retry_after: data.retry_after,
+        },
       };
     }
 
-    const token = data.token || data.access_token || data.accessToken;
-    if (token) {
-      data.access_token = token;
+    const accessTokenValue = data.token || data.access_token || data.accessToken;
+    if (accessTokenValue) {
+      data["access_token"] = accessTokenValue;
+      return {
+        ok: res.ok,
+        data,
+      };
     }
 
+    // FreePI reports failures as {code, message} — 403 consent_required,
+    // 404 not_found ("unknown session", i.e. the device code expired), 429
+    // rate_limited. The generic poll wrapper only understands the OAuth field
+    // names, so an unmapped body reads as "no error, keep polling" and the UI
+    // spins until the 15-minute timeout instead of telling the user anything.
     return {
-      ok: res.ok,
-      data,
+      ok: false,
+      data: {
+        ...data,
+        error: data.error || data.code || `http_${res.status}`,
+        error_description: data.error_description || data.message,
+      },
     };
   },
 

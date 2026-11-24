@@ -132,3 +132,104 @@ test("FreePI Provider Integration Tests", async (t) => {
   assert.ok(fs.existsSync(path.join(rootDir, "public/providers/freepi.svg")), "public/providers/freepi.svg must exist");
   assert.ok(fs.existsSync(path.join(rootDir, "public/providers/freepi.png")), "public/providers/freepi.png must exist");
 });
+
+// FreePI's OAuth transport reports failures as {code, message} and gates every
+// token poll behind a server-side consent record. Both used to be dropped on the
+// floor, which turned any upstream failure into a 15-minute "Authorization
+// timeout" with no explanation.
+test("FreePI OAuth error surfacing", async (t) => {
+  const realFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = realFetch; });
+
+  const { default: freepiOAuth } = await import("../../src/lib/oauth/providers/freepi.js");
+
+  const stub = (routes) => {
+    globalThis.fetch = async (url, opts) => {
+      const u = String(url);
+      for (const [suffix, reply] of Object.entries(routes)) {
+        if (u.endsWith(suffix)) return reply(opts);
+      }
+      throw new Error(`unexpected fetch: ${u}`);
+    };
+  };
+
+  const DEVICE = {
+    session_id: "sess-1",
+    user_code: "AAAA-BBBB",
+    verification_uri: "https://github.com/login/device",
+    interval: 5,
+    expires_in: 899,
+  };
+
+  await t.test("consent is posted with session_id + consent_version", async () => {
+    const seen = [];
+    stub({
+      "/auth/github/device": () => Response.json(DEVICE),
+      "/auth/consent": (opts) => {
+        seen.push(JSON.parse(opts.body));
+        return Response.json({ ok: true });
+      },
+    });
+    const data = await freepiOAuth.requestDeviceCode(freepiOAuth.config);
+    assert.deepEqual(seen, [{ session_id: "sess-1", consent_version: "4" }]);
+    assert.equal(data.device_code, "sess-1");
+  });
+
+  await t.test("device code request fails fast when consent is not recorded", async () => {
+    stub({
+      "/auth/github/device": () => Response.json(DEVICE),
+      "/auth/consent": () => new Response('{"code":"internal","message":"boom"}', { status: 500 }),
+    });
+    await assert.rejects(
+      freepiOAuth.requestDeviceCode(freepiOAuth.config),
+      /FreePI consent not recorded \(500\)/,
+    );
+  });
+
+  await t.test("consent failure is not retried on a deterministic 4xx", async () => {
+    let calls = 0;
+    stub({
+      "/auth/github/device": () => Response.json(DEVICE),
+      "/auth/consent": () => {
+        calls++;
+        return new Response('{"code":"bad_request"}', { status: 400 });
+      },
+    });
+    await assert.rejects(freepiOAuth.requestDeviceCode(freepiOAuth.config), /\(400\)/);
+    assert.equal(calls, 1);
+  });
+
+  await t.test("upstream {code,message} is mapped onto OAuth error fields", async () => {
+    stub({
+      "/auth/token": () => new Response('{"code":"not_found","message":"unknown session"}', { status: 404 }),
+    });
+    const result = await freepiOAuth.pollToken(freepiOAuth.config, "sid", null);
+    assert.equal(result.ok, false);
+    assert.equal(result.data.error, "not_found");
+    assert.equal(result.data.error_description, "unknown session");
+  });
+
+  await t.test("403 consent_required keeps its actionable code", async () => {
+    stub({
+      "/auth/token": () =>
+        new Response('{"code":"consent_required","message":"consent required before sign-in"}', { status: 403 }),
+    });
+    const result = await freepiOAuth.pollToken(freepiOAuth.config, "sid", null);
+    assert.equal(result.data.error, "consent_required");
+  });
+
+  await t.test("pending passthrough keeps the server's retry_after", async () => {
+    stub({ "/auth/token": () => Response.json({ status: "pending", retry_after: 10 }) });
+    const result = await freepiOAuth.pollToken(freepiOAuth.config, "sid", null);
+    assert.equal(result.ok, true);
+    assert.equal(result.data.error, "authorization_pending");
+    assert.equal(result.data.retry_after, 10);
+  });
+
+  await t.test("a granted session still maps token -> access_token", async () => {
+    stub({ "/auth/token": () => Response.json({ token: "jwt-1", handle: "devuser", tier: "young" }) });
+    const result = await freepiOAuth.pollToken(freepiOAuth.config, "sid", null);
+    assert.equal(result.ok, true);
+    assert.equal(result.data.access_token, "jwt-1");
+  });
+});

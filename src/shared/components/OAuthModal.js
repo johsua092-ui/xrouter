@@ -204,6 +204,12 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         if (data.error === "slow_down") {
           interval = Math.min(interval + 5, 30);
         }
+
+        // Server-requested back-off (freepi sends retry_after instead of
+        // slow_down). Ignoring it is what earns a hard upstream rate limit.
+        if (Number.isFinite(data.retryAfter) && data.retryAfter > interval) {
+          interval = Math.min(data.retryAfter, 30);
+        }
       } catch (err) {
         setError(err.message);
         setStep("error");

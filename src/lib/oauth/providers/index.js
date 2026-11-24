@@ -228,7 +228,10 @@ export async function pollForToken(providerName, deviceCode, codeVerifier, extra
           success: false,
           error: result.data.error,
           errorDescription: result.data.error_description || result.data.message,
-          pending: result.data.error === 'authorization_pending'
+          pending: result.data.error === 'authorization_pending',
+          // Some upstreams (freepi) answer with a server-side back-off instead
+          // of slow_down; the poll loop must honour it or it earns a hard limit.
+          ...(result.data.retry_after ? { retryAfter: result.data.retry_after } : {}),
         };
       } else {
         // Actual error
@@ -241,7 +244,12 @@ export async function pollForToken(providerName, deviceCode, codeVerifier, extra
     }
   }
 
-  return { success: false, error: result.data.error, errorDescription: result.data.error_description };
+  return {
+    success: false,
+    error: result.data.error || result.data.code,
+    errorDescription: result.data.error_description || result.data.message,
+    ...(result.data.retry_after ? { retryAfter: result.data.retry_after } : {}),
+  };
 }
 
 // Run-once guard across the process lifetime
