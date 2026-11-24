@@ -11,10 +11,18 @@
 // 2. Only rewrites metadata if metadata is already present in the request payload. Never injects
 //    a new "metadata" property into payload objects that do not define it.
 
-const ANTIGRAVITY_IDE_VERSION = "2.32.1";
+const ANTIGRAVITY_IDE_VERSION = "2.33.0";
 // Language server build shipped inside that hub; useful as a secondary marker.
 const ANTIGRAVITY_LANGUAGE_SERVER_VERSION = "44.9.1";
 const ANTIGRAVITY_IDE_VERSION_OVERRIDE_ENABLED = true;
+
+const ANTIGRAVITY_UA_HUB_PREFIX = "antigravity/hub/";
+const ANTIGRAVITY_UA_BARE_PREFIX = "antigravity/";
+const ANTIGRAVITY_UA_PLATFORM_SUFFIX = " darwin/arm64";
+
+function buildAntigravityUserAgent(version) {
+  return `${ANTIGRAVITY_UA_HUB_PREFIX}${version || ANTIGRAVITY_IDE_VERSION}${ANTIGRAVITY_UA_PLATFORM_SUFFIX}`;
+}
 
 // Canonical identity the shipped client presents.
 const ANTIGRAVITY_IDE_NAME = "antigravity";
@@ -119,6 +127,7 @@ function applyAntigravityIdeVersionOverride(bodyBuffer, headers, requestUrl) {
 
 module.exports = {
   ANTIGRAVITY_IDE_VERSION,
+  buildAntigravityUserAgent,
   ANTIGRAVITY_LANGUAGE_SERVER_VERSION,
   ANTIGRAVITY_IDE_NAME,
   ANTIGRAVITY_IDE_TYPE,

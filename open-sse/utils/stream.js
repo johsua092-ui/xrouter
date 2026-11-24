@@ -194,6 +194,7 @@ export function createSSEStream(options = {}) {
           let injectedUsage = false;
           let responsesTerminal = false;
           const payload = framePayload(trimmed);
+          if (payload === SSE_DONE_DATA) streamDoneSent = true;
 
           if (payload !== null && payload !== SSE_DONE_DATA) {
             try {

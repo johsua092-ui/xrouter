@@ -23,8 +23,8 @@ try {
 }
 
 const DB_PATH = process.env.DATABASE_PATH || "/root/.xrouter/db/data.sqlite";
-const AG_BASE = "https://daily-cloudcode-pa.googleapis.com/v1internal";
-const UA = "Antigravity/2.11.0 darwin/24.0.0";
+const AG_BASE = "https://cloudcode-pa.googleapis.com/v1internal";
+const UA = "antigravity/hub/2.32.1 linux/x64";
 
 // Google One trial / promo accounts report paidTier g1-pro-tier while staying on
 // Antigravity's free-tier. Only a real Antigravity standard-tier unlocks 5.5.

@@ -13,6 +13,7 @@ import {
 } from "open-sse/services/nous.js";
 import { refreshNousToken } from "open-sse/services/tokenRefresh.js";
 import { CODEX_CLI_VERSION } from "open-sse/config/appConstants.js";
+import { buildKiroIdentityHeaders } from "open-sse/shared/kiroIdentity.js";
 import {
   refreshProviderCredentials,
   shouldRefreshCredentials,
@@ -529,7 +530,7 @@ async function refreshOAuthToken(connection) {
       }
       const response = await fetch(KIRO_CONFIG.socialRefreshUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "User-Agent": "kiro-cli/1.0.0" },
+        headers: { "Content-Type": "application/json", ...buildKiroIdentityHeaders({ refreshToken }) },
         body: JSON.stringify({ refreshToken }),
       });
       if (!response.ok) return null;

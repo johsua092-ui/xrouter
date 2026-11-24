@@ -15,6 +15,7 @@ import { resolveZedModels } from "open-sse/shared/zedAuth.js";
 import { resolveClineModels, resolveClinepassModels } from "open-sse/services/clinepassModels.js";
 import { NOUS_MODELS_URL, normalizeNousModels } from "open-sse/services/nous.js";
 import codexProvider from "open-sse/providers/registry/codex.js";
+import { ANTIGRAVITY_IDE_USER_AGENT, ANTIGRAVITY_IDE_VERSION } from "open-sse/providers/shared.js";
 
 const GEMINI_CLI_MODELS_URL = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels";
 
@@ -228,9 +229,9 @@ const PROVIDER_MODELS_CONFIG = {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "User-Agent": "antigravity/hub/2.24.0 darwin/arm64",
+      "User-Agent": ANTIGRAVITY_IDE_USER_AGENT,
       "X-Client-Name": "antigravity",
-      "X-Client-Version": "2.24.0",
+      "X-Client-Version": ANTIGRAVITY_IDE_VERSION,
     },
     authHeader: "Authorization",
     authPrefix: "Bearer ",

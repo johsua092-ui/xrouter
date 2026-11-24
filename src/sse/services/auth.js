@@ -112,7 +112,6 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
               connectionNoProxy: "",
               connectionProxyPoolId: null,
               vercelRelayUrl: "",
-              useServiceDaemon: override.useServiceDaemon !== false,
             },
             };
             }
@@ -130,7 +129,6 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
             connectionNoProxy: "",
             connectionProxyPoolId: null,
             vercelRelayUrl: "",
-            useServiceDaemon: override.useServiceDaemon !== false,
             },
             };
             }
@@ -157,7 +155,6 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
             connectionNoProxy: resolvedProxy.connectionNoProxy,
             connectionProxyPoolId: resolvedProxy.proxyPoolId || pickedId || null,
             vercelRelayUrl: resolvedProxy.vercelRelayUrl || "",
-            useServiceDaemon: override.useServiceDaemon !== false,
             },
             };
     }

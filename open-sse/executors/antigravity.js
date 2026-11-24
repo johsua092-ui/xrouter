@@ -305,10 +305,13 @@ export class AntigravityExecutor extends BaseExecutor {
       }
     }
 
-    // Request-scoped rejection (bare 429, no quota detail): report it as a client-visible 400 so no
-    // account cooldown is armed and combos advance to their next model instead of hammering a
-    // healthy account with the same refused prompt.
-    if (isAntigravityPromptRejection(response.status, bodyText)) {
+    // Request-scoped rejection (bare 429, no quota detail): report it as a client-visible 400 only
+    // if the request actually carried a system prompt that could be fingerprinted/refused.
+    // Requests without a system prompt (such as model test pings) represent real upstream rate limiting.
+    const hasSystemInstruction = this._hasSystemInstruction !== undefined
+      ? this._hasSystemInstruction
+      : Boolean(this._lastRawSystemPrompt);
+    if (isAntigravityPromptRejection(response.status, bodyText, hasSystemInstruction)) {
       return { status: HTTP_STATUS.BAD_REQUEST, message: ANTIGRAVITY_PROMPT_REJECTED_MESSAGE };
     }
 
@@ -465,6 +468,9 @@ export class AntigravityExecutor extends BaseExecutor {
         // No tools, no systemInstruction, no safetySettings for image gen
       };
 
+      this._lastRawSystemPrompt = undefined;
+      this._hasSystemInstruction = false;
+
       return {
         project: projectId,
         model: cleanModel,
@@ -554,6 +560,7 @@ export class AntigravityExecutor extends BaseExecutor {
     // Cache pre-cloaked system prompt for bare-429 refused-prompt diagnostics,
     // then apply full cloak.mjs parity (`outgoing()`) without mutating input.
     this._lastRawSystemPrompt = readSystemPromptText(requestWithoutTools);
+    this._hasSystemInstruction = Boolean(this._lastRawSystemPrompt);
     if (requestWithoutTools.systemInstruction !== undefined) {
       const normalizedSystem = normalizeAntigravitySystemInstruction(requestWithoutTools.systemInstruction);
       if (normalizedSystem === undefined) {
@@ -840,7 +847,10 @@ export class AntigravityExecutor extends BaseExecutor {
     if (retryMs) return retryMs <= MAX_RETRY_AFTER_MS ? retryMs : false;
 
     // The same body is refused the same way every time — retries only add backoff delay.
-    if (isAntigravityPromptRejection(response.status, bodyText)) return false;
+    const hasSystemInstruction = this._hasSystemInstruction !== undefined
+      ? this._hasSystemInstruction
+      : Boolean(this._lastRawSystemPrompt);
+    if (isAntigravityPromptRejection(response.status, bodyText, hasSystemInstruction)) return false;
 
     if (!this.isTransientAntigravityError(response.status, errorMessage)) return false;
 

@@ -1,9 +1,3 @@
-import {
-  isOpencodeServiceAlive,
-  getDaemonForProxy,
-  executeServiceStream,
-  resolveClientWorkingDirectory,
-} from "../services/opencodeServiceBridge.js";
 import crypto from "crypto";
 import { BaseExecutor } from "./base.js";
 import { FORMATS } from "../translator/formats.js";
@@ -529,86 +523,6 @@ function dropAdaptiveReasoningEffort(body) {
   }
 }
 
-function textFromServiceContent(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return content == null ? "" : String(content);
-  return content.map((part) => {
-    if (typeof part === "string") return part;
-    if (typeof part?.text === "string") return part.text;
-    if (typeof part?.value === "string") return part.value;
-    return "";
-  }).filter(Boolean).join("\n");
-}
-
-function responsesInputToServiceMessages(input, instructions) {
-  const messages = [];
-  const systemText = textFromServiceContent(instructions);
-  if (systemText) messages.push({ role: "system", content: systemText });
-  if (!Array.isArray(input)) return messages;
-
-  for (const item of input) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
-    if (item.type === "message") {
-      messages.push({
-        role: item.role || "user",
-        content: textFromServiceContent(item.content),
-      });
-    } else if (item.type === "function_call") {
-      messages.push({
-        role: "assistant",
-        content: null,
-        tool_calls: [{
-          id: item.call_id || item.id,
-          type: "function",
-          function: {
-            name: item.name,
-            arguments: typeof item.arguments === "string" ? item.arguments : JSON.stringify(item.arguments || {}),
-          },
-        }],
-      });
-    } else if (item.type === "function_call_output") {
-      messages.push({
-        role: "tool",
-        tool_call_id: item.call_id || item.id,
-        content: serializeServiceOutput(item.output),
-      });
-    }
-  }
-  return messages;
-}
-
-function serializeServiceOutput(output) {
-  if (typeof output === "string") return output;
-  if (output == null) return "";
-  try { return JSON.stringify(output); } catch { return String(output); }
-}
-
-function prepareServiceMessages(body) {
-  if (Array.isArray(body?.messages) && body.messages.length > 0) {
-    return body.messages;
-  }
-  if (Array.isArray(body?.input)) {
-    return responsesInputToServiceMessages(body.input, body.instructions);
-  }
-  if (typeof body?.prompt === "string" && body.prompt.trim()) {
-    return [{ role: "user", content: body.prompt }];
-  }
-  if (typeof body?.input === "string" && body.input.trim()) {
-    return [{ role: "user", content: body.input }];
-  }
-  return [];
-}
-
-function prepareServiceToolChoice(toolChoice) {
-  if (typeof toolChoice === "string") return toolChoice;
-  if (!toolChoice || typeof toolChoice !== "object" || Array.isArray(toolChoice)) return undefined;
-  if (typeof toolChoice.mode === "string") return toolChoice.mode;
-  if (toolChoice.type === "function" && toolChoice.function?.name) {
-    return { type: "function", function: { name: toolChoice.function.name } };
-  }
-  return undefined;
-}
-
 export class OpenCodeExecutor extends BaseExecutor {
   constructor() {
     super("opencode", PROVIDERS.opencode);
@@ -684,54 +598,6 @@ export class OpenCodeExecutor extends BaseExecutor {
     const proxyNoProxy = proxyOptions?.connectionNoProxy
       || credentials?.providerSpecificData?.connectionNoProxy
       || "";
-
-    const useServiceDaemon = credentials?.providerSpecificData?.useServiceDaemon !== false;
-
-    // Dual-Mode Architecture:
-    // Prefer the local OpenCode daemon when it is actually reachable. A missing
-    // or crashed daemon used to 502 the whole free lane; fall through to the
-    // TLS HTTP path instead so the request still reaches opencode.ai.
-    if (!isTestEnv && !hasExplicitApiKey && useServiceDaemon) {
-      const daemon = await getDaemonForProxy(proxyUrl, { noProxy: proxyNoProxy, apiKey });
-      const isAlive = await isOpencodeServiceAlive(daemon);
-
-      if (isAlive) {
-        try {
-          const directory = resolveClientWorkingDirectory(credentials, body, body?.messages);
-          const timeStr = new Date().toLocaleTimeString("en-GB");
-          console.log(`[${timeStr}] [BRIDGE] OPENCODE | ${model} | daemon=${daemon?.url || "127.0.0.1"}`);
-
-          const messages = prepareServiceMessages(body);
-          const serviceResponse = await executeServiceStream({
-            model,
-            body,
-            messages,
-            tools: body?.tools || [],
-            toolChoice: prepareServiceToolChoice(body?.tool_choice),
-            credentials: this.prepareRequestCredentials({ body, credentials }),
-            proxyUrl,
-            proxyNoProxy,
-            signal,
-          });
-          const session = credentials?.[SESSION_FIELD] || resolveOpencodeSession(body, credentials);
-          return {
-            response: serviceResponse,
-            url: "http://127.0.0.1/api/session/prompt",
-            headers: {
-              "Content-Type": "text/event-stream",
-              "x-opencode-session": session,
-            },
-            transformedBody: body,
-            responseFormat: FORMATS.OPENAI,
-          };
-        } catch (daemonErr) {
-          const timeStr = new Date().toLocaleTimeString("en-GB");
-          console.warn(`[${timeStr}] [BRIDGE] OPENCODE daemon stream failed (${daemonErr?.message || daemonErr}) — falling back to TLS HTTP`);
-        }
-      }
-      const timeStr = new Date().toLocaleTimeString("en-GB");
-      console.log(`[${timeStr}] [BRIDGE] OPENCODE daemon unreachable — falling back to TLS HTTP`);
-    }
 
     const timeStr = new Date().toLocaleTimeString("en-GB");
     console.log(`[${timeStr}] [DIRECT] OPENCODE | ${model}`);
