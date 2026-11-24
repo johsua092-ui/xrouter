@@ -80,6 +80,59 @@ const OAUTH_TEST_CONFIG = {
     noAuth: true,
   },
   kiro: { checkExpiry: true, refreshable: true },
+  "aws-quick": {
+    // Probe Quick's data plane (entitlements qbs-event): validates the id_token,
+    // the tenant and the account in one call without spending agent-hours.
+    // Uses the shared proxy-aware helper (tenantUrl, else wsHost fallback) so a
+    // connection's proxy and relay settings apply here too.
+    // Refresh is handled here (AWS rotates the refresh token every refresh);
+    // testSingleConnection persists newTokens.
+    checkExpiry: false,
+    refreshable: false,
+    customTest: async (connection, effectiveProxy) => {
+      const psd = connection.providerSpecificData || {};
+      // wsHost is a valid base too (the helper derives https://<wsHost>).
+      if (!psd.tenantUrl && !psd.wsHost) {
+        return { valid: false, error: "Missing Quick tenant/account metadata" };
+      }
+      const { probeAwsQuickEntitlementsResponse } = await import("open-sse/services/usage/aws-quick.js");
+      const probe = (token) => probeAwsQuickEntitlementsResponse(token, psd, effectiveProxy, {
+        signal: AbortSignal.timeout(15000),
+      });
+      let res = await probe(connection.accessToken).catch(() => null);
+      let refreshed = false;
+      let newTokens = null;
+      if ((!res || res.status === 401 || res.status === 403) && connection.refreshToken) {
+        try {
+          const { refreshAwsQuickToken } = await import("open-sse/services/tokenRefresh/aws-quick.js");
+          const merged = await refreshAwsQuickToken(connection.refreshToken, psd, console);
+          if (merged?.accessToken) {
+            refreshed = true;
+            newTokens = {
+              accessToken: merged.accessToken,
+              idToken: merged.idToken,
+              refreshToken: merged.refreshToken || connection.refreshToken,
+              expiresIn: merged.expiresIn,
+            };
+            res = await probe(newTokens.accessToken).catch(() => null);
+          }
+        } catch { /* fall through to the original response's classification */ }
+      }
+      if (res && res.ok) return { valid: true, error: null, refreshed, newTokens };
+      if (res && (res.status === 401 || res.status === 403)) {
+        return { valid: false, error: "Token invalid or revoked", refreshed, newTokens };
+      }
+      // Throttling / upstream outage / timeout says nothing about the
+      // credentials: soft success keeps the connection active with a warning.
+      if (res && (res.status === 408 || res.status === 429 || res.status >= 500)) {
+        return { valid: true, warning: `Quick API returned ${res.status} — quota unknown`, refreshed, newTokens };
+      }
+      if (!res) {
+        return { valid: true, warning: "Quick API probe failed or timed out — quota unknown", refreshed, newTokens };
+      }
+      return { valid: false, error: `Quick API returned ${res.status}`, refreshed, newTokens };
+    },
+  },
   qoder: {
     // Test by hitting Qoder's userinfo endpoint with the device token.
     // refreshable: false because the device-flow refresh endpoint returns

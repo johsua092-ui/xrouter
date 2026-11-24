@@ -79,6 +79,26 @@ describe("Antigravity-Shield Safe Architecture & Protections", () => {
 
       assert.equal(out.project, realPid);
     });
+
+    it("omits x-goog-user-project for consumer accounts so Google IAM cannot deny the quota project", () => {
+      const noPid = ag.buildHeaders({ connectionId: "conn-12345", accessToken: "tok" }, true);
+      assert.equal(noPid["x-goog-user-project"], undefined);
+
+      const canonical = ag.buildHeaders({ connectionId: "conn-12345", accessToken: "tok", projectId: "aicode-consumers" }, true);
+      assert.equal(canonical["x-goog-user-project"], undefined);
+
+      const legacyFake = ag.buildHeaders({ connectionId: "conn-12345", accessToken: "tok", projectId: "useful-spark-a1b2c" }, true);
+      assert.equal(legacyFake["x-goog-user-project"], undefined);
+    });
+
+    it("still sends x-goog-user-project when a real provisioned GCP project is present", () => {
+      const realPid = "my-gcp-production-project-123";
+      const headers = ag.buildHeaders({ connectionId: "conn-12345", accessToken: "tok", projectId: realPid }, false);
+
+      assert.equal(headers["x-goog-user-project"], realPid);
+      assert.equal(headers["Accept"], "application/json");
+      assert.equal(headers["Authorization"], "Bearer tok");
+    });
   });
 
   describe("Pillar 4: Safe Error Classification (No 403 retries, TOS detection)", () => {

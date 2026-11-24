@@ -385,8 +385,18 @@ export class AntigravityExecutor extends BaseExecutor {
       (/^(useful|bright|swift|calm|bold)-(fuze|wave|spark|flow|core)-[a-f0-9]+$/i.test(credentials.projectId) ||
        /^cloudaicompanion-proj-[a-f0-9]+$/i.test(credentials.projectId));
     const projectId = (!isLegacyFakePid && credentials?.projectId) || "aicode-consumers";
+    // Only a real, user-owned GCP project may be billed through x-goog-user-project.
+    // "aicode-consumers" is Antigravity's internal consumer identifier (it still goes
+    // in the request body), NOT a Cloud project the caller can spend against — sending
+    // it as the quota project makes Google IAM reject the call with
+    // 403 USER_PROJECT_DENIED ("Caller does not have required permission to use
+    // project aicode-consumers"). Omitting the header lets the request bill against
+    // the project tied to the OAuth token instead.
+    const quotaProjectId = !isLegacyFakePid && typeof credentials?.projectId === "string"
+      ? credentials.projectId.trim()
+      : "";
 
-    return {
+    const headers = {
       "Content-Type": "application/json",
       "Accept": stream ? "text/event-stream" : "application/json",
       "Authorization": `Bearer ${credentials?.accessToken || ""}`,
@@ -398,9 +408,14 @@ export class AntigravityExecutor extends BaseExecutor {
         pluginType: "GEMINI",
         ideVersion: ANTIGRAVITY_IDE_VERSION,
       }),
-      "x-goog-user-project": projectId,
       "x-request-source": "local",
     };
+
+    if (quotaProjectId && quotaProjectId !== "aicode-consumers") {
+      headers["x-goog-user-project"] = quotaProjectId;
+    }
+
+    return headers;
   }
 
   transformRequest(model, body, stream, credentials) {

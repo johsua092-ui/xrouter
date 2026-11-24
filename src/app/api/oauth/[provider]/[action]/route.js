@@ -41,6 +41,14 @@ import {
   registerXiaomiMimoSession,
   getXiaomiMimoSessionStatus,
   clearXiaomiMimoSession,
+  startAwsQuickProxy,
+  stopAwsQuickProxy,
+  registerAwsQuickSession,
+  resolveAwsQuickAuthorizeUrl,
+  getAwsQuickSessionStatus,
+  getAwsQuickSessionResult,
+  clearAwsQuickSession,
+  pasteAwsQuickUrl,
 } from "@/lib/oauth/utils/server";
 import { detectIdeInstalled } from "@/lib/oauth/utils/ideDetect";
 import { ZED_HOSTED_CONFIG } from "@/lib/oauth/constants/oauth";
@@ -97,6 +105,41 @@ export async function GET(request, { params }) {
     const { searchParams } = new URL(request.url);
 
     if (action === "authorize") {
+      // Amazon Quick: two-hop loopback flow — the "authorize URL" is the
+      // quick.aws.com/sn discovery page (nonce + callback port embedded);
+      // the local proxy handles both hops. redirect_uri is the proxy
+      // callback URL returned by start-proxy.
+      if (provider === "aws-quick") {
+        const state = searchParams.get("state") || crypto.randomUUID();
+        const stage = searchParams.get("stage") || "prod";
+        // (Re)start the loopback listener: a retry after the 10-minute idle
+        // timeout, a hop failure, or another tab's stop-proxy closes it, and a
+        // client registered against a dead port can never receive the callback.
+        const proxy = await startAwsQuickProxy();
+        if (!proxy?.success || !proxy.callbackUrl) {
+          return NextResponse.json(
+            { error: `Could not start the loopback callback server: ${proxy?.reason || "unknown"}` },
+            { status: 500 },
+          );
+        }
+        // The live listener's port wins over any redirect_uri the client sends
+        // (its value may come from an earlier attempt on a different port).
+        const redirectUri = proxy.callbackUrl;
+        // Validates + normalizes the loopback origin to http://<host>:<port>
+        // (AWS OIDC public clients reject redirect URIs with a path).
+        if (!registerAwsQuickSession({ state, redirectUri, stage })) {
+          return NextResponse.json(
+            {
+              error:
+                "redirect_uri must be a loopback URL with an explicit port: http://127.0.0.1:<port>, http://localhost:<port> or http://[::1]:<port>",
+            },
+            { status: 400 },
+          );
+        }
+        const authData = await resolveAwsQuickAuthorizeUrl({ state, redirectUri, stage });
+        return NextResponse.json(authData);
+      }
+
       // Xiaomi Desktop: custom ECDH flow — generate keypair, start proxy, return authorize URL
       if (provider === "xiaomi-mimo") {
         const { generateKeyPair, buildAuthorizeUrl, getKeyName } = await import("@/lib/oauth/providers/xiaomi-mimo");
@@ -175,8 +218,12 @@ export async function GET(request, { params }) {
         const result = await startXiaomiMimoProxy();
         return NextResponse.json(result);
       }
+      if (provider === "aws-quick") {
+        const result = await startAwsQuickProxy();
+        return NextResponse.json(result);
+      }
       if (!["codex", "xai"].includes(provider)) {
-        return NextResponse.json({ error: "Proxy only supported for codex/xai/trae/windsurf/zed" }, { status: 400 });
+        return NextResponse.json({ error: "Proxy only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo/aws-quick" }, { status: 400 });
       }
       const appPort = searchParams.get("app_port");
       if (!appPort) {
@@ -209,10 +256,21 @@ export async function GET(request, { params }) {
       else if (provider === "xai") session = getXaiSessionStatus(state);
       else if (provider === "codex") session = getCodexSessionStatus(state);
       else if (provider === "xiaomi-mimo") session = getXiaomiMimoSessionStatus(state);
-      else return NextResponse.json({ error: "Poll only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo" }, { status: 400 });
+      else if (provider === "aws-quick") session = getAwsQuickSessionStatus(state);
+      else return NextResponse.json({ error: "Poll only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo/aws-quick" }, { status: 400 });
       if (!session) return NextResponse.json({ status: "unknown" });
       if (session.status === "done" || session.status === "error") {
         const payload = { ...session };
+        if (provider === "aws-quick") {
+          // Like xiaomi-mimo this does not complete server-side: a done session
+          // must survive until the client POSTs /exchange — that call clears it.
+          // A failed one is cleared here instead.
+          if (session.status === "error") {
+            clearAwsQuickSession(state);
+            stopAwsQuickProxy();
+          }
+          return NextResponse.json(payload);
+        }
         if (provider === "xiaomi-mimo") {
           // Unlike the others this does not auto-exchange server-side, so a
           // finished session must survive until the client POSTs /exchange —
@@ -240,7 +298,8 @@ export async function GET(request, { params }) {
       else if (provider === "xai") stopXaiProxy();
       else if (provider === "codex") stopCodexProxy();
       else if (provider === "xiaomi-mimo") stopXiaomiMimoProxy();
-      else return NextResponse.json({ error: "Proxy only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo" }, { status: 400 });
+      else if (provider === "aws-quick") stopAwsQuickProxy();
+      else return NextResponse.json({ error: "Proxy only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo/aws-quick" }, { status: 400 });
       return NextResponse.json({ success: true });
     }
 
@@ -335,8 +394,39 @@ export async function POST(request, { params }) {
       if (provider === "trae") ok = registerTraeSession({ state });
       else if (provider === "windsurf") ok = registerWindsurfSession({ state });
       else if (provider === "zed") ok = registerZedSession({ state, codeVerifier: body?.codeVerifier, systemId: body?.systemId });
-      else return NextResponse.json({ error: "register-session only supported for trae/windsurf/zed" }, { status: 400 });
+      else if (provider === "aws-quick") ok = !!getAwsQuickSessionStatus(state); // session registered at /authorize
+      else return NextResponse.json({ error: "register-session only supported for trae/windsurf/zed/aws-quick" }, { status: 400 });
       return NextResponse.json({ success: ok });
+    }
+
+    if (action === "paste") {
+      // Amazon Quick paste-back fallback: accepts the browser's final address —
+      // either the /callback?... hop-1 URL (saves discovery, retry required) or
+      // the /?code&state final URL (completes the exchange).
+      if (provider !== "aws-quick") {
+        return NextResponse.json({ error: "Paste-back only supported for aws-quick" }, { status: 400 });
+      }
+      const url = String(body?.url || "").trim();
+      if (!url) {
+        return NextResponse.json({ error: "Missing url" }, { status: 400 });
+      }
+      try {
+        const result = await pasteAwsQuickUrl(url);
+        // Diagnosable without leaking the code/state: host + path + which params.
+        try {
+          const u = new URL(url);
+          console.log(`[aws-quick oauth] paste ok (${result.status}) host=${u.host} path=${u.pathname} params=${[...u.searchParams.keys()].join(",")}`);
+        } catch {}
+        return NextResponse.json(result);
+      } catch (err) {
+        try {
+          const u = new URL(url);
+          console.log(`[aws-quick oauth] paste failed host=${u.host} path=${u.pathname} params=${[...u.searchParams.keys()].join(",")} : ${err.message}`);
+        } catch {
+          console.log(`[aws-quick oauth] paste failed (unparseable url) : ${err.message}`);
+        }
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
     }
 
     if (action === "exchange") {
@@ -400,6 +490,57 @@ export async function POST(request, { params }) {
         } catch (err) {
           clearXiaomiMimoSession(state);
           stopXiaomiMimoProxy();
+          return NextResponse.json({ error: err.message }, { status: 500 });
+        }
+      }
+
+      // Amazon Quick: the proxy (or the paste-back flow) already completed the
+      // two-hop exchange — read the settled session result and create the connection.
+      if (provider === "aws-quick") {
+        if (!state) {
+          return NextResponse.json({ error: "Missing state" }, { status: 400 });
+        }
+        const session = getAwsQuickSessionResult(state);
+        if (!session || session.status !== "done" || !session.result) {
+          return NextResponse.json(
+            { error: session?.error || "OAuth session not completed. Please restart the login flow." },
+            { status: 400 },
+          );
+        }
+        const result = session.result;
+        const { mapTokens } = await import("@/lib/oauth/providers/aws-quick");
+        try {
+          const tokenData = mapTokens(result.tokens, {
+            userInfo: result.userInfo,
+            discovery: result.discovery,
+            stage: result.stage,
+            clientId: result.clientId,
+            clientSecret: result.clientSecret,
+          });
+          const connection = await createProviderConnection({
+            provider: "aws-quick",
+            authType: "oauth",
+            ...tokenData,
+            // Contract with the gateway executor: expiresAt is epoch ms.
+            expiresAt: tokenData.expiresIn
+              ? Date.now() + tokenData.expiresIn * 1000
+              : null,
+            testStatus: "active",
+          });
+          clearAwsQuickSession(state);
+          stopAwsQuickProxy();
+          return NextResponse.json({
+            success: true,
+            connection: {
+              id: connection.id,
+              provider: connection.provider,
+              email: connection.email,
+              displayName: connection.displayName,
+            },
+          });
+        } catch (err) {
+          clearAwsQuickSession(state);
+          stopAwsQuickProxy();
           return NextResponse.json({ error: err.message }, { status: 500 });
         }
       }

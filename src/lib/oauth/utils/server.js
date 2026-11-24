@@ -1,6 +1,16 @@
 import http from "http";
+import crypto from "crypto";
 import { URL } from "url";
 import { CODEX_CONFIG, TRAE_CONFIG, WINDSURF_CONFIG, ZED_HOSTED_CONFIG } from "../constants/oauth.js";
+import {
+  AWS_QUICK_CONFIG,
+  buildSigninUrl as buildAwsQuickSigninUrl,
+  buildAuthorizeUrl as buildAwsQuickAuthorizeUrl,
+  registerAwsQuickClient as registerAwsQuickOidcClient,
+  completeAwsQuickExchange as completeAwsQuickOidcExchange,
+  parsePastedQuery as parseAwsQuickPastedQuery,
+  discoveryOfQuery as awsQuickDiscoveryOfQuery,
+} from "../providers/aws-quick.js";
 
 // Loopback origin guard for local callback proxies.
 // Legit OAuth redirects are top-level navigations (no `Origin` header); a cross-site
@@ -1001,3 +1011,480 @@ export function stopXiaomiMimoProxy() {
   xiaomiMimoSessions.clear();
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Amazon Quick (aws-quick) two-hop loopback proxy. Singleton server, dynamic
+// port (AWS OIDC public clients accept any loopback URI with an empty path).
+//   Hop 1: GET /callback?nonce&issuerUrl&tenantUrl&idcRegion…  → validate
+//          nonce → dynamic OIDC client registration → 302 authorize (PKCE)
+//   Hop 2: GET /?code&state → validate state → PKCE exchange → user-info →
+//          settle the session result (exchange endpoint creates the connection)
+// Server + sessions live on globalThis so Next hot-reload neither duplicates
+// the listener nor drops pending login sessions.
+// ───────────────────────────────────────────────────────────────────────────
+
+const awsQuickRuntime = (globalThis.__awsQuickOAuthRuntime ??= {
+  server: null,
+  timeout: null,
+  port: null,
+  sessions: new Map(), // state → session
+});
+
+function findAwsQuickSessionByNonce(nonce) {
+  if (!nonce) return null;
+  for (const session of awsQuickRuntime.sessions.values()) {
+    if (session.nonce === nonce) return session;
+  }
+  return null;
+}
+
+/**
+ * Drop sessions past their lifetime. Every entry is one login attempt holding
+ * a PKCE verifier + OIDC client secret, so they must not accumulate for the
+ * process lifetime (one per /authorize call).
+ */
+function sweepAwsQuickSessions() {
+  const now = Date.now();
+  for (const [state, session] of awsQuickRuntime.sessions.entries()) {
+    if (session.expiresAt && session.expiresAt <= now) {
+      awsQuickRuntime.sessions.delete(state);
+    }
+  }
+}
+
+// AWS OIDC public clients (the desktop flow) only accept a bare loopback
+// redirect URI — no path, no trailing slash.
+const AWS_QUICK_LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * Normalize a callback URL to the bare `http://<host>:<port>` form.
+ * @returns {{port: number, redirectUri: string}|null} null when the URL is not
+ * an http loopback URL with an explicit port.
+ */
+function normalizeAwsQuickRedirectUri(redirectUri) {
+  let parsed;
+  try {
+    parsed = new URL(String(redirectUri || ""));
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:") return null;
+  if (!AWS_QUICK_LOOPBACK_HOSTS.has(parsed.hostname)) return null;
+  const port = Number(parsed.port);
+  if (!Number.isInteger(port) || port <= 0) return null;
+  return { port, redirectUri: `http://${parsed.hostname}:${port}` };
+}
+
+function settleAwsQuickSession(session, { tokens, userInfo }) {
+  session.status = "done";
+  session.result = {
+    tokens,
+    clientId: session.clientId,
+    clientSecret: session.clientSecret,
+    discovery: { ...(session.discovery || {}) },
+    tenantUrl: session.discovery?.tenant_url || "",
+    userInfo,
+    stage: session.stage,
+  };
+}
+
+/**
+ * Create (or adopt, on a paste-back retry) the login session for one attempt.
+ * The nonce binds hop-1 to this attempt; the PKCE pair is generated here and
+ * never leaves the server.
+ */
+export function registerAwsQuickSession({ state, redirectUri, stage, appVersion }) {
+  sweepAwsQuickSessions();
+  if (!state) return false;
+  // Validate + normalize once: the caller's callback URL may carry a path
+  // (`/callback`), but AWS OIDC only registers the bare loopback origin.
+  const normalized = normalizeAwsQuickRedirectUri(redirectUri);
+  if (!normalized) return false;
+  const { port } = normalized;
+  const bareRedirectUri = normalized.redirectUri;
+  const expiresAt = Date.now() + AWS_QUICK_CONFIG.oauthTimeoutMs;
+  const existing = awsQuickRuntime.sessions.get(state);
+  if (existing) {
+    // Retry attempt: keep nonce/verifier/discovery, refresh the callback port.
+    existing.port = port;
+    existing.redirectUri = bareRedirectUri;
+    existing.expiresAt = expiresAt;
+    return true;
+  }
+  const nonce = crypto.randomBytes(32).toString("base64url");
+  const verifier = crypto.randomBytes(32).toString("base64url");
+  const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
+  awsQuickRuntime.sessions.set(state, {
+    state,
+    nonce,
+    verifier,
+    challenge,
+    port,
+    redirectUri: bareRedirectUri,
+    stage: stage || "prod",
+    appVersion: appVersion || null,
+    discovery: null,
+    discoverySavedAt: null,
+    clientId: null,
+    clientSecret: null,
+    status: "pending",
+    result: null,
+    error: null,
+    createdAt: Date.now(),
+    expiresAt,
+  });
+  return true;
+}
+
+/**
+ * Build the URL the popup/paste flow opens for this attempt. With fresh saved
+ * discovery (paste-back retry) it registers the OIDC client and returns the
+ * authorize URL directly, skipping the discovery hop (magpie parity).
+ */
+export async function resolveAwsQuickAuthorizeUrl({ state, redirectUri, stage, appVersion }) {
+  sweepAwsQuickSessions();
+  const session = awsQuickRuntime.sessions.get(state);
+  if (!session) throw new Error("No active Amazon Quick login session; restart the login flow");
+  // Keep the session's validated loopback origin (registered from redirectUri);
+  // the caller may pass a differing one on retry, so refresh it when valid.
+  const normalized = normalizeAwsQuickRedirectUri(redirectUri);
+  if (normalized) {
+    session.port = normalized.port;
+    session.redirectUri = normalized.redirectUri;
+  }
+  const port = session.port;
+  const stage_ = stage || session.stage || "prod";
+  const discoveryFresh =
+    session.discovery &&
+    session.discoverySavedAt &&
+    Date.now() - session.discoverySavedAt <= (AWS_QUICK_CONFIG.discoveryMaxAgeMs);
+  if (discoveryFresh) {
+    // Register first, consume the saved hop-1 fields only once registration
+    // succeeded — a failed registration must not destroy the retry window.
+    const savedAt = session.discoverySavedAt;
+    let client;
+    try {
+      client = await registerAwsQuickOidcClient({
+        discovery: session.discovery,
+        redirectUri: session.redirectUri,
+        stage: stage_,
+      });
+    } catch (err) {
+      session.discoverySavedAt = savedAt;
+      throw err;
+    }
+    // takeDiscovery semantics: the saved hop-1 fields are consumed by this attempt.
+    session.discoverySavedAt = null;
+    session.clientId = client.clientId;
+    session.clientSecret = client.clientSecret;
+    session.discovery.idc_region = client.idcRegion;
+    const authorizeUrl = buildAwsQuickAuthorizeUrl({
+      clientId: client.clientId,
+      redirectUri: session.redirectUri,
+      state,
+      codeChallenge: session.challenge,
+      idcRegion: client.idcRegion,
+      stage: stage_,
+    });
+    return {
+      state,
+      // authUrl mirrors authorizeUrl: the shared proxy-flow modal opens
+      // authData.authUrl, the aws-quick paste-retry path reads authorizeUrl.
+      authUrl: authorizeUrl,
+      authorizeUrl,
+      redirectUri: session.redirectUri,
+      codeVerifier: null, // PKCE verifier stays server-side (session-scoped)
+      flowType: "authorization_code",
+      discoverySkipped: true,
+    };
+  }
+
+  const authorizeUrl = buildAwsQuickSigninUrl({ port, nonce: session.nonce, appVersion: appVersion || session.appVersion, stage: stage_ });
+  return {
+    state,
+    authUrl: authorizeUrl, // shared proxy-flow modal opens authData.authUrl
+    authorizeUrl,
+    redirectUri: session.redirectUri,
+    codeVerifier: null,
+    flowType: "authorization_code",
+    discoverySkipped: false,
+  };
+}
+
+export function getAwsQuickSessionStatus(state) {
+  sweepAwsQuickSessions();
+  const s = awsQuickRuntime.sessions.get(state);
+  if (!s) return null;
+  // Tokens/clientSecret stay server-side — the /exchange endpoint reads the
+  // session directly; the client only needs status + error.
+  return { status: s.status, error: s.error || null, discoverySaved: !!(s.discovery && s.discoverySavedAt) };
+}
+
+/** Raw session incl. the settled result — server-side use only (/exchange). */
+export function getAwsQuickSessionResult(state) {
+  const s = awsQuickRuntime.sessions.get(state);
+  if (!s) return null;
+  return { status: s.status, error: s.error || null, result: s.result || null };
+}
+
+export function clearAwsQuickSession(state) {
+  awsQuickRuntime.sessions.delete(state);
+}
+
+/**
+ * Paste-back fallback: finish (or pre-stage) a login from the final address of
+ * a browser that could not reach this machine's 127.0.0.1 listener.
+ *   /callback?nonce&issuerUrl&… (hop 1) → rememberDiscovery + ask to retry
+ *   /?code&state                (hop 2) → complete the exchange, settle session
+ * @returns {Promise<{status: "discovery-saved"|"done", state: string}>}
+ */
+export async function pasteAwsQuickUrl(pasted) {
+  const pasteError = () =>
+    Object.assign(
+      new Error("Not a completed-login address. Paste the full URL from the browser address bar after Amazon Quick sign-in finishes."),
+      { kind: "paste" }
+    );
+  // A vanished session is almost always a server restart (or a link from an
+  // earlier attempt) — say so instead of blaming the pasted URL.
+  const sessionGone = () =>
+    Object.assign(
+      new Error("Login session not found — it does not survive a gateway restart and links expire. Start the sign-in again (the pasted address stays valid only for the session that created it)."),
+      { kind: "paste" }
+    );
+  const q = parseAwsQuickPastedQuery(pasted);
+  if (!q) throw pasteError();
+  sweepAwsQuickSessions();
+
+  if (q.has("nonce")) {
+    // Hop 1 reached the browser but not our listener: keep the discovery
+    // fields so the next attempt goes straight to the OIDC authorize URL.
+    const session = findAwsQuickSessionByNonce(q.get("nonce"));
+    if (!session) throw sessionGone();
+    if (q.get("error")) {
+      throw new Error(`Login failed: ${q.get("error")} ${q.get("error_description") || ""}`.trim());
+    }
+    // Build + validate first: a partial write would advertise a saved
+    // discovery the retry path cannot actually use.
+    const discovery = awsQuickDiscoveryOfQuery(q);
+    if (!discovery.issuer_url) throw new Error("discovery callback did not provide issuerUrl");
+    session.discovery = discovery;
+    session.discoverySavedAt = Date.now();
+    return { status: "discovery-saved", state: session.state };
+  }
+
+  if (q.has("code")) {
+    const session = q.get("state") ? awsQuickRuntime.sessions.get(q.get("state")) : null;
+    if (!session) throw sessionGone();
+    try {
+      const { tokens, userInfo } = await completeAwsQuickOidcExchange({ query: q, session });
+      settleAwsQuickSession(session, { tokens, userInfo });
+    } catch (e) {
+      if (e?.kind === "mismatch") throw pasteError();
+      // Never downgrade a session that already settled (a late duplicate paste
+      // must not turn a usable result into an error).
+      if (session.status !== "done") {
+        session.status = "error";
+        session.error = e.message;
+      }
+      throw e;
+    }
+    return { status: "done", state: session.state };
+  }
+
+  if (q.has("error")) {
+    throw new Error(`Login failed: ${q.get("error")} ${q.get("error_description") || ""}`.trim());
+  }
+  throw pasteError();
+}
+
+/**
+ * Start the aws-quick loopback proxy (dynamic port). Both hops are handled
+ * in-server; the session is settled (not persisted) for /exchange to consume.
+ */
+export function startAwsQuickProxy() {
+  return new Promise((resolve) => {
+    if (awsQuickRuntime.server) {
+      // Reuse the live listener, but renew its idle timeout (zed pattern).
+      if (awsQuickRuntime.timeout) clearTimeout(awsQuickRuntime.timeout);
+      awsQuickRuntime.timeout = setTimeout(() => { console.log("[aws-quick oauth] timeout, stopping"); stopAwsQuickProxy(); }, AWS_QUICK_CONFIG.oauthTimeoutMs);
+      resolve({ success: true, port: awsQuickRuntime.port, callbackUrl: `http://127.0.0.1:${awsQuickRuntime.port}` });
+      return;
+    }
+
+    const server = http.createServer(async (req, res) => {
+      const url = new URL(req.url, "http://127.0.0.1");
+      if (url.pathname === "/favicon.ico") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      // Hop 1: discovery callback — validate nonce, register client, 302 authorize.
+      if (url.pathname === "/callback") {
+        if (!isLoopbackOrigin(req.headers.origin)) {
+          res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderCodexResultPage(false, "Cross-origin callback rejected"));
+          return;
+        }
+        const q = url.searchParams;
+        const session = findAwsQuickSessionByNonce(q.get("nonce"));
+        if (!session) {
+          // Stale/foreign link — answer without touching any session and keep
+          // the server alive so the real callback can still land.
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderCodexResultPage(false, "No active Amazon Quick login matches this link. Restart the login flow."));
+          return;
+        }
+        try {
+          if (q.get("error")) {
+            throw new Error(`Login failed: ${q.get("error")} ${q.get("error_description") || ""}`.trim());
+          }
+          // Validate before writing: a partial discovery would strand the
+          // session with fields the retry path cannot use.
+          const discovery = awsQuickDiscoveryOfQuery(q);
+          if (!discovery.issuer_url) throw new Error("discovery callback did not provide issuerUrl");
+          session.discovery = discovery;
+          const client = await registerAwsQuickOidcClient({
+            discovery: session.discovery,
+            redirectUri: session.redirectUri,
+            stage: session.stage,
+          });
+          session.clientId = client.clientId;
+          session.clientSecret = client.clientSecret;
+          session.discovery.idc_region = client.idcRegion;
+          const location = buildAwsQuickAuthorizeUrl({
+            clientId: client.clientId,
+            redirectUri: session.redirectUri,
+            state: session.state,
+            codeChallenge: session.challenge,
+            idcRegion: client.idcRegion,
+            stage: session.stage,
+          });
+          res.writeHead(302, { Location: location, "Cache-Control": "no-store" });
+          res.end();
+          // Non-reversible short tag: the state must never land in logs verbatim.
+          const stateTag = crypto.createHash("sha256").update(String(session.state)).digest("hex").slice(0, 8);
+          console.log(`[aws-quick oauth] hop-1 discovery ok, redirecting to authorize (state ${stateTag}…)`);
+        } catch (err) {
+          session.status = "error";
+          session.error = err.message;
+          console.log("[aws-quick oauth] hop-1 failed:", err.message);
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderCodexResultPage(false, err.message));
+          // Keep this attempt's error readable by the poller after the listener goes.
+          stopAwsQuickProxy(session.state);
+        }
+        return;
+      }
+
+      // Hop 2: OIDC redirect lands on "/" (public-client redirect URIs have an
+      // empty path). A bare "/" visit shows the waiting page.
+      if (url.pathname === "/" || url.pathname === "/index.html") {
+        const q = url.searchParams;
+        const isCallback = q.has("code") || q.has("state") || q.has("error");
+        if (!isCallback) {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderCodexResultPage(false, "Waiting for Amazon Quick sign-in — complete the login in the quick.aws.com tab."));
+          return;
+        }
+        if (!isLoopbackOrigin(req.headers.origin)) {
+          res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderCodexResultPage(false, "Cross-origin callback rejected"));
+          return;
+        }
+        const session = q.get("state") ? awsQuickRuntime.sessions.get(q.get("state")) : null;
+        if (!session) {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderCodexResultPage(false, "No active Amazon Quick login session"));
+          return;
+        }
+        try {
+          const { tokens, userInfo } = await completeAwsQuickOidcExchange({ query: q, session });
+          settleAwsQuickSession(session, { tokens, userInfo });
+          const who = userInfo.email || userInfo.display_name || userInfo.user_name || "";
+          console.log(`[aws-quick oauth] hop-2 exchange ok${who ? ` (${who})` : ""}`);
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderCodexResultPage(true, who ? `Signed in as ${who}. You can close this window.` : "You can close this window."));
+          stopAwsQuickProxy();
+        } catch (err) {
+          if (err?.kind === "mismatch") {
+            // Not this login's callback (stale link) — keep waiting (magpie parity).
+            res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+            res.end(renderCodexResultPage(false, err.message));
+            return;
+          }
+          // A settled session is never downgraded: a duplicate/late callback
+          // must not erase a result the /exchange endpoint can still consume.
+          if (session.status !== "done") {
+            session.status = "error";
+            session.error = err.message;
+          }
+          console.log("[aws-quick oauth] hop-2 failed:", err.message);
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderCodexResultPage(false, err.message));
+          // Keep this attempt's error readable by the poller after the listener goes.
+          stopAwsQuickProxy(session.state);
+        }
+        return;
+      }
+
+      res.writeHead(404);
+      res.end("Not found");
+    });
+
+    server.on("error", (err) => {
+      console.log("[aws-quick oauth] listen error:", err.message);
+      resolve({ success: false, reason: err.message });
+    });
+
+    server.listen(0, "127.0.0.1", () => {
+      awsQuickRuntime.server = server;
+      awsQuickRuntime.port = server.address().port;
+      awsQuickRuntime.timeout = setTimeout(() => {
+        console.log("[aws-quick oauth] timeout, stopping");
+        stopAwsQuickProxy();
+      }, AWS_QUICK_CONFIG.oauthTimeoutMs);
+      console.log(`[aws-quick oauth] listening on port ${awsQuickRuntime.port}`);
+      resolve({
+        success: true,
+        port: awsQuickRuntime.port,
+        callbackUrl: `http://127.0.0.1:${awsQuickRuntime.port}`,
+      });
+    });
+  });
+}
+
+/**
+ * Stop the loopback listener and drop unfinished attempts.
+ * @param {string|null} keepState state whose failure must stay readable by the
+ *   modal poller — the listener is gone, but /poll-status still needs the error.
+ */
+export function stopAwsQuickProxy(keepState = null) {
+  // The listener is a single gateway-wide singleton: another tab (or another
+  // user) may still be mid-login on it. Closing it for one caller would strand
+  // every other attempt, so only stop when nothing else is still pending.
+  const othersPending = [...awsQuickRuntime.sessions.entries()].some(
+    ([state, session]) => state !== keepState && session.status === "pending",
+  );
+  if (othersPending && awsQuickRuntime.server) {
+    if (keepState) awsQuickRuntime.sessions.delete(keepState);
+    if (awsQuickRuntime.timeout) clearTimeout(awsQuickRuntime.timeout);
+    awsQuickRuntime.timeout = setTimeout(() => stopAwsQuickProxy(), AWS_QUICK_CONFIG.oauthTimeoutMs);
+    console.log(`[aws-quick oauth] keeping listener (port ${awsQuickRuntime.port}) — another login is pending`);
+    return;
+  }
+  console.log(`[aws-quick oauth] stopping (port ${awsQuickRuntime.port || "-"})`);
+  if (awsQuickRuntime.timeout) { clearTimeout(awsQuickRuntime.timeout); awsQuickRuntime.timeout = null; }
+  if (awsQuickRuntime.server) { awsQuickRuntime.server.close(); awsQuickRuntime.server = null; }
+  awsQuickRuntime.port = null;
+  // No callback can arrive once the listener is down: drop every unfinished
+  // attempt (each holds a PKCE verifier + client secret) but keep settled
+  // sessions (and the one failure the poller must still read) for a late
+  // /exchange or /poll-status — all of them re-stamped with a fresh deadline.
+  for (const [state, session] of awsQuickRuntime.sessions.entries()) {
+    if (state === keepState || session.status === "done") {
+      session.expiresAt = Date.now() + AWS_QUICK_CONFIG.oauthTimeoutMs;
+    } else {
+      awsQuickRuntime.sessions.delete(state);
+    }
+  }
+}
