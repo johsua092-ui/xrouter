@@ -13,9 +13,20 @@ export default {
     },
   },
   category: "apikey",
+  thinkingConfig: {
+    // Mistral only speaks top-level reasoning_effort, and the accepted set is
+    // model-gated (deepseek-v4-1-flash-1017: none|low|high|xhigh,
+    // mistral-large: low|medium|high). "auto" = send nothing, use the model default.
+    options: ["auto", "none", "low", "medium", "high", "xhigh"],
+    defaultMode: "auto",
+  },
   transport: {
     baseUrl: "https://api.mistral.ai/v1/chat/completions",
     validateUrl: "https://api.mistral.ai/v1/models",
+    // Mistral's chat schema is strict (extra="forbid"): a Claude/DeepSeek-shaped
+    // `thinking` object is rejected with 422 extra_forbidden, so thinking must go
+    // through the dedicated "mistral" format (reasoning_effort only, clamped).
+    thinkingFormat: "mistral",
     quirks: {
       dropClientMetadata: true,
     },

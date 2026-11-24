@@ -402,6 +402,21 @@ function applyFormat(fmt, body, cfg, caps, supportedLevels, display, model = "")
       body.reasoning_effort = want === "max" && supportedLevels && !supportedLevels.includes("max") ? "high" : want;
       break;
     }
+    case "mistral": {
+      // Mistral's Chat schema is strict: `thinking` is not a field (422 extra_forbidden,
+      // even when the client only sent reasoning_effort — the DeepSeek-shaped block used
+      // to be injected for deepseek-* ids in Mistral's own catalog). reasoning_effort is
+      // understood but model-gated, so clamp to the level set the model advertises
+      // (deepseek-v4-1-flash-1017: none|low|high|xhigh, mistral-large: low|medium|high)
+      // and send nothing at all when it advertises none — the model default then applies.
+      if (!supportedLevels || !supportedLevels.length) break;
+      if (none && !supportedLevels.includes("none")) break;  // cannot disable
+      const requested = none ? "none" : eff.mode === "auto" ? "high" : toLevel(eff);
+      const level = mapEffortToSupportedLevel(requested, supportedLevels);
+      if (!level || (level === "none" && !supportedLevels.includes("none"))) break;
+      body.reasoning_effort = level;
+      break;
+    }
     case "kimi": {
       if (none && canDisable) { body.thinking = { type: "disabled" }; break; }
       const effort = toKimiReasoningEffort(eff);

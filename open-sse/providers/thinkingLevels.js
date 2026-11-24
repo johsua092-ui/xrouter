@@ -25,6 +25,7 @@ const FORMAT_LEVELS = {
   "gemini-level": L.gemini,
   "gemini-budget": L.base,
   zai: L.onOff,
+  mistral: ["none", "low", "medium", "high", "xhigh"],
   qwen: L.base,
   kimi: L.levelMax,
   deepseek: L.hiMax,
@@ -69,6 +70,11 @@ const PATTERN_THINKING = [
   // would never fire for dotted ids like deepseek-v4.1-flash.
   { provider: "codebuddy-cn", pattern: "deepseek-v4-pro",     levels: ["low", "high", "xhigh"] },
   { provider: "codebuddy-cn", pattern: "deepseek-v4.1-flash", levels: ["low", "high", "max"] },
+  // Mistral (probed live 2026-11-24): reasoning_effort is accepted but model-gated —
+  // deepseek-v4-1-flash-1017 takes none|low|high|xhigh, mistral-large low|medium|high.
+  // These must stay above the unqualified "*deepseek-v4.*" glob (first match wins).
+  { provider: "mistral", pattern: "*deepseek*", levels: ["none", "low", "high", "xhigh"] },
+  { provider: "mistral", pattern: "*large*",    levels: ["low", "medium", "high"] },
   { pattern: "*deepseek-v4.*", levels: ["none", "low", "medium", "high", "xhigh", "max"] },
   // codebuddy-cn per-model effort sets — the server's product-config payload
   // publishes `reasoning.supportedEfforts` per model. NOTE: the chat endpoint

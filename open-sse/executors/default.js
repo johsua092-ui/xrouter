@@ -102,10 +102,18 @@ export class DefaultExecutor extends BaseExecutor {
       if (this.config.quirks?.dropClientMetadata) {
         delete transformed.client_metadata;
       }
-      stripUnsupportedParams(this.provider, model, transformed);
     }
 
-    return injectReasoningContent({ provider: this.provider, model, body: transformed });
+    // Order matters: inject first (the DeepSeek/Kimi model rules re-add reasoning_content
+    // on every assistant turn), then strip what this provider rejects. Stripping first and
+    // injecting after let the model rule put the field straight back into a provider that
+    // its own strip rule had just removed it from — Mistral answers 422 extra_forbidden
+    // (body.messages[i].assistant.reasoning_content), Groq 400, on every multi-turn call.
+    const injected = injectReasoningContent({ provider: this.provider, model, body: transformed });
+    if (injected && typeof injected === "object") {
+      stripUnsupportedParams(this.provider, model, injected);
+    }
+    return injected;
   }
 
   // Fallback json_schema → json_object for openai-compatible providers without native Structured Output.
