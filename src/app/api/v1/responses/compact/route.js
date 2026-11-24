@@ -41,7 +41,8 @@ export async function POST(request) {
   const newRequest = new Request(request.url, {
     method: "POST",
     headers,
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: request.signal
   });
   return await handleChat(newRequest);
 }
