@@ -318,3 +318,104 @@ test("FreePI identity resolution (duplicate-free re-login)", async (t) => {
     assert.equal(mapped.displayName, "FreePI User");
   });
 });
+
+// The per-token maps are process-lifetime state: FreePI has no refresh, so every
+// re-login mints a new token and adds entries nobody removes. Measured before
+// the sweep: 1.12 KB per token across these maps (≈110 MB per 100k logins), and
+// a queue whose stream never closed kept an account "busy" forever.
+test("FreePI per-token state hygiene", async (t) => {
+  const {
+    getSessionId,
+    acquireFreePiQueueLock,
+    sweepFreePiState,
+    getFreePiStateStats,
+    wrapStreamWithQueueLock,
+  } = await import("../../open-sse/executors/freepi.js");
+
+  await t.test("session id is stable per token and distinct across tokens", () => {
+    const a1 = getSessionId("hygiene-a");
+    const a2 = getSessionId("hygiene-a");
+    const b = getSessionId("hygiene-b");
+    assert.equal(a1, a2);
+    assert.notEqual(a1, b);
+  });
+
+  await t.test("sessions older than the TTL are dropped", () => {
+    getSessionId("ttl-a");
+    getSessionId("ttl-b");
+    assert.ok(getFreePiStateStats().sessions >= 2);
+    sweepFreePiState(Date.now() + 7 * 60 * 60 * 1000);
+    assert.equal(getFreePiStateStats().sessions, 0, "6h-idle sessions must not survive the sweep");
+  });
+
+  await t.test("a held queue survives the sweep, an idle one does not", async () => {
+    const token = `hygiene-queue-${Date.now()}`;
+    const before = getFreePiStateStats().queues;
+
+    const release = await acquireFreePiQueueLock(token);
+    assert.equal(getFreePiStateStats().queues, before + 1);
+
+    sweepFreePiState(Date.now() + 7 * 60 * 60 * 1000);
+    assert.equal(getFreePiStateStats().queues, before + 1, "a running slot must never be swept");
+
+    await release();
+    sweepFreePiState(Date.now() + 7 * 60 * 60 * 1000);
+    assert.equal(getFreePiStateStats().queues, before, "an idle slot is not worth keeping");
+  });
+
+  await t.test("the per-token maps stay bounded", () => {
+    for (let i = 0; i < 700; i++) getSessionId(`bounded-${i}`);
+    const stats = getFreePiStateStats();
+    assert.ok(stats.sessions <= stats.limit, `sessions=${stats.sessions} limit=${stats.limit}`);
+  });
+
+  await t.test("the lock is released when the body cannot be wrapped", () => {
+    let releases = 0;
+    const bomb = {
+      body: { pipeThrough() { throw new Error("boom"); } },
+      status: 200,
+      statusText: "OK",
+      headers: new Headers(),
+    };
+    assert.throws(() => wrapStreamWithQueueLock(bomb, () => { releases++; }), /boom/);
+    assert.equal(releases, 1, "a failed wrap must not strand the account as BUSY");
+  });
+
+  await t.test("release fires once on EOF", async () => {
+    let releases = 0;
+    const source = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("hello"));
+          controller.close();
+        },
+      }),
+      { status: 200 },
+    );
+    const wrapped = wrapStreamWithQueueLock(source, () => { releases++; });
+    await new Response(wrapped.body).text();
+    assert.equal(releases, 1);
+  });
+
+  await t.test("release fires once on cancel", async () => {
+    let releases = 0;
+    const source = new Response(
+      new ReadableStream({
+        pull(controller) { controller.enqueue(new TextEncoder().encode("chunk")); },
+      }),
+      { status: 200 },
+    );
+    const wrapped = wrapStreamWithQueueLock(source, () => { releases++; });
+    const reader = wrapped.body.getReader();
+    await reader.read();
+    await reader.cancel();
+    assert.equal(releases, 1);
+  });
+
+  await t.test("a body-less response releases immediately", () => {
+    let releases = 0;
+    const res = new Response(null, { status: 204 });
+    wrapStreamWithQueueLock(res, () => { releases++; });
+    assert.equal(releases, 1);
+  });
+});
