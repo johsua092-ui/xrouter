@@ -305,6 +305,25 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
   const [providerStrategy, setProviderStrategy] = useState(null);
   const [providerStickyLimit, setProviderStickyLimit] = useState("1");
   const [confirmState, setConfirmState] = useState(null);
+  const [poolStats, setPoolStats] = useState(null);
+
+  // FreePI pool panel: queue pressure per account lives in the server process, so
+  // the only way to see it is to poll the snapshot endpoint.
+  useEffect(() => {
+    if (providerId !== "freepi") return undefined;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/providers/freepi/stats", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setPoolStats(data);
+      } catch { /* panel is diagnostic, never break the page */ }
+    };
+    load();
+    const timer = setInterval(load, 5000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [providerId]);
 
   const fetch_ = useCallback(async () => {
     try {
@@ -400,6 +419,60 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
 
   return (
     <>
+      {providerId === "freepi" && poolStats && (
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h2 className="text-lg font-semibold">FreePI pool</h2>
+            <span className="text-xs text-text-muted">
+              {poolStats.totals.idle} idle · {poolStats.totals.busy} busy · {poolStats.totals.inFlight} in flight · {poolStats.totals.waiting} waiting
+            </span>
+          </div>
+
+          {poolStats.alerts?.length > 0 && (
+            <div className="mb-3 rounded-md border border-danger-border bg-danger-bg px-3 py-2 text-xs text-danger-fg">
+              {poolStats.alerts.join(" · ")}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            {poolStats.accounts.map((account) => (
+              <div key={account.id} className="flex items-center justify-between gap-2 text-xs">
+                <span className="font-mono truncate">{account.name}</span>
+                <span className="flex items-center gap-2 shrink-0">
+                  {account.waiting > 0 && (
+                    <span className="text-text-muted">{account.waiting} waiting</span>
+                  )}
+                  <Badge
+                    size="sm"
+                    dot
+                    variant={
+                      account.status === "idle" ? "success"
+                        : account.status === "busy" ? "warning"
+                          : "error"
+                    }
+                  >
+                    {account.status === "needs_reauth" ? "needs re-auth"
+                      : account.status === "rate_limited" ? "rate limited"
+                        : account.status}
+                  </Badge>
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 text-xs text-text-muted">
+            <span>requests {poolStats.metrics.requests}</span>
+            <span>overflow {poolStats.metrics.queueOverflow}</span>
+            <span>timeout {poolStats.metrics.queueTimeout}</span>
+            <span>429 upstream {poolStats.metrics.upstream429}</span>
+            <span>401 {poolStats.metrics.authFailures}</span>
+            <span>ads {poolStats.metrics.adsCycles}/{poolStats.metrics.adsFailures}</span>
+            <span>handshakes {poolStats.metrics.handshakes}</span>
+            <span>queues {poolStats.metrics.queues}</span>
+          </div>
+        </Card>
+      )}
+
       <Card>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <h2 className="text-lg font-semibold">Connections</h2>

@@ -423,7 +423,7 @@ test("FreePI per-token state hygiene", async (t) => {
 });
 
 test("FreePI queue admission control", async (t) => {
-  const { acquireFreePiQueueLock, getFreePiQueuePressure, reserveFreePiSlot } = await import(
+  const { acquireFreePiQueueLock, getFreePiQueuePressure, reserveFreePiSlot, getFreePiMetrics } = await import(
     "../../open-sse/executors/freepi.js"
   );
   const { checkFallbackError } = await import("../../open-sse/services/accountFallback.js");
@@ -503,6 +503,8 @@ test("FreePI queue admission control", async (t) => {
     controllers.forEach((c) => c.abort());
     await Promise.all(waiting);
     await release();
+
+    assert.ok(getFreePiMetrics().queueOverflow >= 1, "the pool panel must be able to count refusals");
   });
 
   await t.test("a queued request times out instead of waiting forever", async (t) => {
@@ -543,6 +545,22 @@ test("FreePI queue admission control", async (t) => {
     );
     assert.equal(timeout.shouldLock, false);
     assert.equal(timeout.cooldownMs, 0);
+  });
+
+  await t.test("the pool snapshot is exposed and countable", async () => {
+    const metrics = getFreePiMetrics();
+    for (const key of ["requests", "queueOverflow", "queueTimeout", "upstream429", "authFailures", "adsCycles", "handshakes", "queues", "reservations"]) {
+      assert.equal(typeof metrics[key], "number", `${key} must be a gauge or counter`);
+    }
+
+    const routeSrc = fs.readFileSync(
+      path.join(rootDir, "src/app/api/providers/freepi/stats/route.js"), "utf8");
+    assert.ok(routeSrc.includes("validateApiKey"), "monitors must be able to scrape with an API key");
+    assert.ok(routeSrc.includes("collectFreePiStats"), "route must serve the shared snapshot");
+
+    const collectorSrc = fs.readFileSync(path.join(rootDir, "src/lib/freepiStats.js"), "utf8");
+    assert.ok(collectorSrc.includes("getFreePiQueuePressure"), "per-account queue depth comes from the executor");
+    assert.ok(collectorSrc.includes("needs_reauth"), "dead tokens must be visible as their own state");
   });
 
   await t.test("routing exposes a slot-aware strategy for FreePI", () => {

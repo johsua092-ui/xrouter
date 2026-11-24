@@ -81,6 +81,23 @@ export function sweepFreePiState(now = Date.now()) {
 }
 
 /** Sizes of the in-process state (tests + debugging hooks). */
+// Counters for the pool panel: they are process-lifetime and monotonic, which is
+// what a scraper wants (rate() over time), while the map sizes above are gauges.
+const counters = {
+  requests: 0,
+  queueOverflow: 0,
+  queueTimeout: 0,
+  upstream429: 0,
+  adsCycles: 0,
+  adsFailures: 0,
+  handshakes: 0,
+  authFailures: 0,
+};
+
+export function getFreePiMetrics() {
+  return { ...counters, ...getFreePiStateStats(), reservations: selectionReservations.size };
+}
+
 export function getFreePiStateStats() {
   return {
     sessions: sessionMap.size,
@@ -202,6 +219,7 @@ export async function launchSessionHandshake(token, sessionId = null, proxyOptio
 
     stamp(launchHandshakeMap, key, Date.now());
     stamp(lastImpressionMap, key, Date.now());
+    counters.handshakes += 1;
     return true;
   } catch {
     return false;
@@ -324,6 +342,7 @@ export async function acquireFreePiQueueLock(token, signal) {
   // the classifier can tell "our own admission control said no" from "the
   // upstream account is unhealthy" — the first must never cool the account down.
   if (queue.waiting.length >= MAX_QUEUE_SIZE) {
+    counters.queueOverflow += 1;
     const err = new Error("FreePI queue full: too many concurrent requests queued for this account (QUEUE_OVERFLOW)");
     err.code = "QUEUE_OVERFLOW";
     err.retryAfterMs = 2000;
@@ -372,6 +391,7 @@ export async function acquireFreePiQueueLock(token, signal) {
       if (signal && typeof signal.removeEventListener === "function") {
         signal.removeEventListener("abort", onAbort);
       }
+      counters.queueTimeout += 1;
       const err = new Error(`FreePI queue wait exceeded ${QUEUE_MAX_WAIT_MS}ms (QUEUE_TIMEOUT)`);
       err.code = "QUEUE_TIMEOUT";
       err.retryAfterMs = 5000;
@@ -505,6 +525,7 @@ export class FreePiExecutor extends DefaultExecutor {
     const tokenStateKey = cleanToken ? tokenKey(cleanToken) : "";
     const sessionId = cleanToken ? getSessionId(cleanToken) : randomUUID();
     const turnId = randomUUID();
+    counters.requests += 1;
 
     // 1. Session Launch Handshake: pre-warm account if not yet performed or expired
     if (cleanToken) {
@@ -519,7 +540,9 @@ export class FreePiExecutor extends DefaultExecutor {
       const lastImpression = lastImpressionMap.get(tokenStateKey) || 0;
       if (Date.now() - lastImpression > ADS_INTERVAL_MS) {
         stamp(lastImpressionMap, tokenStateKey, Date.now()); // optimistic debounce
-        fireAdCycle(cleanToken, sessionId, turnId, proxyOptions).catch(() => {});
+        fireAdCycle(cleanToken, sessionId, turnId, proxyOptions)
+          .then(() => { counters.adsCycles += 1; })
+          .catch(() => { counters.adsFailures += 1; });
       }
     }
 
@@ -574,6 +597,7 @@ export class FreePiExecutor extends DefaultExecutor {
             const cloned = result.response.clone();
             const text = await cloned.text();
             if (text.includes("concurrent") || text.includes("one request at a time")) {
+              counters.upstream429 += 1;
               log?.info?.("FREEPI", `Detected concurrent lock (429: one request at a time). Waiting 2.1s before retry (${attempt}/2)...`);
               await new Promise((r) => setTimeout(r, 2100));
               result = await super.execute(params);
@@ -605,6 +629,8 @@ export class FreePiExecutor extends DefaultExecutor {
           // Fall through to original result
         }
       }
+
+      if (result?.response?.status === 401) counters.authFailures += 1;
 
       // 4. If streaming response is successful, wrap stream so lock is held until stream completion
       if (result?.response?.ok && result.response.body) {
