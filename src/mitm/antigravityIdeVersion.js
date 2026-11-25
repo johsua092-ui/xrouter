@@ -11,7 +11,7 @@
 // 2. Only rewrites metadata if metadata is already present in the request payload. Never injects
 //    a new "metadata" property into payload objects that do not define it.
 
-const ANTIGRAVITY_IDE_VERSION = "2.33.0";
+const ANTIGRAVITY_IDE_VERSION = "2.34.0";
 // Language server build shipped inside that hub; useful as a secondary marker.
 const ANTIGRAVITY_LANGUAGE_SERVER_VERSION = "44.9.1";
 const ANTIGRAVITY_IDE_VERSION_OVERRIDE_ENABLED = true;

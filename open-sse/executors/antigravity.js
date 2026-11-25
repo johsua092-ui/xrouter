@@ -570,6 +570,31 @@ export class AntigravityExecutor extends BaseExecutor {
       }
     }
 
+    // Rewrite competing-client branding in system prompts (e.g. Claude Code, Codex CLI,
+    // Hermes, OpenCode, OpenClaw) so Antigravity doesn't flag systemInstruction with a bare 429.
+    if (requestWithoutTools.systemInstruction?.parts) {
+      const rewrittenParts = [];
+      for (const part of requestWithoutTools.systemInstruction.parts) {
+        if (typeof part.text !== "string") {
+          rewrittenParts.push(part);
+          continue;
+        }
+        let text = part.text;
+        for (const { from, to } of ANTIGRAVITY_PROMPT_REWRITES) {
+          text = text.replaceAll(from, to);
+        }
+        if (text.trim()) rewrittenParts.push({ ...part, text });
+      }
+      if (rewrittenParts.length === 0) {
+        delete requestWithoutTools.systemInstruction;
+      } else {
+        requestWithoutTools.systemInstruction = {
+          ...requestWithoutTools.systemInstruction,
+          parts: rewrittenParts,
+        };
+      }
+    }
+
     const generationConfig = { ...(requestWithoutTools.generationConfig || {}) };
     const maxTokensCap = isClaude ? 64000 : 65536;
     if (!generationConfig.maxOutputTokens || generationConfig.maxOutputTokens > maxTokensCap) {

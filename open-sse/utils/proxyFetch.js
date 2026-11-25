@@ -43,8 +43,8 @@ async function getOrCreateDirectAgent(key, insecure, keepAliveTimeout, keepAlive
   return agent;
 }
 
-export function getDirectDispatcher(insecure = false) {
-  const { keepAliveTimeout, keepAliveMaxTimeout } = resolveKeepAliveTimeouts();
+export function getDirectDispatcher(insecure = false, targetUrl = "") {
+  const { keepAliveTimeout, keepAliveMaxTimeout } = resolveKeepAliveTimeouts(targetUrl);
   const key = `direct::${insecure ? "insecure" : "secure"}::${keepAliveTimeout}::${keepAliveMaxTimeout}`;
   return getOrCreateDirectAgent(key, insecure, keepAliveTimeout, keepAliveMaxTimeout);
 }
@@ -602,7 +602,7 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
   // got-scraping disabled — use native fetch with enlarged maxHeaderSize (64KB)
   // to avoid UND_ERR_HEADERS_OVERFLOW from Google / Cloudflare responses with massive Set-Cookie headers.
   const forceFreshSocket = proxyOptions?.forceFreshSocket === true || options?.forceFreshSocket === true;
-  const dispatcher = options.dispatcher || (await (forceFreshSocket ? getFreshRetryDispatcher() : getDirectDispatcher()).catch(() => null));
+  const dispatcher = options.dispatcher || (await (forceFreshSocket ? getFreshRetryDispatcher() : getDirectDispatcher(false, url)).catch(() => null));
   try {
     return await originalFetch(url, dispatcher ? { ...options, dispatcher } : options);
   } catch (err) {
