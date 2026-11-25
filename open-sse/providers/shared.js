@@ -92,7 +92,7 @@ export const ANTHROPIC_COMPAT_BASE = "https://api.anthropic.com/v1";
 // Official Antigravity IDE Desktop 2.24.0 fingerprint captured from macOS arm64 (PR #4816).
 // Keep this static even when X Router runs on Linux: the provider profile is
 // intentionally matching the IDE client, not the server host.
-export const ANTIGRAVITY_IDE_VERSION = "2.33.0";
+export const ANTIGRAVITY_IDE_VERSION = "2.34.0";
 export const ANTIGRAVITY_IDE_BASE_URL = "https://cloudcode-pa.googleapis.com";
 export const ANTIGRAVITY_IDE_USER_AGENT = `antigravity/hub/${ANTIGRAVITY_IDE_VERSION} darwin/arm64`;
 // Chromium/Electron engine versi yang sama dipakai hub untuk X-Goog-Api-Client.

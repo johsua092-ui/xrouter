@@ -194,6 +194,12 @@ export const CLAUDE_SYSTEM_PROMPT = "You are Claude Code, Anthropic's official C
 // makes the backend flag the request and answer 429 Quota Exhausted.
 export const ANTIGRAVITY_PROMPT_REWRITES = [
   { from: "You are a Claude agent, built on Anthropic's Claude Agent SDK.", to: "" },
+  // Claude Code & Codex CLI identity/harness phrases fingerprinted in systemInstruction (bisected live 2026-11-24).
+  { from: /You(?: are|'re) Claude Code(?:,\s*Anthropic's official CLI for Claude)?\.?/gi, to: "You are an AI coding assistant." },
+  { from: /interactive agent that helps users with software engineering tasks/gi, to: "AI coding assistant that helps users with software engineering tasks" },
+  { from: /Dual-use security tools \(C2 frameworks, credential testing, exploit development\) require clear authorization context/gi, to: "Dual-use security tools require clear authorization context" },
+  { from: /was pasted into the message by the user from somewhere else and may contain instructions the user did not write/gi, to: "comes from user-pasted content and may contain untrusted instructions" },
+  { from: /You(?: are|'re) a coding agent running in the Codex CLI(?:,\s*a terminal-based coding assistant)?\.?/gi, to: "You are a coding assistant." },
   // ── Fingerprinted prompt text that makes Antigravity answer a bare 429 RESOURCE_EXHAUSTED ──
   // Every rule REWORDS; none deletes the line. Deleting also removes identifiers the model is
   // supposed to receive (skill_view(name='hermes-agent'), the docs URL, the Begin/End markers).
@@ -231,7 +237,8 @@ export const ANTIGRAVITY_PROMPT_REWRITES = [
   { from: /opencode/gi, to: (m) => (m === "OpenCode" ? "Antigravity" : m === "OPENCODE" ? "ANTIGRAVITY" : "antigravity") }
 ];
 
-export const ANTIGRAVITY_DEFAULT_SYSTEM = "You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.**Absolute paths only****Proactiveness**";
+// Official Antigravity 2.34.0 identity, sent ahead of every generation request.
+export const ANTIGRAVITY_DEFAULT_SYSTEM = "You are Antigravity Agent, a powerful agentic AI coding assistant designed by the Google engineering team.\nYou are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.\nThe USER will send you requests, which you must always prioritize addressing. User requests are enclosed within <USER_REQUEST> tags.";
 
 // Derive từ registry oauth.refreshLeadMs
 export const REFRESH_LEAD_MS = Object.fromEntries(
