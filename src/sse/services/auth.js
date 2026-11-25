@@ -39,6 +39,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
   const preferredConnectionId = options?.preferredConnectionId || null;
   const conversationKey = options?.conversationKey || null;
   const requestedModel = options?.requestedModel || model;
+  const body = options?.body || null;
   // Acquire mutex to prevent race conditions
   const currentMutex = selectionMutex;
   let resolveMutex;
@@ -268,13 +269,39 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       if (affinityId) {
         const affinityConn = availableConnections.find((c) => c.id === affinityId);
         if (affinityConn) {
-          connection = affinityConn;
-          log.info("CACHE_AFFINITY", `${provider} | warm KV-cache match → sticky on ${connection.id?.slice(0, 8)} (${connection.name || connection.email || "unnamed"})`);
-          touchAffinity(providerId, conversationKey, connection.id);
-          await updateProviderConnection(connection.id, {
-            lastUsedAt: new Date().toISOString(),
-            consecutiveUseCount: (connection.consecutiveUseCount || 0) + 1
-          });
+          let useAffinity = true;
+          if (resolveProviderId(providerId) === "freepi") {
+            const isMultiTurn = Array.isArray(body?.messages) && body.messages.some((m) => m?.role === "assistant");
+            const hasExplicitSession = Boolean(body?.session_id || body?.conversation_id);
+            const mustStaySticky = isMultiTurn || hasExplicitSession;
+            if (!mustStaySticky) {
+              try {
+                const { getFreePiQueuePressure } = await import("open-sse/executors/freepi.js");
+                const pressure = getFreePiQueuePressure(affinityConn.accessToken || affinityConn.apiKey || "");
+                if (!pressure.idle) {
+                  // Busy account on single turn: release sticky affinity so slot dispatcher can pick an idle account
+                  clearAffinity(providerId, conversationKey);
+                  useAffinity = false;
+                }
+              } catch (_) {}
+            }
+          }
+
+          if (useAffinity) {
+            connection = affinityConn;
+            log.info("CACHE_AFFINITY", `${provider} | warm KV-cache match → sticky on ${connection.id?.slice(0, 8)} (${connection.name || connection.email || "unnamed"})`);
+            touchAffinity(providerId, conversationKey, connection.id);
+            await updateProviderConnection(connection.id, {
+              lastUsedAt: new Date().toISOString(),
+              consecutiveUseCount: (connection.consecutiveUseCount || 0) + 1
+            });
+            if (resolveProviderId(providerId) === "freepi") {
+              try {
+                const { reserveFreePiSlot } = await import("open-sse/executors/freepi.js");
+                reserveFreePiSlot(connection.accessToken || connection.apiKey || "");
+              } catch (_) {}
+            }
+          }
         } else {
           clearAffinity(providerId, conversationKey);
         }
@@ -283,7 +310,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
 
     if (connection) {
       // skip strategy
-    } else if (strategy === "least-loaded" && resolveProviderId(providerId) === "freepi") {
+    } else if ((strategy === "least-loaded" || (strategy !== "round-robin" && availableConnections.length > 1)) && resolveProviderId(providerId) === "freepi") {
       // FreePI allows exactly one in-flight request per token, so recency is the
       // wrong signal — each account's own queue depth is. Pick the account nobody
       // is waiting on; when all are busy, take the shortest queue instead of

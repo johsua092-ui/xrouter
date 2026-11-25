@@ -466,6 +466,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, {
       requestedModel: requestedModel || model,
       conversationKey,
+      body,
     });
 
     // All accounts unavailable

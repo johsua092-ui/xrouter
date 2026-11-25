@@ -1,4 +1,72 @@
+# v0.1.1 (2026-11-25)
+
+### Features & Hardening — FreePI Arena Multi-Model Parallel Streaming & Watchdog
+
+- **Model-Isolated Conversation Affinity**:
+  - `src/sse/services/conversationAffinity.js`: Injected `${targetModel}\0` prefix into the conversation affinity anchor hash (`deriveConversationKey`).
+  - Previously, concurrent turns with the same prompt text/system instruction (such as parallel multi-model benchmarking in the Arena dashboard) derived identical affinity keys, causing different models to compete for the same FreePI account slot and triggering concurrency stalls or timeouts.
+  - Adding the model identifier ensures distinct conversation keys and allows parallel multi-model dispatch across accounts.
+- **Dynamic Single-Turn Slot Bypass**:
+  - `src/sse/services/auth.js`: Added single-turn affinity release when a FreePI account slot is busy.
+  - Single-turn requests (no assistant history or explicit session ID) no longer stick rigidly to a busy account slot. If the assigned account is currently executing a stream (`!pressure.idle`), affinity is cleared and routing dynamically selects an idle account slot.
+- **Stream Inactivity Watchdog & Abort Listener**:
+  - `open-sse/executors/freepi.js`: Added a 60-second inactivity watchdog (`STREAM_INACTIVITY_TIMEOUT_MS = 60_000`) and client abort signal listener in `wrapStreamWithQueueLock`.
+  - Automatically releases the account queue lock if upstream stops emitting chunks for 60s or if the client disconnects, preventing permanently locked account slots from stranded streams.
+  - Exported compatibility helper functions: `isFreePiSlotAvailable`, `getFreePiQueueStats`, and `evictFreePiSlot`.
+- **Chat Parameter Safety**:
+  - `src/sse/handlers/chat.js` & `src/sse/services/auth.js`: Forwarded `body` in `options` to `getProviderCredentials` and safely defaulted `const body = options?.body || null;` to fix `ReferenceError: body is not defined`.
+- **Regression Suite**:
+  - Added `tests/unit/freepi-parallel-stream.test.js` validating multi-model concurrent streaming, watchdog timeout eviction, and slot-aware fallback routing (10/10 PASS).
+
+### Features & UI — FreePI Pool Metrics, Strategy Selector & Slot Reservation
+
+- **Provider Pool Telemetry & Metrics API**:
+  - `open-sse/executors/freepi.js` & `src/app/api/providers/freepi/stats/route.js`: Added real-time metric counters (`getFreePiMetrics()`) tracking total requests, queue overflows/timeouts, upstream 429s, auth failures, ad impression cycles, and handshakes.
+  - Exposed via authenticated `GET /api/providers/freepi/stats` joining server telemetry with database account records.
+- **Provider Dashboard UI & Strategy Selector**:
+  - Added account pool status indicators (`idle`, `busy`, `rate_limited`, `needs_reauth`) and queue count meters to the FreePI provider management page.
+  - Added interactive dispatch strategy selector: `fill-first`, `round-robin`, and `least-loaded` (slot-aware).
+- **Selection-Time Slot Reservation**:
+  - Implemented `reserveFreePiSlot(token, ttlMs = 5000)` to mark accounts as reserved during connection selection, preventing race conditions where multiple parallel requests pick the same idle account before dispatch.
+- **Tunable Post-Stream Settling Delay**:
+  - Introduced `FREEPI_SETTLING_DELAY_MS` (clamped 0–2000ms, default 500ms) allowing operators to tune socket reset margin and boost per-account throughput by up to 40% at 200ms.
+
+### Documentation — Setup Wizard URL
+
+- Fixed repository clone URL in `README.md` install command from `x-router` to `xrouter`.
+
 # v0.1.1 (2026-11-24)
+
+### Bug Fix — Mistral Strict Chat Schema & Reasoning Effort Clamping
+
+- **api.mistral.ai validates request bodies with `extra="forbid"`**, rejecting foreign fields with HTTP 422 `extra_forbidden` (e.g. `body.thinking` and `body.messages[i].assistant.reasoning_content`).
+- `open-sse/translator/thinkingUnified.js` & `open-sse/registry/mistral.js`:
+  - Added `"mistral"` thinking format: suppresses `thinking` objects and rewrites reasoning requests into top-level `reasoning_effort` clamped to the target model's advertised level set (`low|medium|high` or `none|low|high|xhigh`).
+  - Models without reasoning capabilities send no reasoning parameters, matching official API expectations.
+- `open-sse/executors/default.js`:
+  - Reordered request transformation to run `stripUnsupportedParams` *after* `injectReasoningContent`. This ensures provider-level field stripping rules take precedence over model-level placeholder rules, resolving both Mistral 422 errors and Groq 400 errors on multi-turn reasoning conversations.
+- Added regression test suite `tests/unit/mistral-strict-schema.test.js`.
+
+### Bug Fix — FreePI GitHub Device-Flow Error Surfacing & Account Deduplication
+
+- **Device Flow Error Surfacing**:
+  - `src/lib/oauth/providers/freepi.js` & `src/app/api/oauth/freepi/poll/route.js`: Mapped upstream error responses (`403 consent_required`, `404 not_found`, `429 rate_limited`) to standard OAuth error fields.
+  - Eliminated the 15-minute silent polling hang when consent failed or device codes expired, failing fast with descriptive user messages.
+  - Added bounded timeouts for `/auth/github/device` (10s) and `/auth/consent` (6s), with proper handling of server `retry_after` back-off headers up to 60s.
+- **Account Identity Deduplication**:
+  - Resolved account identity hierarchically across `/auth/token`, retried `/me/stats` (2 attempts), and `/me` fallback.
+  - Prevents empty email fields from creating duplicate database rows for the same account on re-login, avoiding split single-concurrency queue limits.
+
+### Features & Performance — FreePI Slot-Aware Routing & Resource Hygiene
+
+- **Bounded Process Memory & Token Key Hashing**:
+  - Replaced raw ~477-byte token strings with 22-character SHA-256 hashes (`tokenKey`) as keys in process-lifetime maps (`sessionMap`, `lastImpressionMap`, `launchHandshakeMap`, `tokenQueues`), preventing credentials from appearing in heap dumps and drastically reducing memory overhead.
+  - Added a 5-minute unreferenced background sweep dropping sessions idle for >6 hours, expired impressions, and empty queues. Capped all maps at 500 entries with oldest-first eviction.
+- **Admission Control & Honest Health Checks**:
+  - Replaced failing `/me/stats` health probes with real 1-token output verification.
+  - Queue admission rejections (`QUEUE_OVERFLOW` and `QUEUE_TIMEOUT` after 120s) now return 429 without arming account cooldowns or locking models, enabling immediate failover to alternative accounts.
+- **Slot-Aware Account Dispatch**:
+  - Introduced `least-loaded` dispatch strategy selecting the account with the lowest queue depth.
 
 ### Bug Fix — Antigravity Prompt Guard False-Positive on Plain Requests
 

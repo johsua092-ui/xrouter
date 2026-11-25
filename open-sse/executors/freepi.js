@@ -16,6 +16,7 @@ const SETTLING_DELAY_MS = Math.min(
   Math.max(0, SETTLING_ENV === undefined || SETTLING_ENV === "" ? 500 : Number(SETTLING_ENV) || 0),
 );
 const MAX_QUEUE_SIZE = 10;
+const STREAM_INACTIVITY_TIMEOUT_MS = 60 * 1000; // 60s without chunk -> force abort
 // A request that cannot get the slot within this budget fails with QUEUE_TIMEOUT
 // instead of hanging: the queue used to wait until the client aborted, which on a
 // 1200-token stream ahead of it means tens of seconds of silence.
@@ -458,22 +459,73 @@ export function reserveFreePiSlot(token, ttlMs = RESERVATION_TTL_MS) {
 }
 
 /**
+ * Helper compatibility aliases for slot-aware inspection and eviction.
+ */
+export function isFreePiSlotAvailable(token) {
+  return getFreePiQueuePressure(token).idle;
+}
+
+export function getFreePiQueueStats(token) {
+  const p = getFreePiQueuePressure(token);
+  return { running: p.running === 1, waitingCount: p.waiting, totalLoad: p.total };
+}
+
+export function evictFreePiSlot(token) {
+  const key = token && typeof token === "string" && token.trim() ? tokenKey(token.trim()) : "";
+  if (!key) return;
+  const queue = tokenQueues.get(key);
+  if (queue) {
+    queue.running = false;
+    queue.waiting.forEach((item) => {
+      item.aborted = true;
+      if (item.timer) clearTimeout(item.timer);
+      item.reject?.(new Error("FreePI connection slot evicted"));
+    });
+    queue.waiting = [];
+    tokenQueues.delete(key);
+  }
+  selectionReservations.delete(key);
+  sessionMap.delete(key);
+  lastImpressionMap.delete(key);
+  launchHandshakeMap.delete(key);
+}
+
+/**
  * Wraps a streaming response body so that the queue release lock is held
  * throughout the entire token streaming lifecycle until EOF, flush, or abort.
  * Exported for tests: the release paths are the difference between a slot that
  * frees up and an account that looks busy for the life of the process.
  */
-export function wrapStreamWithQueueLock(response, releaseLock) {
+export function wrapStreamWithQueueLock(response, releaseLock, signal = null) {
   // Release must be idempotent and non-throwing: it is called from four paths
   // (body-less, flush, cancel, and the failure path below) and a rejected
   // release would surface as an unhandled rejection.
   let released = false;
+  let inactivityTimer = null;
+
   const safeRelease = () => {
     if (released) return;
     released = true;
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = null;
+    }
     try {
       Promise.resolve(releaseLock()).catch(() => {});
     } catch { /* a throwing release must not mask the response */ }
+  };
+
+  const resetInactivityTimer = (controller) => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      safeRelease();
+      try {
+        controller.error(new Error("FreePI stream inactivity timeout: no chunk received for 60s"));
+      } catch {}
+    }, STREAM_INACTIVITY_TIMEOUT_MS);
+    if (inactivityTimer && typeof inactivityTimer.unref === "function") {
+      inactivityTimer.unref();
+    }
   };
 
   if (!response?.body || typeof response.body.pipeThrough !== "function") {
@@ -481,8 +533,20 @@ export function wrapStreamWithQueueLock(response, releaseLock) {
     return response;
   }
 
+  if (signal) {
+    if (signal.aborted) {
+      safeRelease();
+    } else {
+      signal.addEventListener("abort", safeRelease, { once: true });
+    }
+  }
+
   const transform = new TransformStream({
+    start(controller) {
+      resetInactivityTimer(controller);
+    },
     transform(chunk, controller) {
+      resetInactivityTimer(controller);
       controller.enqueue(chunk);
     },
     flush() {
@@ -642,7 +706,7 @@ export class FreePiExecutor extends DefaultExecutor {
 
       // 4. If streaming response is successful, wrap stream so lock is held until stream completion
       if (result?.response?.ok && result.response.body) {
-        result.response = wrapStreamWithQueueLock(result.response, releaseLock);
+        result.response = wrapStreamWithQueueLock(result.response, releaseLock, signal);
         return result;
       }
 
