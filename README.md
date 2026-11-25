@@ -131,7 +131,7 @@ Run the production setup wizard directly on your server with one command:
 
 ```bash
 # Interactive setup wizard (prompts for port, password, and deployment mode)
-curl -fsSL https://raw.githubusercontent.com/johsua092-ui/x-router/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/johsua092-ui/xrouter/main/install.sh | bash
 
 # Or non-interactive one-liner with flags
 bash install.sh --port 8080 --password "MySecretPass" -y
