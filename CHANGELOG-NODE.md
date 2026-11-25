@@ -1,4 +1,44 @@
+# v0.1.1 (2026-11-25)
+
+### Added — FreePI Arena Multi-Model Parallel Streaming & Deadlock Safeguards
+
+- Model-isolated conversation affinity via `${targetModel}\0` anchor prefix in `deriveConversationKey`.
+- Dynamic single-turn affinity release when a FreePI account slot is busy, rerouting turns to idle connections.
+- 60s stream inactivity watchdog timer (`STREAM_INACTIVITY_TIMEOUT_MS`) and client abort listener in `wrapStreamWithQueueLock`.
+- Fixed `ReferenceError: body is not defined` by passing `body` into `getProviderCredentials`.
+- Added unit test suite `tests/unit/freepi-parallel-stream.test.js`.
+
+### Added — FreePI Pool Metrics, Strategy Selector & Slot Reservation
+
+- Real-time pool telemetry endpoint `GET /api/providers/freepi/stats` and provider dashboard status panel.
+- Account dispatch strategy selector (`fill-first`, `round-robin`, `least-loaded` / slot-aware).
+- Selection-time slot reservation (`reserveFreePiSlot`) with TTL to eliminate account selection race conditions.
+- Tunable post-stream settling delay via `FREEPI_SETTLING_DELAY_MS`.
+
+### Fixed — Documentation
+
+- Fixed installation script repository URL in `README.md`.
+
 # v0.1.1 (2026-11-24)
+
+### Fixed — Mistral Strict Chat Schema Reasoning Parameters
+
+- Implemented `"mistral"` thinking format suppressing `thinking` objects and clamping `reasoning_effort` to model capabilities.
+- Reordered `stripUnsupportedParams` after `injectReasoningContent` in `DefaultExecutor`, eliminating 422 errors on Mistral and 400 errors on Groq.
+- Added regression suite `tests/unit/mistral-strict-schema.test.js`.
+
+### Fixed — FreePI Device Flow Error Surfacing & Account Deduplication
+
+- Surfaced device flow error responses instead of hanging in a 15-minute polling loop on consent failures.
+- Bounded auth latency and honoured `retry_after` headers up to 60s.
+- Deduplicated account identity across login attempts to avoid multiple rows for the same account.
+
+### Added — FreePI Slot-Aware Routing & Resource Hygiene
+
+- SHA-256 hashed keys and 5-minute background sweeps for FreePI process state maps.
+- Replaced `/me/stats` health probes with real 1-token output verification.
+- Transparent admission control (429 without account cooldown on queue overflow/timeout).
+- Initial `least-loaded` dispatch strategy.
 
 ### Fixed — Antigravity Prompt Guard False-Positive on Plain Requests
 

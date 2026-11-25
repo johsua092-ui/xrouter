@@ -114,7 +114,8 @@ export function deriveConversationKey({ body, request = null, headers = null, ap
       else if (role === "user" && !firstUser && text) firstUser = text.slice(0, 500);
       if (system && firstUser) break;
     }
-    const anchor = `${system}\0${firstUser}`;
+    const targetModel = body?.model ? String(body.model).trim() : "";
+    const anchor = `${targetModel}\0${system}\0${firstUser}`;
     if (anchor.length > 5) {
       const hash = crypto.createHash("sha256").update(anchor).digest("hex").slice(0, 20);
       const caller = apiKey
