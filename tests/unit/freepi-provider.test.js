@@ -671,3 +671,37 @@ test("FreePI output-budget floor (empty responses)", async (t) => {
     assert.ok(src.includes("clampFreePiMaxTokens(base)"), "override must run the clamp");
   });
 });
+
+test("FreePI conversation-pin mismatch asks for another account without a cooldown", async (t) => {
+  const { checkFallbackError } = await import("../../open-sse/services/accountFallback.js");
+
+  await t.test("mismatch is retryable and cools nothing down", () => {
+    const decision = checkFallbackError(
+      403,
+      '{"error":{"message":"This conversation belongs to another free-pi account. Sharing or rotating accounts isn\'t allowed; use one account per person."}}',
+      0,
+      "freepi",
+    );
+    assert.equal(decision.shouldFallback, true);
+    assert.equal(decision.cooldownMs, 0);
+    assert.equal(decision.shouldLock, false, "the account is healthy");
+    assert.equal(decision.retryOther, true, "the caller must try a different account");
+  });
+
+  await t.test("other request-scoped FreePI refusals still stop the request", () => {
+    for (const text of ["queue_overflow", "queue_timeout", "model_requires_credits"]) {
+      const decision = checkFallbackError(429, text, 0, "freepi");
+      assert.equal(decision.shouldLock, false);
+      assert.ok(!decision.retryOther, `${text} must not rotate accounts`);
+    }
+  });
+
+  await t.test("the executor-side chat guard lets a mismatch rotate", () => {
+    const chatSrc = fs.readFileSync(path.join(rootDir, "src/sse/handlers/chat.js"), "utf8");
+    assert.ok(chatSrc.includes("pinMismatch"), "chat.js must special-case the pin mismatch");
+    assert.ok(
+      /isFreepi && conversationKey && !pinMismatch/.test(chatSrc),
+      "the mid-conversation rotation guard must exempt a mismatch"
+    );
+  });
+});

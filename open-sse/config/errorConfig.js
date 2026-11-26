@@ -82,7 +82,9 @@ export const ERROR_RULES = [
 
   // --- Text-based rules (checked first, order = priority) ---
   // FreePI specific rules: model refusal & conversation ownership are request-scoped, not fatal to the account
-  { provider: "freepi", text: "belongs to another free-pi account", cooldownMs: 0, lock: false },
+  // Wrong account for this conversation, not a bad credential: try another account
+  // (the owner is found by elimination) without cooling anything down.
+  { provider: "freepi", text: "belongs to another free-pi account", cooldownMs: 0, lock: false, retryOther: true },
   { provider: "freepi", text: "model_requires_credits", cooldownMs: 0, lock: false },
   // Our own admission control. A full queue or an expired wait says nothing about
   // the account: locking it here turned a client-side backpressure signal into a

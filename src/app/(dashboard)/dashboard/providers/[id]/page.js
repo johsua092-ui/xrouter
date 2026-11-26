@@ -45,6 +45,10 @@ export default function ProviderDetailPage() {
   const params = useParams();
   const router = useRouter();
   const providerId = params.id;
+  // FreePI pins every conversation to the account that started it; rotating accounts
+  // makes the next turn fail with "This conversation belongs to another free-pi
+  // account". So round-robin is not offered for this provider at all.
+  const isFreePiStrategyPage = resolveProviderId(providerId) === "freepi";
   const { getCaps } = useModelCaps();
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1723,7 +1727,13 @@ export default function ProviderDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-text-muted font-medium">Strategy</span>
                 <select
-                  value={providerStrategy || "fill-first"}
+                  value={
+                    isFreePiStrategyPage
+                      ? providerStrategy === "round-robin"
+                        ? "least-loaded"
+                        : providerStrategy || "least-loaded"
+                      : providerStrategy || "fill-first"
+                  }
                   onChange={(e) => {
                     const value = e.target.value;
                     const strategy = value === "fill-first" ? null : value;
@@ -1733,10 +1743,15 @@ export default function ProviderDetailPage() {
                   className="py-1 px-2 text-xs text-text-main bg-background border border-border rounded-md focus:outline-none focus:border-primary"
                 >
                   <option value="fill-first">Fill first</option>
-                  <option value="round-robin">Round robin</option>
+                  {!isFreePiStrategyPage && <option value="round-robin">Round robin</option>}
                   <option value="least-loaded">Slot-aware (least loaded)</option>
                 </select>
-                {providerStrategy === "round-robin" && (
+                {isFreePiStrategyPage && (
+                  <span className="text-[11px] text-text-muted italic">
+                    FreePI pins a conversation to one account — rotating breaks the next turn
+                  </span>
+                )}
+                {!isFreePiStrategyPage && providerStrategy === "round-robin" && (
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-text-muted">Sticky:</span>
                     <input

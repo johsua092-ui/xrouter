@@ -31,6 +31,7 @@ function touchConnection(connection) {
   updateProviderConnection(connection.id, { lastUsedAt: new Date().toISOString() })
     .catch((err) => log.warn("AUTH", `lastUsedAt touch failed for ${connection.id?.slice(0, 8)}: ${err.message}`));
 }
+const FREE_PI_ROUND_ROBIN_WARNED = new Set();
 
 // Mutex to prevent race conditions during account selection
 let selectionMutex = Promise.resolve();
@@ -330,7 +331,15 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
 
     if (connection) {
       // skip strategy
-    } else if ((strategy === "least-loaded" || (strategy !== "round-robin" && availableConnections.length > 1)) && resolveProviderId(providerId) === "freepi") {
+    } else if (resolveProviderId(providerId) === "freepi" && (strategy === "least-loaded" || strategy === "round-robin" || availableConnections.length > 1)) {
+      // A stored round-robin setting is never honoured for FreePI: the upstream pins a
+      // conversation to the account that started it, so rotating accounts makes the next
+      // turn fail with "belongs to another free-pi account" (403). Say so once per process
+      // instead of silently rewriting the config, then pick by queue depth like usual.
+      if (strategy === "round-robin" && !FREE_PI_ROUND_ROBIN_WARNED.has(providerId)) {
+        FREE_PI_ROUND_ROBIN_WARNED.add(providerId);
+        log.warn?.("AUTH", `${provider} | round-robin is not usable with FreePI (conversations are pinned to one account) → using least-loaded`);
+      }
       // FreePI allows exactly one in-flight request per token, so recency is the
       // wrong signal — each account's own queue depth is. Pick the account nobody
       // is waiting on; when all are busy, take the shortest queue instead of
@@ -513,7 +522,7 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   const githubResetAtMs = githubMonthlyResetMs(status, errorText, provider);
 
   // Provider-specific precise cooldown (e.g. codex usage_limit_reached resets_at) overrides backoff
-  let shouldFallback, cooldownMs, shouldLock, newBackoffLevel;
+  let shouldFallback, cooldownMs, shouldLock, newBackoffLevel, retryOther;
   if (githubResetAtMs) {
     shouldFallback = true;
     cooldownMs = githubResetAtMs - Date.now();
@@ -526,10 +535,16 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
       : Math.min(resetsAtMs - Date.now(), MAX_RATE_LIMIT_COOLDOWN_MS);
     newBackoffLevel = 0;
   } else {
-    ({ shouldFallback, cooldownMs, shouldLock, newBackoffLevel } = checkFallbackError(status, errorText, backoffLevel, resolveProviderId(provider)));
+    ({ shouldFallback, cooldownMs, shouldLock, newBackoffLevel, retryOther } = checkFallbackError(status, errorText, backoffLevel, resolveProviderId(provider)));
   }
   // A rejected request is the caller's mistake, so no account gets cooled down.
-  if (shouldLock === false) return { shouldFallback: false, cooldownMs: 0 };
+  // `retryOther` is the exception: the account is healthy but holds no claim on this
+  // conversation (FreePI pins a thread to one account), so the caller must move on
+  // to another account instead of failing the turn.
+  if (shouldLock === false) {
+    if (retryOther) return { shouldFallback: true, cooldownMs: 0, retryOther: true };
+    return { shouldFallback: false, cooldownMs: 0 };
+  }
   if (!shouldFallback) return { shouldFallback: false, cooldownMs: 0 };
 
   const reason = typeof errorText === "string" ? errorText.slice(0, 200) : "Provider error";

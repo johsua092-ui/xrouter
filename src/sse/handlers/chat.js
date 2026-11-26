@@ -623,10 +623,17 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       : (await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, resetsAtMs)).shouldFallback;
 
     if (shouldFallback) {
-      // FreePI strictly prohibits account rotation mid-conversation.
-      // Do not fall back to another account if this is an existing conversation thread.
+      // FreePI pins a conversation to the account that started it, so rotating mid-thread
+      // normally breaks the next turn. The exception is the pin mismatch itself: the
+      // upstream said this account does not own the conversation, which means the
+      // current account is the wrong one and moving on is the only way to heal it.
       const isFreepi = provider === "freepi" || provider === "fp";
-      if (isFreepi && conversationKey) {
+      const pinMismatch = isFreepi && typeof result.error === "string"
+        && result.error.includes("belongs to another free-pi account");
+      if (pinMismatch) {
+        log.warn("FREEPI", `Conversation is pinned to another account → trying the next one (not ${credentials.connectionName || credentials.connectionId?.slice(0, 8)})`);
+      }
+      if (isFreepi && conversationKey && !pinMismatch) {
         log.warn("FREEPI", `Prevented account rotation mid-conversation for ${credentials.connectionName || credentials.connectionId?.slice(0, 8)}`);
         return result.response;
       }
