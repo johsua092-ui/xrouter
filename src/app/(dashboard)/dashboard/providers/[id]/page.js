@@ -1746,11 +1746,6 @@ export default function ProviderDetailPage() {
                   {!isFreePiStrategyPage && <option value="round-robin">Round robin</option>}
                   <option value="least-loaded">Slot-aware (least loaded)</option>
                 </select>
-                {isFreePiStrategyPage && (
-                  <span className="text-[11px] text-text-muted italic">
-                    FreePI pins a conversation to one account — rotating breaks the next turn
-                  </span>
-                )}
                 {!isFreePiStrategyPage && providerStrategy === "round-robin" && (
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-text-muted">Sticky:</span>
