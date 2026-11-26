@@ -175,7 +175,10 @@ export function buildOnStreamComplete({ provider, model, connectionId, apiKey, r
       console.error("[RequestDetail] Failed to update streaming content:", err.message);
     });
     if (producedNothing && log?.errorLine) {
-      log.errorLine(reqTag, "✗", `EMPTY STREAM · ${provider}/${model} · no content and no completion tokens`);
+      // Say whether the model thought and then stopped, or said nothing at all — the
+      // two need different fixes and used to be indistinguishable in the log.
+      const thinkingChars = typeof safeThinking === "string" ? safeThinking.length : 0;
+      log.errorLine(reqTag, "✗", `EMPTY STREAM · ${provider}/${model} · no content · thinking ${thinkingChars} chars`);
     }
 
     // Persist stream usage to DB (no console line; the "📊 done" line below is authoritative)
