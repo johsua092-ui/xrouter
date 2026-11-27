@@ -311,10 +311,10 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
             connection = affinityConn;
             log.info("CACHE_AFFINITY", `${provider} | warm KV-cache match → sticky on ${connection.id?.slice(0, 8)} (${connection.name || connection.email || "unnamed"})`);
             touchAffinity(providerId, conversationKey, connection.id);
-            await updateProviderConnection(connection.id, {
-              lastUsedAt: new Date().toISOString(),
-              consecutiveUseCount: (connection.consecutiveUseCount || 0) + 1
-            });
+            // Same telemetry, one throttled write instead of one transaction per turn.
+            // The affinity path bypasses the round-robin branch, so its sticky counter is
+            // not read from here; lastUsedAt is what keeps recency ordering sane.
+            touchConnection(connection);
             if (resolveProviderId(providerId) === "freepi") {
               try {
                 const { reserveFreePiSlot } = await import("open-sse/executors/freepi.js");
