@@ -32,7 +32,7 @@ export default {
     // any GET-based probe marks a healthy account dead. Validation is a 1-token
     // completion in app/api/providers/[id]/test/testUtils.js.
     headers: {
-      "x-client-version": "0.6.25",
+      "x-client-version": process.env.FREEPI_CLI_VERSION || "0.6.28",
     },
   },
   oauth: {

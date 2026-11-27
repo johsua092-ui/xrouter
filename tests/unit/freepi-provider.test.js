@@ -95,7 +95,12 @@ test("FreePI Provider Integration Tests", async (t) => {
   assert.ok(fpExecutor instanceof executorsModule.FreePiExecutor, "getExecutor('fp') must return FreePiExecutor instance");
 
   const headers = freepiExecutor.buildHeaders({ accessToken: "fake-jwt-token" });
-  assert.equal(headers["x-client-version"], "0.6.25");
+  assert.ok(
+    /^\d+\.\d+\.\d+$/.test(headers["x-client-version"]),
+    "x-client-version must be a version string"
+  );
+  const [maj, min, pat] = headers["x-client-version"].split(".").map(Number);
+  assert.ok(maj > 0 || min > 6 || (min === 6 && pat >= 28), "must satisfy the upstream minimum 0.6.28");
   assert.ok(headers["x-session-id"], "headers must include x-session-id");
   assert.ok(headers["x-turn-id"], "headers must include x-turn-id");
   assert.equal(headers["x-ad-context"], "none", "headers must include x-ad-context: none");
@@ -576,5 +581,41 @@ test("FreePI queue admission control", async (t) => {
     const testUtils = fs.readFileSync(
       path.join(rootDir, "src/app/api/providers/[id]/test/testUtils.js"), "utf8");
     assert.ok(testUtils.includes('case "freepi"'), "connection test needs a real completion probe");
+  });
+});
+
+test("FreePI client version stays ahead of the upstream minimum", async (t) => {
+  const { getFreePiCliVersion, parseRequiredCliVersion } = await import(
+    "../../open-sse/executors/freepi.js"
+  );
+  const src = fs.readFileSync(path.join(rootDir, "open-sse/executors/freepi.js"), "utf8");
+  const registry = fs.readFileSync(path.join(rootDir, "open-sse/providers/registry/freepi.js"), "utf8");
+
+  await t.test("the shipped version is not the rejected 0.6.25", () => {
+    const [major, minor, patch] = getFreePiCliVersion().split(".").map(Number);
+    assert.ok(major > 0 || minor > 6 || (minor === 6 && patch >= 28),
+      `0.6.28 is the upstream minimum, got ${getFreePiCliVersion()}`);
+  });
+
+  await t.test("the required version is parsed out of a 426 body", () => {
+    const body = '{"code":"upgrade_required","message":"your free-pi-cli 0.6.25 is below the required minimum (0.6.28); update with: npx free-pi-cli@latest"}';
+    assert.equal(parseRequiredCliVersion(body), "0.6.28");
+    assert.equal(parseRequiredCliVersion("no version here"), null);
+    assert.equal(parseRequiredCliVersion(null), null);
+  });
+
+  await t.test("a 426 lifts the header and retries once", () => {
+    assert.ok(/status === 426/.test(src), "executor must handle 426");
+    assert.ok(src.includes("cliVersion = required"), "the lifted version must be kept");
+  });
+
+  await t.test("the override env var is spelled the way operators will type it", () => {
+    assert.ok(src.includes("process.env.FREEPI_CLI_VERSION"), "FREEPI_CLI_VERSION must be read verbatim");
+    assert.ok(!/FREEPI_cliVersion/.test(src), "no camel-cased copy of the env name");
+  });
+
+  await t.test("the connection test sends the same version", () => {
+    assert.ok(registry.includes("FREEPI_CLI_VERSION"), "registry header should be configurable");
+    assert.ok(!registry.includes('"0.6.25"'), "registry must not pin the rejected version");
   });
 });

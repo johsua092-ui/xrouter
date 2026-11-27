@@ -46,7 +46,7 @@ async function probeFreePi(connection, effectiveProxy = null) {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
-          "x-client-version": "0.6.25",
+          "x-client-version": process.env.FREEPI_CLI_VERSION || "0.6.28",
           "x-session-id": crypto.randomUUID(),
         },
         body: JSON.stringify({
