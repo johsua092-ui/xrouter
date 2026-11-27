@@ -12,6 +12,26 @@ import { cooldownRegistry } from "./cooldownRegistry.js";
 export { apiKeyGateFailure, shouldLogAuthFailure } from "./keyGate.js";
 import * as log from "../utils/logger.js";
 
+// lastUsedAt is telemetry, not a routing input for FreePI: least-loaded picks by
+// live queue depth. Writing it once per request cost a SQLite transaction per
+// request (measured ~64 write syscalls/request end to end, WAL churn included).
+// One write per connection per window carries the same information.
+const TOUCH_INTERVAL_MS = Math.max(0, Number(process.env.XR_CONNECTION_TOUCH_MS ?? 5000) || 0);
+const touchedAt = new Map();
+
+function touchConnection(connection) {
+  if (!connection?.id) return;
+  if (TOUCH_INTERVAL_MS > 0) {
+    const now = Date.now();
+    const last = touchedAt.get(connection.id) || 0;
+    if (now - last < TOUCH_INTERVAL_MS) return;
+    touchedAt.set(connection.id, now);
+    if (touchedAt.size > 2000) touchedAt.clear(); // pool churn guard
+  }
+  updateProviderConnection(connection.id, { lastUsedAt: new Date().toISOString() })
+    .catch((err) => log.warn("AUTH", `lastUsedAt touch failed for ${connection.id?.slice(0, 8)}: ${err.message}`));
+}
+
 // Mutex to prevent race conditions during account selection
 let selectionMutex = Promise.resolve();
 
@@ -332,10 +352,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       if (bestLoad > 0) {
         log.info("AUTH", `${provider} | all accounts busy (shortest queue ${bestLoad}) → least-loaded ${connection.id?.slice(0, 8)}`);
       }
-      await updateProviderConnection(connection.id, {
-        lastUsedAt: new Date().toISOString(),
-        consecutiveUseCount: (connection.consecutiveUseCount || 0) + 1,
-      });
+      touchConnection(connection);
     } else if (strategy === "round-robin") {
       const stickyLimit = providerOverride.stickyRoundRobinLimit || settings.stickyRoundRobinLimit || 3;
 

@@ -42,6 +42,35 @@ const SETTLING_DELAY_MS = Math.min(
   Math.max(0, SETTLING_ENV === undefined || SETTLING_ENV === "" ? 500 : Number(SETTLING_ENV) || 0),
 );
 const MAX_QUEUE_SIZE = 10;
+// Particle always writes reasoning_content before any content. With a small output
+// budget the reasoning eats the whole allowance and the turn ends with
+// finish_reason=length and an empty message (measured: 30-60 → empty, 120+ → fine;
+// 69 of 296 live requests, 23%, came back empty this way). Raising the budget is
+// the only fix that does not buffer the stream or duplicate the request.
+const MIN_MAX_TOKENS_ENV = process.env.FREEPI_MIN_MAX_TOKENS;
+export const FREEPI_MIN_MAX_TOKENS = Math.min(
+  4096,
+  Math.max(0, MIN_MAX_TOKENS_ENV === undefined || MIN_MAX_TOKENS_ENV === "" ? 256 : Number(MIN_MAX_TOKENS_ENV) || 0),
+);
+
+/**
+ * Raise a too-small output budget to the floor. Returns the body untouched when
+ * nothing needs to change, plus what the caller asked for so the raise is visible.
+ */
+export function clampFreePiMaxTokens(body, minOut = FREEPI_MIN_MAX_TOKENS) {
+  if (!minOut || !body || typeof body !== "object") return { body, raisedFrom: null };
+  const key = typeof body.max_tokens === "number"
+    ? "max_tokens"
+    : typeof body.max_completion_tokens === "number"
+      ? "max_completion_tokens"
+      : null;
+  if (!key) return { body, raisedFrom: null };
+  const requested = body[key];
+  if (!Number.isFinite(requested) || requested <= 0 || requested >= minOut) {
+    return { body, raisedFrom: null };
+  }
+  return { body: { ...body, [key]: minOut }, raisedFrom: requested };
+}
 const STREAM_INACTIVITY_TIMEOUT_MS = 60 * 1000; // 60s without chunk -> force abort
 // A request that cannot get the slot within this budget fails with QUEUE_TIMEOUT
 // instead of hanging: the queue used to wait until the client aborted, which on a
@@ -600,6 +629,15 @@ export function wrapStreamWithQueueLock(response, releaseLock, signal = null) {
 export class FreePiExecutor extends DefaultExecutor {
   constructor() {
     super("freepi");
+  }
+
+  transformRequest(model, body) {
+    const base = super.transformRequest(model, body);
+    const { body: adjusted, raisedFrom } = clampFreePiMaxTokens(base);
+    if (raisedFrom != null) {
+      console.log(`[FREEPI] raised max_tokens ${raisedFrom} → ${FREEPI_MIN_MAX_TOKENS} (reasoning would have consumed the budget)`);
+    }
+    return adjusted;
   }
 
   buildHeaders(credentials, stream = true, url, model, body) {

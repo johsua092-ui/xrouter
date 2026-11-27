@@ -619,3 +619,55 @@ test("FreePI client version stays ahead of the upstream minimum", async (t) => {
     assert.ok(!registry.includes('"0.6.25"'), "registry must not pin the rejected version");
   });
 });
+
+test("FreePI output-budget floor (empty responses)", async (t) => {
+  const { clampFreePiMaxTokens, FREEPI_MIN_MAX_TOKENS } = await import(
+    "../../open-sse/executors/freepi.js"
+  );
+
+  await t.test("the floor defaults to 256 tokens", () => {
+    assert.equal(FREEPI_MIN_MAX_TOKENS, 256);
+  });
+
+  await t.test("a tiny budget is raised and reported", () => {
+    const { body, raisedFrom } = clampFreePiMaxTokens({ max_tokens: 30, model: "particle" });
+    assert.equal(body.max_tokens, 256);
+    assert.equal(body.model, "particle", "other fields must survive");
+    assert.equal(raisedFrom, 30, "the original value is needed for the log line");
+  });
+
+  await t.test("max_completion_tokens is treated the same way", () => {
+    const { body, raisedFrom } = clampFreePiMaxTokens({ max_completion_tokens: 64 });
+    assert.equal(body.max_completion_tokens, 256);
+    assert.equal(raisedFrom, 64);
+  });
+
+  await t.test("adequate, missing and nonsensical budgets are left alone", () => {
+    for (const body of [
+      { max_tokens: 256 },
+      { max_tokens: 4096 },
+      { max_tokens: 0 },
+      { max_tokens: -1 },
+      { max_tokens: null },
+      { max_tokens: "120" },
+      { messages: [] },
+      null,
+    ]) {
+      const { body: out, raisedFrom } = clampFreePiMaxTokens(body);
+      assert.deepEqual(out, body);
+      assert.equal(raisedFrom, null);
+    }
+  });
+
+  await t.test("a zero floor disables the clamp", () => {
+    const { body, raisedFrom } = clampFreePiMaxTokens({ max_tokens: 10 }, 0);
+    assert.equal(body.max_tokens, 10);
+    assert.equal(raisedFrom, null);
+  });
+
+  await t.test("the executor applies it through transformRequest", () => {
+    const src = fs.readFileSync(path.join(rootDir, "open-sse/executors/freepi.js"), "utf8");
+    assert.ok(/transformRequest\(model, body\)\s*\{/.test(src), "FreePiExecutor must override transformRequest");
+    assert.ok(src.includes("clampFreePiMaxTokens(base)"), "override must run the clamp");
+  });
+});
