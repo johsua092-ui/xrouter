@@ -1,3 +1,22 @@
+# v0.1.1 (2026-11-27)
+
+### Fixed — Antigravity: competing-client system fingerprints, 90s googleapis keep-alive, IDE 2.34.0
+
+- Symptom: bare `429 RESOURCE_EXHAUSTED` a few turns in whenever the system prompt carried Claude Code / Codex CLI harness text, and a cold TCP+TLS handshake (~100–200 ms) on every turn spaced more than ~4s apart.
+- Root cause: the backend fingerprints competing harness phrases inside `systemInstruction`, and `resolveKeepAliveTimeouts()` applied the 4s default to every host — including Google Frontend, which holds HTTP/1.1 sockets for minutes.
+- Fix: five new `ANTIGRAVITY_PROMPT_REWRITES` regex rules reword the harness phrases instead of deleting them, and the official 2.34.0 `ANTIGRAVITY_DEFAULT_SYSTEM` identity ships ahead of every request; `antigravity.js` applies the table to `systemInstruction.parts` and prunes empty parts.
+- Fix: `GOOGLE_KEEPALIVE_TIMEOUT_MS = 90_000` with `isGoogleApisHost()` in `runtimeConfig.js`; `resolveKeepAliveTimeouts(targetUrl)` and `getDirectDispatcher(insecure, targetUrl)` route the 90s window only to `*.googleapis.com`, with `FETCH_KEEPALIVE_TIMEOUT_MS` still authoritative.
+- Fix: `openai-to-gemini.js` treats `developer` as system and accumulates multiple system messages into `systemInstruction.parts`; spoofed IDE version bumped to `2.34.0` in `providers/shared.js` and `src/mitm/antigravityIdeVersion.js`.
+- Verified by `tests/unit/antigravity-prompt-rejection.test.js` and `tests/unit/antigravity-billing-header-rewrite.test.js`.
+
+### Fixed — FreePI: upstream client-version gate (`426`) and self-healing header
+
+- Symptom: `426 upgrade_required: your free-pi-cli 0.6.25 is below the required minimum (0.6.28)` took the whole pool down while the accounts were healthy.
+- Root cause: `x-client-version` was the hardcoded literal `0.6.25` in `open-sse/executors/freepi.js`, and the upstream raised the floor to 0.6.28.
+- Fix: mutable `cliVersion` defaulting to `0.6.28`, overridable via `FREEPI_CLI_VERSION` (upper case, spelling guarded by a test).
+- Fix: a `426` triggers `parseRequiredCliVersion()` → `compareVersions()` → header lift → single retry, so the next bump heals without a deploy; the provider registry header and the connection-test probe now share the same value.
+- Verified by `tests/unit/freepi-provider.test.js` plus a live 200 on three `fp/particle` and one `fp/deepseek-v4.1-flash` completions, no `426` in the journal since deploy.
+
 # v0.1.1 (2026-11-25)
 
 ### Added — FreePI Arena Multi-Model Parallel Streaming & Deadlock Safeguards

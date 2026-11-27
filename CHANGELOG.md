@@ -1,3 +1,28 @@
+# v0.1.1 (2026-11-27)
+
+### Bug Fix — Antigravity: Competing-Client System Fingerprints, 90s googleapis Keep-Alive, IDE 2.34.0
+
+- **Symptom** — generations against Antigravity return a bare `429 RESOURCE_EXHAUSTED` ("Quota Exhausted") within a few turns whenever the client system prompt carries Claude Code / Codex CLI harness text, and turns spaced more than ~4s apart pay a fresh TCP+TLS handshake (~100–200 ms) on every request.
+- **Root cause** — the backend fingerprints the `systemInstruction` text of competing agent harnesses (`You are Claude Code…`, `You are a coding agent running in the Codex CLI…`, the dual-use security-tools paragraph, the "pasted into the message by the user" warning) and treats a match as an unentitled client. Separately, `resolveKeepAliveTimeouts()` applied the 4s default to every host, tearing down Google Frontend sockets that HTTP/1.1 keeps open for minutes.
+- **Fix** —
+  - `open-sse/config/appConstants.js`: five new `ANTIGRAVITY_PROMPT_REWRITES` rules (case-insensitive regex) that reword those harness phrases into neutral text instead of deleting lines, plus the official 2.34.0 `ANTIGRAVITY_DEFAULT_SYSTEM` identity (`Antigravity Agent`, `<USER_REQUEST>` framing).
+  - `open-sse/executors/antigravity.js`: applies the rewrite table to every `systemInstruction.parts` entry during `transformRequest()`; parts that end up empty are dropped and the whole `systemInstruction` is removed when nothing is left.
+  - `open-sse/config/runtimeConfig.js`: `GOOGLE_KEEPALIVE_TIMEOUT_MS = 90_000` plus `isGoogleApisHost()`; `resolveKeepAliveTimeouts(targetUrl)` now returns 90s for `*.googleapis.com` (matching the Antigravity Go `IdleConnTimeout`) and the previous 4s everywhere else, with `FETCH_KEEPALIVE_TIMEOUT_MS` still overriding both.
+  - `open-sse/utils/proxyFetch.js`: `getDirectDispatcher(insecure, targetUrl)` threads the request URL into keep-alive resolution, so the dispatcher cache key includes the resolved timeout.
+  - `open-sse/translator/request/openai-to-gemini.js`: the `developer` role is treated as system, and multiple system messages accumulate into `systemInstruction.parts` instead of overwriting each other.
+  - `open-sse/providers/shared.js` and `src/mitm/antigravityIdeVersion.js`: spoofed IDE version 2.33.0 → **2.34.0** (user-agent `antigravity/hub/2.34.0 darwin/arm64`), so the MITM metadata rewrite and the runtime headers cannot disagree.
+- **Verified by** `tests/unit/antigravity-prompt-rejection.test.js` (rewrite table plus empty-part pruning) and `tests/unit/antigravity-billing-header-rewrite.test.js` (IDE version bump); both green across 9 changed files.
+
+### Bug Fix — FreePI: Upstream Client-Version Gate (`426`) and Self-Healing Header
+
+- **Symptom** — every FreePI request began failing with `426 upgrade_required: your free-pi-cli 0.6.25 is below the required minimum (0.6.28)`. The whole pool went dark while the accounts and tokens were still healthy.
+- **Root cause** — `open-sse/executors/freepi.js` hardcoded `CLI_VERSION = "0.6.25"` into `x-client-version`; the upstream raised its minimum to 0.6.28 (also the current npm `latest`), and a hardcoded literal cannot be lifted without a redeploy.
+- **Fix** —
+  - `open-sse/executors/freepi.js`: the version is now mutable (`cliVersion`, default `0.6.28`) and overridable with `FREEPI_CLI_VERSION` (upper case — the first cut camel-cased it and the override was dead, now guarded by a test). Exports `getFreePiCliVersion()` and `parseRequiredCliVersion()`.
+  - A `426` no longer fails the request: `parseRequiredCliVersion()` reads the minimum out of the body, `compareVersions()` lifts the header when the required version is newer, and the call retries once — the next upstream bump heals itself without a deploy.
+  - `open-sse/providers/registry/freepi.js` and `src/app/api/providers/[id]/test/testUtils.js` each carried their own `0.6.25` copy; both now share `FREEPI_CLI_VERSION || "0.6.28"`, so connection tests stop reporting dead accounts for a version the executor had already fixed.
+- **Verified by** `tests/unit/freepi-provider.test.js` (426 body parsing, header lift, override spelling) plus a live check: three `fp/particle` completions and one `fp/deepseek-v4.1-flash` request returned 200 with content, and the journal has no `426` since the deploy.
+
 # v0.1.1 (2026-11-25)
 
 ### Features & Hardening — FreePI Arena Multi-Model Parallel Streaming & Watchdog
