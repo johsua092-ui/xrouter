@@ -1,5 +1,12 @@
 # v0.1.1 (2026-11-27)
 
+### Fixed — Providers UI: drop stale `FREE` badges when upstream removes a model
+
+- Symptom: after FreePI removed `deepseek-v4-flash` from `/client-version` (leaving 3 unlimited models), XRouter still showed 4 `FREE` badges on FreePI in the provider detail page and model picker.
+- Root cause: `dashboard/providers/[id]/page.js` and `ModelSelectModal.js` only updated `isFree` when `liveModel` was found in the fetched catalog; removed models returned `undefined` and fell back to static `model.isFree: true`.
+- Fix: `page.js` resolves missing built-in models to `isFree = false` whenever `suggestedModels` succeeds (`!suggestedModelsError && suggestedModels.length > 0`); `ModelSelectModal.js` resets `h.isFree = false` in its `freeCatalogModels` merge when `live === undefined`.
+- Verified by `npx next build` (Turbopack), `node scripts/copy-standalone-assets.mjs`, and live server health check on port `20128`.
+
 ### Fixed — Antigravity: competing-client system fingerprints, 90s googleapis keep-alive, IDE 2.34.0
 
 - Symptom: bare `429 RESOURCE_EXHAUSTED` a few turns in whenever the system prompt carried Claude Code / Codex CLI harness text, and a cold TCP+TLS handshake (~100–200 ms) on every turn spaced more than ~4s apart.

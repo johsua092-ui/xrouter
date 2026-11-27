@@ -1,5 +1,14 @@
 # v0.1.1 (2026-11-27)
 
+### Bug Fix — Providers UI: Prevent Removed Upstream Models From Keeping Stale `FREE` Badges
+
+- **Symptom** — after FreePI dropped `deepseek-v4-flash` from `https://api.freepi.ai/client-version` (reducing its live unlimited models from 4 to 3), XRouter still displayed `FREE` badges on 4 FreePI models in both the provider detail page and the model selector modal.
+- **Root cause** — `dashboard/providers/[id]/page.js` and `ModelSelectModal.js` only overrode `isFree` when a matching entry existed in the live suggested catalog (`liveModel !== undefined`); when an upstream model was removed altogether rather than flipped to `free: false`, the lookup returned `undefined` and fell back to the static registry flag (`isFree: true` in `open-sse/providers/registry/freepi.js`).
+- **Fix** —
+  - `src/app/(dashboard)/dashboard/providers/[id]/page.js`: when `suggestedModels` loads cleanly (`!suggestedModelsError && suggestedModels.length > 0`), any built-in model missing from the live list resolves `isFree` to `false` instead of falling back to `model.isFree`.
+  - `src/shared/components/ModelSelectModal.js`: when `freeCatalogModels[providerId]` has live entries and a hardcoded model is absent (`live === undefined`), explicitly resets `h.isFree = false`.
+- **Verified by** Next.js Turbopack production build (`npx next build` + `node scripts/copy-standalone-assets.mjs`) and live runtime check on port `20128`.
+
 ### Bug Fix — Antigravity: Competing-Client System Fingerprints, 90s googleapis Keep-Alive, IDE 2.34.0
 
 - **Symptom** — generations against Antigravity return a bare `429 RESOURCE_EXHAUSTED` ("Quota Exhausted") within a few turns whenever the client system prompt carries Claude Code / Codex CLI harness text, and turns spaced more than ~4s apart pay a fresh TCP+TLS handshake (~100–200 ms) on every request.

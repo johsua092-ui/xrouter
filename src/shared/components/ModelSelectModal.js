@@ -392,6 +392,8 @@ export default function ModelSelectModal({
               const live = liveCatalog.find((lm) => lm.id === h.id);
               if (live !== undefined && typeof live.isFree === "boolean") {
                 h.isFree = live.isFree;
+              } else {
+                h.isFree = false;
               }
             }
           }
