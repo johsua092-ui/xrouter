@@ -3,7 +3,33 @@ import os from "node:os";
 import { DefaultExecutor } from "./default.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 
-const CLI_VERSION = "0.6.25";
+// The upstream rejects requests from old clients: 426 upgrade_required with
+// "your free-pi-cli 0.6.25 is below the required minimum (0.6.28)". 0.6.28 is the
+// current min and latest; keep the version mutable so a 426 can lift it without a
+// redeploy, and let operators pin it with FREEPI_CLI_VERSION.
+const VERSION_PATTERN = /below the required minimum \(([0-9]+\.[0-9]+\.[0-9]+)\)/i;
+let cliVersion = process.env.FREEPI_CLI_VERSION || "0.6.28";
+
+export function getFreePiCliVersion() {
+  return cliVersion;
+}
+
+/** Pull the minimum client version out of a 426 body, or null when absent. */
+export function parseRequiredCliVersion(text) {
+  if (typeof text !== "string") return null;
+  const match = text.match(VERSION_PATTERN);
+  return match ? match[1] : null;
+}
+
+function compareVersions(a, b) {
+  const pa = String(a).split(".").map(Number);
+  const pb = String(b).split(".").map(Number);
+  for (let i = 0; i < 3; i += 1) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
 const ADS_INTERVAL_MS = 60 * 1000;
 const LAUNCH_HANDSHAKE_TTL_MS = 55 * 60 * 1000; // 55m TTL (official FreePI CLI launch grace is 60m)
 // Post-stream grace before the slot is handed to the next request. 500ms is the
@@ -179,7 +205,7 @@ export async function launchSessionHandshake(token, sessionId = null, proxyOptio
           "Content-Type": "application/json",
           "x-session-id": sid,
           "x-turn-id": turnId,
-          "x-client-version": CLI_VERSION,
+          "x-client-version": cliVersion,
           "x-client-os": process.platform,
           "x-client-arch": os.arch(),
           "x-ad-trigger": "launch",
@@ -253,7 +279,7 @@ async function fireAdCycle(token, sessionId, turnId, proxyOptions) {
           "Content-Type": "application/json",
           "x-session-id": sessionId,
           "x-turn-id": turnId,
-          "x-client-version": CLI_VERSION,
+          "x-client-version": cliVersion,
           "x-client-os": process.platform,
           "x-client-arch": os.arch(),
           "x-ad-trigger": "user_message",
@@ -582,7 +608,7 @@ export class FreePiExecutor extends DefaultExecutor {
     const sessionId = token ? getSessionId(token) : randomUUID();
     const turnId = randomUUID();
 
-    headers["x-client-version"] = CLI_VERSION;
+    headers["x-client-version"] = cliVersion;
     headers["x-session-id"] = sessionId;
     headers["x-turn-id"] = turnId;
     headers["x-ad-context"] = "none";
@@ -682,6 +708,22 @@ export class FreePiExecutor extends DefaultExecutor {
           } catch {
             break;
           }
+        }
+      }
+
+      // If upstream rejects the client version, lift it to the required minimum and
+      // retry once, so a version bump does not take the pool down until the next deploy.
+      if (result?.response?.status === 426 && cleanToken) {
+        try {
+          const text = await result.response.clone().text();
+          const required = parseRequiredCliVersion(text);
+          if (required && compareVersions(required, cliVersion) > 0) {
+            log?.warn?.("FREEPI", `Client version ${cliVersion} rejected, retrying as ${required}`);
+            cliVersion = required;
+            result = await super.execute(params);
+          }
+        } catch {
+          // Fall through to the original result
         }
       }
 
