@@ -23,6 +23,30 @@
   - `open-sse/providers/registry/freepi.js` and `src/app/api/providers/[id]/test/testUtils.js` each carried their own `0.6.25` copy; both now share `FREEPI_CLI_VERSION || "0.6.28"`, so connection tests stop reporting dead accounts for a version the executor had already fixed.
 - **Verified by** `tests/unit/freepi-provider.test.js` (426 body parsing, header lift, override spelling) plus a live check: three `fp/particle` completions and one `fp/deepseek-v4.1-flash` request returned 200 with content, and the journal has no `426` since the deploy.
 
+### Performance — Connection Touch Throttling (`lastUsedAt` Write Churn)
+
+- **Symptom** — every routed request opened a SQLite transaction; measured end to end at 72.6 KB and 64 write syscalls per request once WAL churn was included, which is pure overhead on the hottest path of the gateway.
+- **Root cause** — `updateProviderConnection` persisted `lastUsedAt` on every request in the strategy branch **and** in the cache-affinity branch (the path a warm conversation actually takes). Least-loaded routing reads live queue depth, so `lastUsedAt` is telemetry, not routing input.
+- **Fix** — `src/sse/services/auth.js`: `touchConnection()` now throttles to one write per connection per `XR_CONNECTION_TOUCH_MS` (default 5000 ms, `0` disables throttling) and fires it fire-and-forget so the request path never waits. Round-robin deliberately keeps its per-request write because `consecutiveUseCount` is routing input. `perf(auth)` follow-up (`01e9fe51`) routes the cache-affinity branch through the same `touchConnection()` — it skips the `consecutiveUseCount` bump, since recency ordering only needs `lastUsedAt`.
+- **Verified by** `tests/unit/freepi-provider.test.js` (round-robin still counts, throttled path stops writing every turn).
+
+### Bug Fix — FreePI: Reasoning-Only Turns on a Small Output Budget
+
+- **Symptom** — 69 of 296 live requests (23%) returned `finish_reason=length` with an empty message and no content.
+- **Root cause** — particle always emits `reasoning_content` before any content, so a small `max_tokens` is consumed entirely by reasoning and the turn ends with nothing to show. Reproduced and bounded: `max_tokens` 30 and 60 produce empty replies, 120 is fine.
+- **Fix** — `open-sse/executors/freepi.js`: `FREEPI_MIN_MAX_TOKENS` (default 256, `0` disables) with `clampFreePiMaxTokens(body)` raises a too-small budget inside `transformRequest()` and logs the caller's original value — `[FREEPI] raised max_tokens 30 → 256 (reasoning would have consumed the budget)`. A floor is used instead of a retry: detecting an empty stream means buffering the whole response before replying, and a retry would double upstream usage on 23% of traffic.
+- **Verified by** the reproduction matrix (30/60/120) and the added assertions in `tests/unit/freepi-provider.test.js`.
+
+### Bug Fix — FreePI: Mid-Thread Account Rotation (`403 belongs to another free-pi account`)
+
+- **Symptom** — the next turn in a pinned thread failed with `403 This conversation belongs to another free-pi account. Sharing or rotating accounts isn't allowed; use one account per person.`, and the dashboard offered a round-robin strategy for a provider that pins conversations by design.
+- **Root cause** — three independent routes into rotation: the dashboard exposed round-robin for FreePI, a stored or API-written round-robin was honoured by the strategy branch, and the mid-conversation rotation guard failed the turn outright instead of walking to the account that owns the thread.
+- **Fix** —
+  - Dashboard (`dashboard/providers/[id]/page.js`, `providers/components/ConnectionsCard.js`): round-robin is no longer offered for FreePI (slot-aware/least-loaded is shown instead) and a stored round-robin renders as least-loaded so the select never blanks.
+  - `src/sse/services/auth.js`: a stored round-robin is absorbed for FreePI and resolved by queue depth, with a single warning per process instead of silently rewriting the operator's config.
+  - `open-sse/config/errorConfig.js`: the pin error becomes `{ provider: "freepi", text: "belongs to another free-pi account", cooldownMs: 0, lock: false, retryOther: true }` — fall back, cool nothing down, lock nothing; `accountFallback.js`, `streamingHandler.js`, `chat.js` and `conversationAffinity.js` propagate `retryOther` so other request-scoped FreePI refusals keep their normal handling.
+- **Verified by** `tests/unit/freepi-provider.test.js` — 48 passing, including the error rule (retryable, no cooldown, no account lock) and the strategy override.
+
 # v0.1.1 (2026-11-25)
 
 ### Features & Hardening — FreePI Arena Multi-Model Parallel Streaming & Watchdog

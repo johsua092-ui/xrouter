@@ -17,6 +17,29 @@
 - Fix: a `426` triggers `parseRequiredCliVersion()` → `compareVersions()` → header lift → single retry, so the next bump heals without a deploy; the provider registry header and the connection-test probe now share the same value.
 - Verified by `tests/unit/freepi-provider.test.js` plus a live 200 on three `fp/particle` and one `fp/deepseek-v4.1-flash` completions, no `426` in the journal since deploy.
 
+### Changed — connection touch throttling (`lastUsedAt` write churn)
+
+- Symptom: one SQLite transaction per routed request — measured 72.6 KB and 64 write syscalls per request including WAL churn.
+- Root cause: `lastUsedAt` was persisted on every request in both the strategy branch and the cache-affinity branch, even though least-loaded reads live queue depth and `lastUsedAt` is telemetry.
+- Fix: `src/sse/services/auth.js` `touchConnection()` throttles to one write per connection per `XR_CONNECTION_TOUCH_MS` (default 5000, `0` disables) and runs fire-and-forget; round-robin keeps its per-request write because `consecutiveUseCount` is routing input.
+- Fix: the cache-affinity branch routes through the same throttle (`01e9fe51`), without bumping `consecutiveUseCount`.
+- Verified by `tests/unit/freepi-provider.test.js`.
+
+### Fixed — FreePI: reasoning-only turns on a small output budget
+
+- Symptom: 23% of live requests (69/296) returned `finish_reason=length` with empty content.
+- Root cause: particle emits `reasoning_content` before content, so a small `max_tokens` is eaten by reasoning; reproduced at 30 and 60 (empty), fine at 120.
+- Fix: `FREEPI_MIN_MAX_TOKENS` (default 256, `0` disables) + `clampFreePiMaxTokens()` in `open-sse/executors/freepi.js` raise the budget inside `transformRequest()` and log the original value.
+- A floor rather than a retry: empty-stream detection would buffer every response, and a retry would double upstream usage on 23% of traffic.
+- Verified by the 30/60/120 reproduction and `tests/unit/freepi-provider.test.js`.
+
+### Fixed — FreePI: mid-thread account rotation (`403 belongs to another free-pi account`)
+
+- Symptom: the next turn of a pinned thread 403'd with "This conversation belongs to another free-pi account", and the dashboard offered round-robin for a provider that pins conversations.
+- Root cause: the dashboard exposed round-robin, a stored round-robin was honoured, and the rotation guard failed the turn instead of walking accounts.
+- Fix: round-robin is hidden for FreePI (stored value renders as least-loaded) and absorbed by the strategy branch with a warn-once; `errorConfig.js` gains `retryOther` on the pin error so the gateway falls back to the owning account with no cooldown and no lock.
+- Verified by `tests/unit/freepi-provider.test.js` — 48 passing, covering the error rule and the strategy override.
+
 # v0.1.1 (2026-11-25)
 
 ### Added — FreePI Arena Multi-Model Parallel Streaming & Deadlock Safeguards
