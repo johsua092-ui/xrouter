@@ -1305,7 +1305,9 @@ export default function ProviderDetailPage() {
             ([, m]) => m === fullModel || m === oldFormatModel
           )?.[0];
           const liveModel = suggestedModels.find((s) => s.id === model.id);
-          const isFree = liveModel !== undefined ? liveModel.isFree : model.isFree;
+          const isFree = liveModel !== undefined
+            ? liveModel.isFree
+            : (!suggestedModelsError && suggestedModels.length > 0 ? false : model.isFree);
           return (
             <ModelRow
               key={model.id}
