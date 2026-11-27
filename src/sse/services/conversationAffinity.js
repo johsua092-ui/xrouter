@@ -1,3 +1,4 @@
+import { resolveProviderId } from "@/shared/constants/providers.js";
 import crypto from "node:crypto";
 import * as log from "../utils/logger.js";
 
@@ -52,6 +53,18 @@ const MAX_AFFINITY_ENTRIES = 5000;
 // different FreePI account, and the upstream answers 403 "belongs to another free-pi
 // account". Stored in the kv table (scope conversationAffinity), hydrated at boot.
 const AFFINITY_SCOPE = "conversationAffinity";
+
+// The router is addressed by aliases (`fp/particle`), while every other layer stores the
+// resolved id (`freepi`). Keying affinity by the raw provider meant a pin written under
+// `freepi:` was never found — or cleared — when the caller spoke `fp`.
+function affinityProvider(provider) {
+  if (!provider) return provider;
+  try {
+    return resolveProviderId(provider) || provider;
+  } catch {
+    return provider;
+  }
+}
 const PERSIST_MIN_INTERVAL_MS = 60 * 1000;
 const lastPersisted = new Map();
 let hydration = null;
@@ -63,6 +76,7 @@ function affinityDb() {
 function persistAffinity(storeKey, entry, force = false) {
   const now = Date.now();
   if (force || now - (lastPersisted.get(storeKey) || 0) >= PERSIST_MIN_INTERVAL_MS) {
+    if (lastPersisted.size > MAX_AFFINITY_ENTRIES) lastPersisted.clear();
     lastPersisted.set(storeKey, now);
   } else {
     return;
@@ -116,7 +130,7 @@ export function hydrateAffinity() {
   return hydration;
 }
 
-// Key: `${provider}:${convKey}` -> { connectionId, lastUsedAt, expiresAt }
+// Key: `${resolvedProviderId}:${convKey}` -> { connectionId, lastUsedAt, expiresAt }
 const affinityStore = new Map();
 
 /**
@@ -127,6 +141,8 @@ const cleanupInterval = setInterval(() => {
   for (const [k, v] of affinityStore) {
     if (now >= v.expiresAt) {
       affinityStore.delete(k);
+      // Drop the persisted copy too, otherwise it is re-read on the next boot.
+      forgetAffinity(k);
     }
   }
 }, 60000);
@@ -204,7 +220,7 @@ export function deriveConversationKey({ body, request = null, headers = null, ap
 export function getAffinityConnectionId(provider, convKey) {
   if (!provider || !convKey) return null;
   if (!hydration) hydrateAffinity();
-  const storeKey = `${provider}:${convKey}`;
+  const storeKey = `${affinityProvider(provider)}:${convKey}`;
   const entry = affinityStore.get(storeKey);
   if (!entry) return null;
 
@@ -221,9 +237,10 @@ export function getAffinityConnectionId(provider, convKey) {
  */
 export function setAffinityConnection(provider, convKey, connectionId) {
   if (!provider || !convKey || !connectionId) return;
-  const ttl = PROVIDER_CACHE_TTL_MS[provider] || DEFAULT_CACHE_TTL_MS;
+  const providerKey = affinityProvider(provider);
+  const ttl = PROVIDER_CACHE_TTL_MS[providerKey] || DEFAULT_CACHE_TTL_MS;
   const now = Date.now();
-  const storeKey = `${provider}:${convKey}`;
+  const storeKey = `${providerKey}:${convKey}`;
 
   if (affinityStore.size >= MAX_AFFINITY_ENTRIES) {
     // Evict oldest entry
@@ -246,10 +263,11 @@ export function setAffinityConnection(provider, convKey, connectionId) {
  */
 export function touchAffinity(provider, convKey, connectionId) {
   if (!provider || !convKey) return;
-  const storeKey = `${provider}:${convKey}`;
+  const providerKey = affinityProvider(provider);
+  const storeKey = `${providerKey}:${convKey}`;
   const entry = affinityStore.get(storeKey);
   if (entry) {
-    const ttl = entry.ttlMs || PROVIDER_CACHE_TTL_MS[provider] || DEFAULT_CACHE_TTL_MS;
+    const ttl = entry.ttlMs || PROVIDER_CACHE_TTL_MS[providerKey] || DEFAULT_CACHE_TTL_MS;
     const now = Date.now();
     entry.lastUsedAt = now;
     entry.expiresAt = now + ttl;
@@ -269,9 +287,11 @@ export function touchAffinity(provider, convKey, connectionId) {
  */
 export function clearAffinity(provider, convKey) {
   if (!provider || !convKey) return;
-  const storeKey = `${provider}:${convKey}`;
-  const existed = affinityStore.delete(storeKey);
-  if (existed) forgetAffinity(storeKey);
+  const storeKey = `${affinityProvider(provider)}:${convKey}`;
+  affinityStore.delete(storeKey);
+  // Delete unconditionally: the entry may already have been swept from memory while
+  // its row was still in the database, and a resurrected wrong pin causes a 403 later.
+  forgetAffinity(storeKey);
 }
 
 // Boot: rebuild the pins that were live before the last restart.
