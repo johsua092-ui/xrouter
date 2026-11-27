@@ -1742,7 +1742,7 @@ export default function ProviderDetailPage() {
                   }}
                   className="py-1 px-2 text-xs text-text-main bg-background border border-border rounded-md focus:outline-none focus:border-primary"
                 >
-                  <option value="fill-first">Fill first</option>
+                  {!isFreePiStrategyPage && <option value="fill-first">Fill first</option>}
                   {!isFreePiStrategyPage && <option value="round-robin">Round robin</option>}
                   <option value="least-loaded">Slot-aware (least loaded)</option>
                 </select>

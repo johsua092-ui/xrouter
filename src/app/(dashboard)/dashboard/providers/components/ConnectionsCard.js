@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getStatusVariant as getConnectionStatusVariant } from "@/shared/utils/connectionStatus";
+import { resolveProviderId } from "@/shared/constants/providers";
 import PropTypes from "prop-types";
 import { Card, Badge, Button, Modal, Select, Toggle, EditConnectionModal, ConfirmModal } from "@/shared/components";
 
@@ -296,6 +297,9 @@ AddApiKeyModal.propTypes = {
 // ── ConnectionsCard ────────────────────────────────────────────
 // Self-contained card: fetches, displays and manages all connections for a provider.
 export default function ConnectionsCard({ providerId, isOAuth }) {
+  // FreePI pins a conversation to one account upstream, so rotation is not offered and
+  // "fill first" would not be honoured either — the selector shows the one usable option.
+  const isFreePiStrategy = resolveProviderId(providerId) === "freepi";
   const [connections, setConnections] = useState([]);
   const [proxyPools, setProxyPools] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -407,10 +411,10 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
             <span className="text-xs text-text-muted font-medium">Strategy</span>
             <select
               value={
-                providerId === "freepi"
+                isFreePiStrategy
                   ? providerStrategy === "round-robin"
                     ? "least-loaded"
-                    : providerStrategy || "fill-first"
+                    : providerStrategy || "least-loaded"
                   : providerStrategy || "fill-first"
               }
               onChange={(e) => {
@@ -421,11 +425,11 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
               }}
               className="px-2 py-1 text-xs border border-border rounded-md bg-background focus:outline-none focus:border-primary"
             >
-              <option value="fill-first">Fill first</option>
-              {providerId !== "freepi" && <option value="round-robin">Round robin</option>}
+              {!isFreePiStrategy && <option value="fill-first">Fill first</option>}
+              {!isFreePiStrategy && <option value="round-robin">Round robin</option>}
               <option value="least-loaded">Slot-aware (least loaded)</option>
             </select>
-            {providerStrategy === "round-robin" && (
+            {!isFreePiStrategy && providerStrategy === "round-robin" && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-text-muted">Sticky:</span>
                 <input

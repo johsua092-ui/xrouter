@@ -5,7 +5,7 @@ import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
 import { resolveProviderId, FREE_PROVIDERS, FREE_TIER_PROVIDERS, AI_PROVIDERS } from "@/shared/constants/providers.js";
 import { getAntigravityQuotaCache, getAntigravityModelQuota } from "./antigravityQuota.js";
 import { resolveAgyTransport } from "open-sse/executors/agyCliExecutor.js";
-import { getAffinityConnectionId, setAffinityConnection, touchAffinity, clearAffinity } from "./conversationAffinity.js";
+import { getAffinityConnectionId, setAffinityConnection, touchAffinity, clearAffinity, hydrateAffinity } from "./conversationAffinity.js";
 import { tripCircuitBreaker, isCircuitBreakerOpen, recordCircuitSuccess } from "./circuitBreaker.js";
 import { cooldownRegistry } from "./cooldownRegistry.js";
 
@@ -53,6 +53,11 @@ function githubMonthlyResetMs(status, errorText, provider) {
  * @param {string|null} model - Model name for per-model rate limit filtering
  */
 export async function getProviderCredentials(provider, excludeConnectionIds = null, model = null, options = {}) {
+  // Pins are restored from the database at boot. Waiting here (a resolved promise after
+  // the first call) keeps the first request after a restart on its own account instead
+  // of missing the pin and getting a 403.
+  await hydrateAffinity();
+
   // Normalize to Set for consistent handling
   const excludeSet = excludeConnectionIds instanceof Set
     ? excludeConnectionIds

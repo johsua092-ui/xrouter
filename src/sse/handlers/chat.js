@@ -27,7 +27,7 @@ import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActi
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import { detectFormatByEndpoint } from "open-sse/translator/formats.js";
-import { deriveConversationKey, clearAffinity } from "../services/conversationAffinity.js";
+import { deriveConversationKey, clearAffinity, setAffinityConnection } from "../services/conversationAffinity.js";
 import { recordCircuitSuccess } from "../services/circuitBreaker.js";
 import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
@@ -461,6 +461,10 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
   let lastError = null;
   let lastStatus = null;
   let lastHeaders = null;
+  // Set when the upstream told us the conversation belongs to another account. The
+  // account that finally answers is the real owner, so it must become the pin —
+  // otherwise the next turn picks by queue depth, lands on a stranger and 403s again.
+  let healedPin = false;
 
   while (true) {
     const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, {
@@ -603,7 +607,13 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       }
     });
 
-    if (result.success) return result.response;
+    if (result.success) {
+      if (healedPin && conversationKey) {
+        setAffinityConnection(provider, conversationKey, credentials.connectionId);
+        log.info("FREEPI", `Conversation owner found → pinned to ${credentials.connectionName || credentials.connectionId?.slice(0, 8)}`);
+      }
+      return result.response;
+    }
 
     // Antigravity 409/429: refresh live quota to get exact resetAt before locking
     let quotaResetMs = null;
@@ -631,6 +641,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       const pinMismatch = isFreepi && typeof result.error === "string"
         && result.error.includes("belongs to another free-pi account");
       if (pinMismatch) {
+        healedPin = true;
         log.warn("FREEPI", `Conversation is pinned to another account → trying the next one (not ${credentials.connectionName || credentials.connectionId?.slice(0, 8)})`);
       }
       if (isFreepi && conversationKey && !pinMismatch) {
