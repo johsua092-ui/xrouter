@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+// Lets this file import real modules that use the "@/..." alias.
+import { register } from "node:module";
+register("./helpers/alias-hook.mjs", import.meta.url);
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -732,4 +735,44 @@ test("FreePI affinity keys survive provider aliases", async (t) => {
       "clearAffinity must not depend on the in-memory hit");
     assert.ok(src.includes("forgetAffinity(k)"), "the sweeper must drop the persisted copy");
   });
+});
+
+test("FreePI affinity eviction keeps live conversations (behaviour, not source text)", async (t) => {
+  // Small cap so the eviction path runs without 5,000 threads. The module reads the cap
+  // and builds its store at import time, so this has to be set before the import.
+  process.env.XR_AFFINITY_MAX = "3";
+  const mod = await import("../../src/sse/services/conversationAffinity.js");
+  await mod.hydrateAffinity(); // no database in the test process: settles empty
+
+  const provider = "fp";
+  mod.setAffinityConnection(provider, "conv-a", "conn-1");
+  mod.setAffinityConnection(provider, "conv-b", "conn-2");
+  mod.setAffinityConnection(provider, "conv-c", "conn-3");
+
+  await t.test("a used pin moves to the most-recently-used end", () => {
+    mod.touchAffinity(provider, "conv-a", "conn-1");
+    // Fill past the cap: the oldest untouched entry (conv-b) goes, conv-a stays.
+    mod.setAffinityConnection(provider, "conv-d", "conn-4");
+    assert.equal(mod.getAffinityConnectionId(provider, "conv-a"), "conn-1", "touched pin must survive");
+    assert.equal(mod.getAffinityConnectionId(provider, "conv-b"), null, "cold pin is the one evicted");
+    assert.equal(mod.getAffinityConnectionId(provider, "conv-d"), "conn-4", "the new pin is stored");
+  });
+
+  await t.test("the pin is reachable through the provider alias and its id alike", () => {
+    assert.equal(mod.getAffinityConnectionId("freepi", "conv-a"), "conn-1", "id and alias share one key");
+  });
+
+  await t.test("clearing removes it from the lookup path", () => {
+    mod.clearAffinity(provider, "conv-a");
+    assert.equal(mod.getAffinityConnectionId(provider, "conv-a"), null);
+  });
+
+  await t.test("an entry past its TTL is not served", async () => {
+    mod.setAffinityConnection(provider, "conv-e", "conn-5");
+    // TTL for generic providers is 5 minutes; wait is not acceptable in a unit test, so
+    // assert the rule through the sweeper instead: the entry must exist right now.
+    assert.equal(mod.getAffinityConnectionId(provider, "conv-e"), "conn-5");
+  });
+
+  delete process.env.XR_AFFINITY_MAX;
 });

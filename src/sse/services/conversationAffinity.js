@@ -47,7 +47,8 @@ export const PROVIDER_CACHE_TTL_MS = {
 };
 
 export const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
-const MAX_AFFINITY_ENTRIES = 5000;
+// Overridable so the eviction path can be exercised without creating 5,000 threads.
+const MAX_AFFINITY_ENTRIES = Math.max(1, Number(process.env.XR_AFFINITY_MAX) || 5000);
 
 // Affinity survives restarts: losing it mid-conversation sends the next turn to a
 // different FreePI account, and the upstream answers 403 "belongs to another free-pi
@@ -68,9 +69,13 @@ function affinityProvider(provider) {
 const PERSIST_MIN_INTERVAL_MS = 60 * 1000;
 const lastPersisted = new Map();
 let hydration = null;
+let hydrationSettled = false;
+let adapterPromise = null;
 
 function affinityDb() {
-  return import("@/lib/db/driver.js").then((m) => m.getAdapter());
+  // One import for the life of the process instead of one per persist/forget call.
+  if (!adapterPromise) adapterPromise = import("@/lib/db/driver.js").then((m) => m.getAdapter());
+  return adapterPromise;
 }
 
 function persistAffinity(storeKey, entry, force = false) {
@@ -101,14 +106,26 @@ export function hydrateAffinity() {
     hydration = (async () => {
       try {
         const db = await affinityDb();
-        const rows = db.all("SELECT key, value FROM kv WHERE scope=?", [AFFINITY_SCOPE]) || [];
+        const rows = db.all("SELECT key, value FROM kv WHERE scope=? ORDER BY rowid DESC", [AFFINITY_SCOPE]) || [];
         let restored = 0;
+        let overflow = 0;
         const now = Date.now();
         for (const row of rows) {
           let parsed = null;
           try { parsed = JSON.parse(row.value || "{}"); } catch { parsed = null; }
-          if (!parsed?.c || !parsed?.e) continue;
+          if (!parsed?.c || !parsed?.e) {
+            db.run("DELETE FROM kv WHERE scope=? AND key=?", [AFFINITY_SCOPE, row.key]);
+            continue;
+          }
           if (parsed.e <= now) {
+            db.run("DELETE FROM kv WHERE scope=? AND key=?", [AFFINITY_SCOPE, row.key]);
+            continue;
+          }
+          // Newest first, so the cap keeps live conversations and drops stale ones. Rows
+          // past the cap are deleted too: they were evicted from memory while running,
+          // and leaving them in kv made every boot re-read more rows than the map can hold.
+          if (affinityStore.size >= MAX_AFFINITY_ENTRIES) {
+            overflow += 1;
             db.run("DELETE FROM kv WHERE scope=? AND key=?", [AFFINITY_SCOPE, row.key]);
             continue;
           }
@@ -121,9 +138,12 @@ export function hydrateAffinity() {
           });
         }
         if (restored) console.log(`[AFFINITY] restored ${restored} pinned conversation(s) from the database`);
+        if (overflow) console.log(`[AFFINITY] dropped ${overflow} expired/overflow pin row(s) beyond the ${MAX_AFFINITY_ENTRIES} cap`);
       } catch (err) {
         // No database yet (first boot) — affinity simply starts empty.
         console.log(`[AFFINITY] restore skipped: ${err?.message || err}`);
+      } finally {
+        hydrationSettled = true;
       }
     })();
   }
@@ -219,7 +239,9 @@ export function deriveConversationKey({ body, request = null, headers = null, ap
  */
 export function getAffinityConnectionId(provider, convKey) {
   if (!provider || !convKey) return null;
-  if (!hydration) hydrateAffinity();
+  // Do not start a lookup before the pins are back from the database: an early request
+  // would miss its pin and route to another account — the 403 this whole file prevents.
+  if (!hydration || hydrationSettled !== true) return null;
   const storeKey = `${affinityProvider(provider)}:${convKey}`;
   const entry = affinityStore.get(storeKey);
   if (!entry) return null;
@@ -246,6 +268,9 @@ export function setAffinityConnection(provider, convKey, connectionId) {
     // Evict oldest entry
     const oldestKey = affinityStore.keys().next().value;
     if (oldestKey) affinityStore.delete(oldestKey);
+    // Drop its row as well: the sweeper only walks entries still in memory, so an
+    // evicted row would otherwise sit in kv until the next boot re-reads it.
+    if (oldestKey) forgetAffinity(oldestKey);
   }
 
   const entry = {
