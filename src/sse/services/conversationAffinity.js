@@ -271,6 +271,10 @@ export function touchAffinity(provider, convKey, connectionId) {
     const now = Date.now();
     entry.lastUsedAt = now;
     entry.expiresAt = now + ttl;
+    // Re-insert to move this pin to the most-recently-used end of the Map, so the
+    // capacity eviction below drops a cold conversation instead of a live one.
+    affinityStore.delete(storeKey);
+    affinityStore.set(storeKey, entry);
     if (connectionId && connectionId !== entry.connectionId) {
       entry.connectionId = connectionId;
       persistAffinity(storeKey, entry, true);
