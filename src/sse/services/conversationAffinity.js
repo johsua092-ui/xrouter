@@ -1,3 +1,4 @@
+import { resolveProviderId } from "@/shared/constants/providers.js";
 import crypto from "node:crypto";
 import * as log from "../utils/logger.js";
 
@@ -39,14 +40,97 @@ export const PROVIDER_CACHE_TTL_MS = {
   dahl: 60 * 60 * 1000,
   zhipu: 60 * 60 * 1000,
   glm: 60 * 60 * 1000,
-  freepi: 60 * 60 * 1000,
-  fp: 60 * 60 * 1000,
+  // FreePI binds a conversation to one account upstream for the life of the
+  // thread, so this affinity must outlive idle time (and restarts, see below).
+  freepi: 24 * 60 * 60 * 1000,
+  fp: 24 * 60 * 60 * 1000,
 };
 
 export const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_AFFINITY_ENTRIES = 5000;
 
-// Key: `${provider}:${convKey}` -> { connectionId, lastUsedAt, expiresAt }
+// Affinity survives restarts: losing it mid-conversation sends the next turn to a
+// different FreePI account, and the upstream answers 403 "belongs to another free-pi
+// account". Stored in the kv table (scope conversationAffinity), hydrated at boot.
+const AFFINITY_SCOPE = "conversationAffinity";
+
+// The router is addressed by aliases (`fp/particle`), while every other layer stores the
+// resolved id (`freepi`). Keying affinity by the raw provider meant a pin written under
+// `freepi:` was never found — or cleared — when the caller spoke `fp`.
+function affinityProvider(provider) {
+  if (!provider) return provider;
+  try {
+    return resolveProviderId(provider) || provider;
+  } catch {
+    return provider;
+  }
+}
+const PERSIST_MIN_INTERVAL_MS = 60 * 1000;
+const lastPersisted = new Map();
+let hydration = null;
+
+function affinityDb() {
+  return import("@/lib/db/driver.js").then((m) => m.getAdapter());
+}
+
+function persistAffinity(storeKey, entry, force = false) {
+  const now = Date.now();
+  if (force || now - (lastPersisted.get(storeKey) || 0) >= PERSIST_MIN_INTERVAL_MS) {
+    if (lastPersisted.size > MAX_AFFINITY_ENTRIES) lastPersisted.clear();
+    lastPersisted.set(storeKey, now);
+  } else {
+    return;
+  }
+  affinityDb()
+    .then((db) => db.run(
+      "INSERT OR REPLACE INTO kv(scope, key, value) VALUES(?, ?, ?)",
+      [AFFINITY_SCOPE, storeKey, JSON.stringify({ c: entry.connectionId, e: entry.expiresAt, t: entry.ttlMs })]
+    ))
+    .catch(() => {});
+}
+
+function forgetAffinity(storeKey) {
+  lastPersisted.delete(storeKey);
+  affinityDb()
+    .then((db) => db.run("DELETE FROM kv WHERE scope=? AND key=?", [AFFINITY_SCOPE, storeKey]))
+    .catch(() => {});
+}
+
+export function hydrateAffinity() {
+  if (!hydration) {
+    hydration = (async () => {
+      try {
+        const db = await affinityDb();
+        const rows = db.all("SELECT key, value FROM kv WHERE scope=?", [AFFINITY_SCOPE]) || [];
+        let restored = 0;
+        const now = Date.now();
+        for (const row of rows) {
+          let parsed = null;
+          try { parsed = JSON.parse(row.value || "{}"); } catch { parsed = null; }
+          if (!parsed?.c || !parsed?.e) continue;
+          if (parsed.e <= now) {
+            db.run("DELETE FROM kv WHERE scope=? AND key=?", [AFFINITY_SCOPE, row.key]);
+            continue;
+          }
+          restored += 1;
+          affinityStore.set(row.key, {
+            connectionId: parsed.c,
+            lastUsedAt: parsed.e - (parsed.t || 0),
+            expiresAt: parsed.e,
+            ttlMs: parsed.t || PROVIDER_CACHE_TTL_MS[row.key.split(":")[0]] || DEFAULT_CACHE_TTL_MS,
+          });
+        }
+        if (restored) console.log(`[AFFINITY] restored ${restored} pinned conversation(s) from the database`);
+      } catch (err) {
+        // No database yet (first boot) — affinity simply starts empty.
+        console.log(`[AFFINITY] restore skipped: ${err?.message || err}`);
+      }
+    })();
+  }
+  return hydration;
+}
+
+// Key: `${resolvedProviderId}:${convKey}` -> { connectionId, lastUsedAt, expiresAt }
 const affinityStore = new Map();
 
 /**
@@ -57,6 +141,8 @@ const cleanupInterval = setInterval(() => {
   for (const [k, v] of affinityStore) {
     if (now >= v.expiresAt) {
       affinityStore.delete(k);
+      // Drop the persisted copy too, otherwise it is re-read on the next boot.
+      forgetAffinity(k);
     }
   }
 }, 60000);
@@ -133,7 +219,8 @@ export function deriveConversationKey({ body, request = null, headers = null, ap
  */
 export function getAffinityConnectionId(provider, convKey) {
   if (!provider || !convKey) return null;
-  const storeKey = `${provider}:${convKey}`;
+  if (!hydration) hydrateAffinity();
+  const storeKey = `${affinityProvider(provider)}:${convKey}`;
   const entry = affinityStore.get(storeKey);
   if (!entry) return null;
 
@@ -150,9 +237,10 @@ export function getAffinityConnectionId(provider, convKey) {
  */
 export function setAffinityConnection(provider, convKey, connectionId) {
   if (!provider || !convKey || !connectionId) return;
-  const ttl = PROVIDER_CACHE_TTL_MS[provider] || DEFAULT_CACHE_TTL_MS;
+  const providerKey = affinityProvider(provider);
+  const ttl = PROVIDER_CACHE_TTL_MS[providerKey] || DEFAULT_CACHE_TTL_MS;
   const now = Date.now();
-  const storeKey = `${provider}:${convKey}`;
+  const storeKey = `${providerKey}:${convKey}`;
 
   if (affinityStore.size >= MAX_AFFINITY_ENTRIES) {
     // Evict oldest entry
@@ -160,12 +248,14 @@ export function setAffinityConnection(provider, convKey, connectionId) {
     if (oldestKey) affinityStore.delete(oldestKey);
   }
 
-  affinityStore.set(storeKey, {
+  const entry = {
     connectionId,
     lastUsedAt: now,
     expiresAt: now + ttl,
     ttlMs: ttl,
-  });
+  };
+  affinityStore.set(storeKey, entry);
+  persistAffinity(storeKey, entry);
 }
 
 /**
@@ -173,14 +263,24 @@ export function setAffinityConnection(provider, convKey, connectionId) {
  */
 export function touchAffinity(provider, convKey, connectionId) {
   if (!provider || !convKey) return;
-  const storeKey = `${provider}:${convKey}`;
+  const providerKey = affinityProvider(provider);
+  const storeKey = `${providerKey}:${convKey}`;
   const entry = affinityStore.get(storeKey);
   if (entry) {
-    const ttl = entry.ttlMs || PROVIDER_CACHE_TTL_MS[provider] || DEFAULT_CACHE_TTL_MS;
+    const ttl = entry.ttlMs || PROVIDER_CACHE_TTL_MS[providerKey] || DEFAULT_CACHE_TTL_MS;
     const now = Date.now();
     entry.lastUsedAt = now;
     entry.expiresAt = now + ttl;
-    if (connectionId) entry.connectionId = connectionId;
+    // Re-insert to move this pin to the most-recently-used end of the Map, so the
+    // capacity eviction below drops a cold conversation instead of a live one.
+    affinityStore.delete(storeKey);
+    affinityStore.set(storeKey, entry);
+    if (connectionId && connectionId !== entry.connectionId) {
+      entry.connectionId = connectionId;
+      persistAffinity(storeKey, entry, true);
+    } else {
+      persistAffinity(storeKey, entry);
+    }
   } else if (connectionId) {
     setAffinityConnection(provider, convKey, connectionId);
   }
@@ -191,6 +291,12 @@ export function touchAffinity(provider, convKey, connectionId) {
  */
 export function clearAffinity(provider, convKey) {
   if (!provider || !convKey) return;
-  const storeKey = `${provider}:${convKey}`;
+  const storeKey = `${affinityProvider(provider)}:${convKey}`;
   affinityStore.delete(storeKey);
+  // Delete unconditionally: the entry may already have been swept from memory while
+  // its row was still in the database, and a resurrected wrong pin causes a 403 later.
+  forgetAffinity(storeKey);
 }
+
+// Boot: rebuild the pins that were live before the last restart.
+void hydrateAffinity();

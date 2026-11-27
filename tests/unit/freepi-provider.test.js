@@ -671,3 +671,65 @@ test("FreePI output-budget floor (empty responses)", async (t) => {
     assert.ok(src.includes("clampFreePiMaxTokens(base)"), "override must run the clamp");
   });
 });
+
+test("FreePI conversation-pin mismatch asks for another account without a cooldown", async (t) => {
+  const { checkFallbackError } = await import("../../open-sse/services/accountFallback.js");
+
+  await t.test("mismatch is retryable and cools nothing down", () => {
+    const decision = checkFallbackError(
+      403,
+      '{"error":{"message":"This conversation belongs to another free-pi account. Sharing or rotating accounts isn\'t allowed; use one account per person."}}',
+      0,
+      "freepi",
+    );
+    assert.equal(decision.shouldFallback, true);
+    assert.equal(decision.cooldownMs, 0);
+    assert.equal(decision.shouldLock, false, "the account is healthy");
+    assert.equal(decision.retryOther, true, "the caller must try a different account");
+  });
+
+  await t.test("other request-scoped FreePI refusals still stop the request", () => {
+    for (const text of ["queue_overflow", "queue_timeout", "model_requires_credits"]) {
+      const decision = checkFallbackError(429, text, 0, "freepi");
+      assert.equal(decision.shouldLock, false);
+      assert.ok(!decision.retryOther, `${text} must not rotate accounts`);
+    }
+  });
+
+  await t.test("the executor-side chat guard lets a mismatch rotate", () => {
+    const chatSrc = fs.readFileSync(path.join(rootDir, "src/sse/handlers/chat.js"), "utf8");
+    assert.ok(chatSrc.includes("pinMismatch"), "chat.js must special-case the pin mismatch");
+    assert.ok(
+      /isFreepi && conversationKey && !pinMismatch/.test(chatSrc),
+      "the mid-conversation rotation guard must exempt a mismatch"
+    );
+  });
+});
+
+test("FreePI affinity keys survive provider aliases", async (t) => {
+  const src = fs.readFileSync(path.join(rootDir, "src/sse/services/conversationAffinity.js"), "utf8");
+
+  await t.test("every entry point normalizes the provider before building a key", () => {
+    const raw = [...src.matchAll(/`\$\{provider\}:\$\{convKey\}`/g)].length;
+    assert.equal(raw, 0, "no caller may key affinity by the raw provider alias");
+    assert.equal(
+      [...src.matchAll(/`\$\{affinityProvider\(provider\)\}:\$\{convKey\}`/g)].length, 2,
+      "get and clear must use the normalized key"
+    );
+    assert.equal(
+      [...src.matchAll(/`\$\{providerKey\}:\$\{convKey\}`/g)].length, 2,
+      "set and touch must use the normalized key"
+    );
+  });
+
+  await t.test("the alias resolver is actually wired in", () => {
+    assert.ok(src.includes('from "@/shared/constants/providers.js"'), "resolveProviderId must be imported");
+    assert.ok(src.includes("function affinityProvider("), "one normalizer, not four copies");
+  });
+
+  await t.test("clearing always reaches the database, even if memory was swept", () => {
+    assert.ok(/affinityStore\.delete\(storeKey\);\n  \/\/ Delete unconditionally/.test(src),
+      "clearAffinity must not depend on the in-memory hit");
+    assert.ok(src.includes("forgetAffinity(k)"), "the sweeper must drop the persisted copy");
+  });
+});

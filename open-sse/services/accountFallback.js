@@ -36,7 +36,11 @@ export function checkFallbackError(status, errorText, backoffLevel = 0, provider
     if (!textHit && !statusHit) continue;
 
     // `lock: false` = the caller's request was wrong, not the account's.
-    if (rule.lock === false) return { shouldFallback: true, cooldownMs: 0, shouldLock: false };
+    // `retryOther` = no cooldown, but this account is the wrong one for the request,
+    // so the caller should try another account (FreePI conversation pinning).
+    if (rule.lock === false) {
+      return { shouldFallback: true, cooldownMs: 0, shouldLock: false, retryOther: Boolean(rule.retryOther) };
+    }
 
     if (rule.backoff) {
       const newLevel = Math.min(backoffLevel + 1, BACKOFF_CONFIG.maxLevel);

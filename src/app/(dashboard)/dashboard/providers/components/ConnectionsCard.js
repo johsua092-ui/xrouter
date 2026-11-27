@@ -406,7 +406,13 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-text-muted font-medium">Strategy</span>
             <select
-              value={providerStrategy || "fill-first"}
+              value={
+                providerId === "freepi"
+                  ? providerStrategy === "round-robin"
+                    ? "least-loaded"
+                    : providerStrategy || "fill-first"
+                  : providerStrategy || "fill-first"
+              }
               onChange={(e) => {
                 const value = e.target.value;
                 const strategy = value === "fill-first" ? null : value;
@@ -416,7 +422,7 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
               className="px-2 py-1 text-xs border border-border rounded-md bg-background focus:outline-none focus:border-primary"
             >
               <option value="fill-first">Fill first</option>
-              <option value="round-robin">Round robin</option>
+              {providerId !== "freepi" && <option value="round-robin">Round robin</option>}
               <option value="least-loaded">Slot-aware (least loaded)</option>
             </select>
             {providerStrategy === "round-robin" && (
