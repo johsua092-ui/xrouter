@@ -55,6 +55,7 @@
 - Real-time pool telemetry endpoint `GET /api/providers/freepi/stats` and provider dashboard status panel.
 - Account dispatch strategy selector (`fill-first`, `round-robin`, `least-loaded` / slot-aware).
 - Selection-time slot reservation (`reserveFreePiSlot`) with TTL to eliminate account selection race conditions.
+- The standalone dashboard pool card was reverted again (`5958462e`, 141 deletions): telemetry lives in the connection list and the stats endpoint, the strategy selector stays.
 - Tunable post-stream settling delay via `FREEPI_SETTLING_DELAY_MS`.
 
 ### Fixed — Documentation

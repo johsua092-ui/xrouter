@@ -75,6 +75,7 @@
 - **Provider Dashboard UI & Strategy Selector**:
   - Added account pool status indicators (`idle`, `busy`, `rate_limited`, `needs_reauth`) and queue count meters to the FreePI provider management page.
   - Added interactive dispatch strategy selector: `fill-first`, `round-robin`, and `least-loaded` (slot-aware).
+  - The standalone pool card added in this wave was reverted again (`5958462e`, 141 lines across `dashboard/providers/[id]/page.js` and `ProvidersCard` siblings) — queue and account telemetry now stays in the connection list plus `GET /api/providers/freepi/stats`; only the strategy selector ships.
 - **Selection-Time Slot Reservation**:
   - Implemented `reserveFreePiSlot(token, ttlMs = 5000)` to mark accounts as reserved during connection selection, preventing race conditions where multiple parallel requests pick the same idle account before dispatch.
 - **Tunable Post-Stream Settling Delay**:
