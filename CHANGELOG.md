@@ -1,5 +1,16 @@
 # v0.1.1 (2026-11-28)
 
+### Bug Fix — JetBrains Executor: `content: null` Round-Trips and Unsupported-Parameter 400s
+
+- **Symptom** — coding agents pointed at `jetbrains/gpt-6-luna` died on the second turn of every tool loop with `[400]: Invalid value for 'content': expected a string, got null.` OpenCode additionally failed on its very first request with `Unsupported parameter: 'top_p'`, `Unsupported value: 'temperature' does not support 0.2 with this model`, and `Unsupported parameter: 'stop'`.
+- **Root cause** — the upstream `api.jetbrains.ai` OpenAI surface validates message and parameter schema far more strictly than OpenAI itself, while agent clients (T3 Code, OpenCode, any OpenAI-compatible harness) legitimately emit `assistant.content: null` alongside `tool_calls`, `role: "tool"` messages with `content: null`, and their own default sampling parameters. The executor passed the body through untouched, so a single null field — semantically identical to an empty string — killed an otherwise valid turn and burned a fallback cycle.
+- **Fix** — `open-sse/executors/jetbrains.js` (`transformRequest`):
+  - Every message `content` is normalised to a real string before the request leaves the router: `null`/`undefined` → `""`, missing key → `""`, non-string scalars coerced, and array content rebuilt by dropping null parts and replacing `{type: "text", text: null}` with `""`. `tool_calls`, `tool_call_id` and role ordering are left exactly as the client sent them.
+  - Parameters verified unsupported on this model are stripped instead of forwarded: `top_p`, `stop`, `logprobs`, `top_logprobs`, `modalities`, `audio`.
+  - `temperature` is dropped unless it is exactly the only accepted value (`1`); `metadata` is dropped unless `store === true`; `parallel_tool_calls` is dropped when the request carries no tools.
+  - Existing behaviour kept intact: `max_tokens` → `max_completion_tokens` with the 4096 floor, `stream_options.include_usage: true` on streaming, `reasoning_effort: "none"` when tools are present, and the 922K input ceiling guard.
+- **Verified by** — live probes against `http://127.0.0.1:20128` on `jetbrains/gpt-6-luna` after `next build` + service restart: OpenAI null-content tool round-trip **200**, assistant `content` key omitted **200**, OpenCode-style parameter bundle (`temperature 0.2` + `top_p` + `stop` + `metadata` + `parallel_tool_calls`) **200**, `parallel_tool_calls` without tools **200**, streaming null-content tool round-trip **200**, Anthropic `/v1/messages` `tool_use`/`tool_result` with `content: null` **200**, and a full loop returning `finish_reason: "stop"` with the tool's answer as final text. Pre-patch baseline reproduced the upstream 400 for the same payloads.
+
 ### Feature — JetBrains AI (Grazie) Provider & `gpt-6-luna` (1.05M Context)
 
 - **Overview** — Integrated JetBrains AI (Grazie / Junie) as a first-class provider in XRouter under alias `jb` (also accepting `jetbrains`, `grazie`, `junie`), providing access to `gpt-6-luna` with a 1.05M token total context window and 922K tokens input capacity.

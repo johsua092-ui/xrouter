@@ -109,6 +109,54 @@ export class JetBrainsExecutor extends BaseExecutor {
       };
     }
 
+    // Upstream validates message fields strictly: '[400] Invalid value for content:
+    // expected a string, got null'. Coding agents (T3 Code, OpenCode) send
+    // content: null on assistant tool-call turns and on tool results, so coerce
+    // every message to a real string before it leaves here.
+    if (Array.isArray(payload.messages)) {
+      payload.messages = payload.messages.map((msg) => {
+        if (!msg || typeof msg !== "object") return msg;
+        let content = msg.content;
+        if (content === null || content === undefined) {
+          content = "";
+        } else if (Array.isArray(content)) {
+          const parts = [];
+          for (const part of content) {
+            if (part === null || part === undefined) continue;
+            if (typeof part === "string") { parts.push(part); continue; }
+            if (typeof part === "object" && "text" in part) {
+              parts.push({ ...part, text: part.text === null || part.text === undefined ? "" : String(part.text) });
+              continue;
+            }
+            parts.push(part);
+          }
+          content = parts;
+        } else if (typeof content !== "string") {
+          content = String(content);
+        }
+        return content === msg.content ? msg : { ...msg, content };
+      });
+    }
+
+    // The upstream only serves these params; anything else is a hard 400 and would
+    // kill an otherwise valid agent turn. Verified against api.jetbrains.ai.
+    delete payload.top_p;
+    delete payload.logprobs;
+    delete payload.top_logprobs;
+    delete payload.stop;
+    delete payload.modalities;
+    delete payload.audio;
+
+    // 'temperature' only supports the default value (1) on these models.
+    if (payload.temperature !== undefined && payload.temperature !== 1) {
+      delete payload.temperature;
+    }
+
+    // 'metadata' is only accepted together with store: true.
+    if (payload.metadata !== undefined && payload.store !== true) {
+      delete payload.metadata;
+    }
+
     // Upstream rejects function tools when reasoning_effort is not 'none' in /v1/chat/completions.
     // Strip empty tools array to avoid triggering unnecessary upstream validations.
     if (Array.isArray(payload.tools) && payload.tools.length === 0) {
@@ -122,6 +170,9 @@ export class JetBrainsExecutor extends BaseExecutor {
       (Array.isArray(payload.functions) && payload.functions.length > 0);
     if (hasTools) {
       payload.reasoning_effort = "none";
+    } else {
+      // Without tools the flag is an outright 400 from upstream.
+      delete payload.parallel_tool_calls;
     }
 
     return payload;
