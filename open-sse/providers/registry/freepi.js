@@ -68,5 +68,10 @@ export default {
     { id: "gemma-4-uncensored", name: "Gemma 4 Uncensored" },
     { id: "glm-4.7-flash-heretic", name: "GLM 4.7 Flash Heretic" },
     { id: "uncensored-1.2", name: "Uncensored 1.2" },
+    // Upstream catalogue 2026-11-28: three models the static list never had, so routing
+    // to them failed before it left the router (`model not found`).
+    { id: "deepseek-v4.1-flash-abliterated", name: "DeepSeek V4.1 Flash Abliterated" },
+    { id: "inkling-2-mini", name: "Inkling 2 Mini" },
+    { id: "ultra-ultra-fast-credits", name: "Ultra Ultra Fast (credits)" },
   ],
 };
