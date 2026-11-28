@@ -20,7 +20,7 @@ export class BaseExecutor {
   }
 
   getBaseUrls() {
-    return this.config.baseUrls || (this.config.baseUrl ? [this.config.baseUrl] : []);
+    return this.config?.baseUrls || (this.config?.baseUrl ? [this.config.baseUrl] : []);
   }
 
   getFallbackCount() {

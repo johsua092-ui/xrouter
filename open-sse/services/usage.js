@@ -28,6 +28,7 @@ import { getCommandCodeUsage } from "./usage/commandcode.js";
 import { getNousUsage } from "./usage/nous.js";
 import { getFreePiUsage } from "./usage/freepi.js";
 import { getAwsQuickUsage } from "./usage/aws-quick.js";
+import { getJetBrainsUsage } from "./usage/jetbrains.js";
 import {
   getIflowUsage,
   getOllamaUsage,
@@ -91,6 +92,10 @@ const USAGE_HANDLERS = {
   freepi: (c) => getFreePiUsage(c.accessToken || c.apiKey, c.proxyOptions),
   // accessToken is the Quick id_token; tenantUrl/wsHost/awsAccountId ride psd
   "aws-quick": (c) => getAwsQuickUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
+  jetbrains: (c) => getJetBrainsUsage(c, c.proxyOptions),
+  jb: (c) => getJetBrainsUsage(c, c.proxyOptions),
+  grazie: (c) => getJetBrainsUsage(c, c.proxyOptions),
+  junie: (c) => getJetBrainsUsage(c, c.proxyOptions),
 };
 
 // Qoder intl/CN share one usage path: PATs must be exchanged to a job token

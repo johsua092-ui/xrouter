@@ -34,6 +34,7 @@ import minimaxCode from "./minimax-code.js";
 import minimaxCodeGlobal from "./minimax-code-global.js";
 import nous from "./nous.js";
 import freepi from "./freepi.js";
+import jetbrains from "./jetbrains.js";
 
 // Provider configurations
 const PROVIDERS = {
@@ -67,6 +68,7 @@ const PROVIDERS = {
   "minimax-code-global": minimaxCodeGlobal,
   nous,
   freepi,
+  jetbrains,
 };
 
 export { PROVIDERS };

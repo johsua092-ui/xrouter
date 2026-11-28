@@ -157,7 +157,7 @@ export function buildOnStreamComplete({ provider, model, connectionId, apiKey, r
     // nothing was wrong while the caller received an empty body. Recording it
     // truthfully is what makes the failure findable; pipeWithDisconnect emits
     // the client-facing error frame.
-    const producedNothing = !contentObj?.content && !contentObj?.thinking &&
+    const producedNothing = !contentObj?.content && !contentObj?.thinking && !contentObj?.hasToolCalls &&
       !(usage?.completion_tokens > 0);
     const detailStatus = producedNothing ? "error" : "success";
 

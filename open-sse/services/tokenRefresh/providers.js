@@ -921,4 +921,90 @@ export async function refreshZcodeToken(refreshToken, credentials, log) {
   return refreshGlmToken(refreshToken, credentials, log);
 }
 
+export async function refreshJetBrainsToken(refreshToken, credentials, log) {
+  if (!refreshToken) return null;
+  return dedupRefresh("jetbrains", refreshToken, async () => {
+    try {
+      const res = await fetch("https://oauth.account.jetbrains.com/oauth2/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: "junie-cli",
+          refresh_token: refreshToken,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        log?.warn?.("TOKEN_REFRESH", `JetBrains refresh failed: ${res.status} ${txt}`);
+        return null;
+      }
+
+      const tokens = await res.json();
+      const idToken = tokens.id_token;
+      let grazieJwt = credentials?.providerSpecificData?.grazieJwt || null;
+      let licenseId = credentials?.providerSpecificData?.licenseId || null;
+
+      if (idToken) {
+        try {
+          const liteRes = await fetch("https://api.jetbrains.ai/auth/jetbrains-jwt/license/obtain/grazie-lite", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${idToken}`,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: "{}",
+            signal: AbortSignal.timeout(15000),
+          });
+          if (liteRes.ok) {
+            const liteJson = await liteRes.json();
+            licenseId = liteJson.license?.licenseId || licenseId;
+            grazieJwt = liteJson.token || null;
+            if (!grazieJwt && licenseId) {
+              const pRes = await fetch("https://api.jetbrains.ai/auth/jetbrains-jwt/provide-access/license/v2", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${idToken}`,
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                body: JSON.stringify({ licenseId }),
+                signal: AbortSignal.timeout(15000),
+              });
+              if (pRes.ok) {
+                const pData = await pRes.json().catch(() => null);
+                grazieJwt = pData?.token || null;
+              }
+            }
+          }
+        } catch (e) {
+          log?.warn?.("TOKEN_REFRESH", `JetBrains grazie-lite exchange warning: ${e.message}`);
+        }
+      }
+
+      return {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token || refreshToken,
+        idToken: tokens.id_token,
+        expiresIn: tokens.expires_in,
+        providerSpecificData: {
+          ...(credentials?.providerSpecificData || {}),
+          licenseId: licenseId || "GZL",
+          grazieJwt: grazieJwt || credentials?.providerSpecificData?.grazieJwt,
+        },
+      };
+    } catch (e) {
+      log?.warn?.("TOKEN_REFRESH", `JetBrains refresh exception: ${e.message}`);
+      return null;
+    }
+  }, log);
+}
+
+
 

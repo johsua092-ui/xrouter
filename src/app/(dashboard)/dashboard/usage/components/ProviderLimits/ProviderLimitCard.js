@@ -47,6 +47,9 @@ export default function ProviderLimitCard({
       qoder: "#EC4899",
       "qoder-cn": "#EC4899",
       claude: "#D97757",
+      jetbrains: "#7FFA8F",
+      jb: "#7FFA8F",
+      junie: "#7FFA8F",
     };
     return colors[provider?.toLowerCase()] || "#6B7280";
   };
@@ -65,7 +68,7 @@ export default function ProviderLimitCard({
             style={{ backgroundColor: `${providerColor}15` }}
           >
             <ProviderIcon
-              src={`/providers/${provider}.png`}
+              providerId={provider}
               alt={provider || "Provider"}
               size={40}
               className="object-contain rounded-lg"

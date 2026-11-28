@@ -49,6 +49,11 @@ import {
   getAwsQuickSessionResult,
   clearAwsQuickSession,
   pasteAwsQuickUrl,
+  startJetbrainsProxy,
+  stopJetbrainsProxy,
+  registerJetbrainsSession,
+  getJetbrainsSessionStatus,
+  clearJetbrainsSession,
 } from "@/lib/oauth/utils/server";
 import { detectIdeInstalled } from "@/lib/oauth/utils/ideDetect";
 import { ZED_HOSTED_CONFIG } from "@/lib/oauth/constants/oauth";
@@ -167,17 +172,22 @@ export async function GET(request, { params }) {
         });
       }
 
-      const redirectUri = searchParams.get("redirect_uri") || (() => {
-        const configuredBase = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
-        if (configuredBase && !configuredBase.includes("localhost") && !configuredBase.includes("127.0.0.1")) {
-          return `${configuredBase.replace(/\/$/, "")}/callback`;
-        }
-        const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
-        const proto = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : request.url.split(":")[0]);
-        const isLocal = host.includes("localhost") || host.includes("127.0.0.1") || host.includes("[::1]");
-        if (!isLocal && host) return `${proto}://${host}/callback`;
-        return `${new URL(request.url).origin}/callback`;
-      })();
+      let redirectUri = searchParams.get("redirect_uri");
+      if (provider === "jetbrains" && (!redirectUri || !redirectUri.includes("localhost:62345"))) {
+        redirectUri = "http://localhost:62345";
+      } else if (!redirectUri) {
+        redirectUri = (() => {
+          const configuredBase = process.env.PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
+          if (configuredBase && !configuredBase.includes("localhost") && !configuredBase.includes("127.0.0.1")) {
+            return `${configuredBase.replace(/\/$/, "")}/callback`;
+          }
+          const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
+          const proto = request.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : request.url.split(":")[0]);
+          const isLocal = host.includes("localhost") || host.includes("127.0.0.1") || host.includes("[::1]");
+          if (!isLocal && host) return `${proto}://${host}/callback`;
+          return `${new URL(request.url).origin}/callback`;
+        })();
+      }
       // Collect provider-specific meta params (e.g. gitlab passes baseUrl, clientId, clientSecret)
       const reservedParams = new Set(["redirect_uri"]);
       const meta = {};
@@ -222,6 +232,18 @@ export async function GET(request, { params }) {
         const result = await startAwsQuickProxy();
         return NextResponse.json(result);
       }
+      if (provider === "jetbrains") {
+        const appPort = searchParams.get("app_port") || 62345;
+        const state = searchParams.get("state");
+        const codeVerifier = searchParams.get("code_verifier");
+        const redirectUri = searchParams.get("redirect_uri");
+        const result = await startJetbrainsProxy(Number(appPort));
+        let serverSide = false;
+        if (result.success && state && codeVerifier && redirectUri) {
+          serverSide = registerJetbrainsSession({ state, codeVerifier, redirectUri });
+        }
+        return NextResponse.json({ ...result, serverSide });
+      }
       if (!["codex", "xai"].includes(provider)) {
         return NextResponse.json({ error: "Proxy only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo/aws-quick" }, { status: 400 });
       }
@@ -257,7 +279,8 @@ export async function GET(request, { params }) {
       else if (provider === "codex") session = getCodexSessionStatus(state);
       else if (provider === "xiaomi-mimo") session = getXiaomiMimoSessionStatus(state);
       else if (provider === "aws-quick") session = getAwsQuickSessionStatus(state);
-      else return NextResponse.json({ error: "Poll only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo/aws-quick" }, { status: 400 });
+      else if (provider === "jetbrains") session = getJetbrainsSessionStatus(state);
+      else return NextResponse.json({ error: "Poll only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo/aws-quick/jetbrains" }, { status: 400 });
       if (!session) return NextResponse.json({ status: "unknown" });
       if (session.status === "done" || session.status === "error") {
         const payload = { ...session };
@@ -285,6 +308,7 @@ export async function GET(request, { params }) {
         else if (provider === "windsurf") clearWindsurfSession(state);
         else if (provider === "zed") clearZedSession(state);
         else if (provider === "xai") clearXaiSession(state);
+        else if (provider === "jetbrains") clearJetbrainsSession(state);
         else clearCodexSession(state);
         return NextResponse.json(payload);
       }
@@ -299,7 +323,8 @@ export async function GET(request, { params }) {
       else if (provider === "codex") stopCodexProxy();
       else if (provider === "xiaomi-mimo") stopXiaomiMimoProxy();
       else if (provider === "aws-quick") stopAwsQuickProxy();
-      else return NextResponse.json({ error: "Proxy only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo/aws-quick" }, { status: 400 });
+      else if (provider === "jetbrains") stopJetbrainsProxy();
+      else return NextResponse.json({ error: "Proxy only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo/aws-quick/jetbrains" }, { status: 400 });
       return NextResponse.json({ success: true });
     }
 

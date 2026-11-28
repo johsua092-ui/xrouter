@@ -1,0 +1,56 @@
+export default {
+  id: "jetbrains",
+  priority: 95,
+  alias: "jb",
+  aliases: ["jetbrains", "grazie", "junie"],
+  uiAlias: "jb",
+  display: {
+    name: "JetBrains AI (Grazie)",
+    icon: "terminal",
+    color: "#7FFA8F",
+    textIcon: "JB",
+    website: "https://www.jetbrains.com/ai/",
+    notice: {
+      signupUrl: "https://account.jetbrains.com",
+    },
+  },
+  category: "oauth",
+  authType: "oauth",
+  authModes: ["oauth"],
+  hasOAuth: true,
+  hasFree: true,
+  features: {
+    usage: true,
+    streaming: true,
+  },
+  transport: {
+    baseUrl: "https://api.jetbrains.ai/user/v5/llm/openai/v1/chat/completions",
+    headers: {
+      "Grazie-Agent": JSON.stringify({ name: "Pulse", version: "1" }),
+      "X-Forced-License-Free": "2",
+      "X-Accept-EAP-License": "false",
+      "X-Accept-Release-License": "false",
+    },
+  },
+  oauth: {
+    clientId: "junie-cli",
+    scope: "offline_access openid jb-authn-service",
+    authorizeUrl: "https://junie.jetbrains.com/cli-auth",
+    tokenUrl: "https://oauth.account.jetbrains.com/oauth2/token",
+    fixedPort: 62345,
+    callbackPath: "/",
+    codeChallengeMethod: "S256",
+  },
+  models: [
+    {
+      id: "gpt-6-luna",
+      name: "GPT-6 Luna (1.05M Context)",
+      isFree: true,
+      contextLength: 1050000,
+      maxInputTokens: 922000,
+      maxResponseTokens: 128000,
+      pricing: { prompt: "0", completion: "0" },
+    },
+  ],
+  passthroughModels: false,
+};

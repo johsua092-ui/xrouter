@@ -1,3 +1,32 @@
+# v0.1.1 (2026-11-28)
+
+### Feature — JetBrains AI (Grazie) Provider & `gpt-6-luna` (1.05M Context)
+
+- **Overview** — Integrated JetBrains AI (Grazie / Junie) as a first-class provider in XRouter under alias `jb` (also accepting `jetbrains`, `grazie`, `junie`), providing access to `gpt-6-luna` with a 1.05M token total context window and 922K tokens input capacity.
+- **Authentication & OAuth PKCE** —
+  - `src/lib/oauth/constants/oauth.js` & `src/lib/oauth/providers/jetbrains.js`: Implemented OAuth 2.0 PKCE flow (`client_id: "junie-cli"`, scope `offline_access openid jb-authn-service`).
+  - Upstream redirect whitelist enforces loopback on port `62345` with path `/`. Added dedicated proxy lifecycle handlers `startJetbrainsProxy` / `stopJetbrainsProxy` in `src/lib/oauth/utils/server.js`, routed via `/api/oauth/jetbrains/start-proxy` and polled in `OAuthModal.js`.
+  - Automated `postExchange` flow exchanges user ID token for Grazie-Lite license (`GZL`) and JWT at `https://api.jetbrains.ai/auth/jetbrains-jwt/license/obtain/grazie-lite`.
+  - Added instant dual-channel callback dispatch (`BroadcastChannel("oauth_callback")`, `window.opener.postMessage`, `localStorage`) via `renderJetbrainsSuccessPage` and handled `status: "done"` in `OAuthModal.js` to ensure the modal closes with zero latency when the popup completes.
+  - Sits on `globalThis.__jetbrainsOAuthRuntime` with 10-minute session TTL pruning to avoid memory accumulation from abandoned auth attempts.
+  - Registered `stopJetbrainsProxy` in `route.js` on `action === "stop-proxy"` for immediate socket cleanup upon modal cancellation.
+- **Runtime & Execution (`open-sse`)** —
+  - `open-sse/providers/registry/jetbrains.js`: Registered `jetbrains` provider with model `gpt-6-luna` (`category: "oauth"`, `hasOAuth: true`, `hasFree: true`).
+  - `open-sse/executors/jetbrains.js`: `JetBrainsExecutor` with transport to `https://api.jetbrains.ai/user/v5/llm/openai/v1/chat/completions`.
+  - Normalizes `max_tokens` into `max_completion_tokens` (minimum 4096 floor to safeguard reasoning token budgets).
+  - Injects `stream_options.include_usage: true` when streaming.
+  - Injects required headers: `Grazie-Agent`, `X-Forced-License-Free: "2"`, and `Grazie-Authenticate-JWT`.
+  - Pre-flight context guard enforces the 922,000 input tokens ceiling (~5.2M characters) and immediately returns a non-penalizing `400 invalid_request_error` without triggering connection backoff or locking.
+  - Empty stream resolution: Injects `reasoning_effort: "none"` on requests with tools to satisfy upstream JetBrains constraints against concurrent tool-use and active reasoning, and updated `hasValuableContent` in `streamHelpers.js` to safeguard usage SSE chunks.
+- **Quota & Usage** —
+  - `open-sse/services/usage/jetbrains.js`: Implemented `getJetBrainsUsage` query pipeline reading local daily token metrics (`usageDaily` and `usageHistory`) by connection ID, eliminating the "Usage API not implemented for jetbrains" error and updating live in `/dashboard/quota`.
+  - Added official Junie green SVG and PNG logos (`public/providers/jetbrains.svg`, `jetbrains.png`) integrated into `ProviderLimitCard.js` and `providerIcon.js`.
+- **Token Refresh & Hardening** —
+  - `open-sse/services/tokenRefresh/providers.js`: Implemented `refreshJetBrainsToken` with automatic Grazie JWT renewal.
+  - Armed all refresh and token-exchange fetch calls with `signal: AbortSignal.timeout(15000)` to guard against hung sockets, promise retention in `dedupRefresh`, lock deadlocks, and background scheduler stalls.
+  - `src/app/api/providers/[id]/test/testUtils.js`: Added `jetbrains` to `OAUTH_TEST_CONFIG` supporting one-click connection tests in the UI.
+- **Verified by** Next.js Turbopack build, asset replication, and live API completion tests on `http://localhost:20128/api/v1/chat/completions` (both non-streaming and streaming SSE chunks with tools).
+
 # v0.1.1 (2026-11-27)
 
 ### Bug Fix — Providers UI: Prevent Removed Upstream Models From Keeping Stale `FREE` Badges

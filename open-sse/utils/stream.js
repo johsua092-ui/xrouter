@@ -123,6 +123,7 @@ export function createSSEStream(options = {}) {
   let totalContentLength = 0;
   let accumulatedContent = "";
   let accumulatedThinking = "";
+  let hasToolCalls = false;
   let ttftAt = null;
   let sseLineCount = 0;
   let sseEmittedCount = 0;
@@ -158,7 +159,8 @@ export function createSSEStream(options = {}) {
     if (onStreamComplete) {
       onStreamComplete({
         content: accumulatedContent,
-        thinking: accumulatedThinking
+        thinking: accumulatedThinking,
+        hasToolCalls
       }, finalUsage, ttftAt);
     }
   };
@@ -273,6 +275,7 @@ export function createSSEStream(options = {}) {
               const delta = parsed.choices?.[0]?.delta;
               const content = delta?.content;
               const reasoning = delta?.reasoning_content || delta?.thought || delta?.reasoning;
+              const toolCalls = delta?.tool_calls;
               if (content && typeof content === "string") {
                 totalContentLength += content.length;
                 accumulatedContent += content;
@@ -280,6 +283,10 @@ export function createSSEStream(options = {}) {
               if (reasoning && typeof reasoning === "string") {
                 totalContentLength += reasoning.length;
                 accumulatedThinking += reasoning;
+              }
+              if (toolCalls && Array.isArray(toolCalls) && toolCalls.length > 0) {
+                hasToolCalls = true;
+                totalContentLength += JSON.stringify(toolCalls).length;
               }
 
               // Also accumulate content and usage for Gemini / Antigravity passthrough chunks
