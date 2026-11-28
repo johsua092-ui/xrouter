@@ -39,16 +39,23 @@ export function parseSSELine(line, format = null) {
 
 // Check if chunk has valuable content (not empty)
 export function hasValuableContent(chunk, format) {
+  // Chunks containing usage stats are valuable metric frames (e.g. stream_options.include_usage)
+  if (chunk?.usage) return true;
+
   // OpenAI format
-  if (format === FORMATS.OPENAI && chunk.choices?.[0]?.delta) {
-    const delta = chunk.choices[0].delta;
-    return (delta.content && delta.content !== "") ||
-           (delta.reasoning_content && delta.reasoning_content !== "") ||
-           (delta.thought && delta.thought !== "") ||
-           (delta.reasoning && delta.reasoning !== "") ||
-           (delta.tool_calls && delta.tool_calls.length > 0) ||
-           chunk.choices[0].finish_reason ||
-           delta.role;
+  if (format === FORMATS.OPENAI) {
+    if (chunk.choices?.[0]?.delta) {
+      const delta = chunk.choices[0].delta;
+      return (delta.content && delta.content !== "") ||
+             (delta.reasoning_content && delta.reasoning_content !== "") ||
+             (delta.thought && delta.thought !== "") ||
+             (delta.reasoning && delta.reasoning !== "") ||
+             (delta.tool_calls && delta.tool_calls.length > 0) ||
+             chunk.choices[0].finish_reason ||
+             delta.role;
+    }
+    if (chunk.choices?.[0]?.finish_reason) return true;
+    return false;
   }
 
   // Claude format

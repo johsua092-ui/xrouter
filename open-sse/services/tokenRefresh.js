@@ -21,6 +21,7 @@ import {
   refreshNousToken,
   refreshGlmToken,
   refreshZcodeToken,
+  refreshJetBrainsToken,
   classifyOAuthRefreshError,
 } from "./tokenRefresh/providers.js";
 import { refreshAwsQuickToken } from "./tokenRefresh/aws-quick.js";
@@ -46,6 +47,7 @@ export {
   refreshNousToken,
   refreshGlmToken,
   refreshZcodeToken,
+  refreshJetBrainsToken,
   refreshAwsQuickToken,
   classifyOAuthRefreshError,
 };
@@ -175,6 +177,10 @@ const REFRESH_HANDLERS = {
   // Amazon Quick: AWS SSO OIDC with camelCase JSON body; RT rotates on every
   // refresh (returned merged — chatCore persists it via onCredentialsRefreshed).
   "aws-quick": (c, log) => refreshAwsQuickToken(c.refreshToken, c.providerSpecificData, log),
+  jetbrains: (c, log) => refreshJetBrainsToken(c.refreshToken, c, log),
+  jb: (c, log) => refreshJetBrainsToken(c.refreshToken, c, log),
+  grazie: (c, log) => refreshJetBrainsToken(c.refreshToken, c, log),
+  junie: (c, log) => refreshJetBrainsToken(c.refreshToken, c, log),
   vertex: vertexRefreshHandler,
   "vertex-partner": vertexRefreshHandler
 };

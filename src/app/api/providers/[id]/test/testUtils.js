@@ -225,6 +225,68 @@ const OAUTH_TEST_CONFIG = {
     },
     refreshable: false,
   },
+  jetbrains: {
+    checkExpiry: false,
+    refreshable: true,
+    customTest: async (connection, effectiveProxy) => {
+      try {
+        const token = connection.providerSpecificData?.grazieJwt || connection.accessToken;
+        if (!token) return { valid: false, error: "Missing JetBrains Grazie JWT token", refreshed: false };
+
+        const testRes = await fetchWithConnectionProxy(
+          "https://api.jetbrains.ai/user/v5/llm/openai/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Grazie-Agent": JSON.stringify({ name: "Pulse", version: "1" }),
+              "X-Forced-License-Free": "2",
+              "X-Accept-EAP-License": "false",
+              "X-Accept-Release-License": "false",
+              "Grazie-Authenticate-JWT": token,
+            },
+            body: JSON.stringify({
+              model: "gpt-6-luna",
+              messages: [{ role: "user", content: "ping" }],
+              max_completion_tokens: 1,
+              stream: false,
+            }),
+          },
+          effectiveProxy,
+        );
+
+        if (testRes && (testRes.ok || testRes.status === 200 || testRes.status === 400 || testRes.status === 429)) {
+          return { valid: true, error: null, refreshed: false, newTokens: null };
+        }
+
+        if (testRes && testRes.status === 401 && connection.refreshToken) {
+          const { refreshJetBrainsToken } = await import("open-sse/services/tokenRefresh/providers.js");
+          const refreshed = await refreshJetBrainsToken(connection, console);
+          if (refreshed?.accessToken) {
+            return {
+              valid: true,
+              error: null,
+              refreshed: true,
+              newTokens: {
+                accessToken: refreshed.accessToken,
+                refreshToken: refreshed.refreshToken,
+                expiresIn: refreshed.expiresIn,
+                providerSpecificData: {
+                  ...connection.providerSpecificData,
+                  ...(refreshed.providerSpecificData || {}),
+                },
+              },
+            };
+          }
+        }
+
+        const errText = testRes ? await testRes.text().catch(() => "") : "";
+        return { valid: false, error: `JetBrains returned ${testRes?.status}: ${errText}`.slice(0, 150), refreshed: false };
+      } catch (err) {
+        return { valid: false, error: err?.message || "JetBrains connection test error", refreshed: false };
+      }
+    },
+  },
   // Grok CLI / Grok Build — probe /v1/user (no inference quota). Headers mirror official CLI.
   "grok-cli": {
     url: PROVIDERS["grok-cli"]?.userUrl || "https://cli-chat-proxy.grok.com/v1/user",

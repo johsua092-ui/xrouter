@@ -7,8 +7,18 @@ import { getProviderIconSrc, markProviderIconMissing } from "@/shared/utils/prov
 import CustomCompatibleIcon from "@/shared/components/CustomCompatibleIcon";
 
 function resolveSrc(src, providerId) {
-  if (src) return src;
-  if (providerId) return getProviderIconSrc(providerId);
+  if (providerId) {
+    const iconSrc = getProviderIconSrc(providerId);
+    if (iconSrc) return iconSrc;
+  }
+  if (src) {
+    const match = src.match(/^\/providers\/([^.]+)\.(png|svg)/);
+    if (match) {
+      const iconSrc = getProviderIconSrc(match[1]);
+      if (iconSrc) return iconSrc;
+    }
+    return src;
+  }
   return null;
 }
 

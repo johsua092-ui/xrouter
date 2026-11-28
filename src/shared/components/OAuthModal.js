@@ -501,6 +501,8 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         redirectUri = "http://localhost:1455/auth/callback";
       } else if (provider === "xai") {
         redirectUri = "http://127.0.0.1:56121/callback";
+      } else if (provider === "jetbrains") {
+        redirectUri = "http://localhost:62345";
       } else if (provider === "antigravity" || provider === "gemini-cli") {
         // Google Client ID is registered only with localhost redirect_uri (Decolua original)
         redirectUri = `http://localhost:${appPort}/callback`;
@@ -560,11 +562,34 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         }
       }
 
-      setAuthData({ ...data, redirectUri, codexServerSide, xaiServerSide });
+      // JetBrains: fixed-port server-side proxy pattern on port 62345
+      let jetbrainsProxyActive = false;
+      let jetbrainsServerSide = false;
+      if (provider === "jetbrains") {
+        try {
+          const proxyUrl = new URL(`/api/oauth/jetbrains/start-proxy`, window.location.origin);
+          proxyUrl.searchParams.set("app_port", appPort || 62345);
+          proxyUrl.searchParams.set("state", data.state);
+          proxyUrl.searchParams.set("code_verifier", data.codeVerifier);
+          proxyUrl.searchParams.set("redirect_uri", redirectUri);
+          const proxyRes = await fetch(proxyUrl.toString());
+          const proxyData = await proxyRes.json();
+          jetbrainsProxyActive = proxyData.success;
+          jetbrainsServerSide = !!proxyData.serverSide;
+          if (!jetbrainsProxyActive && proxyData.reason === "port_busy") {
+            throw new Error("Port 62345 in use; close the conflicting process and retry");
+          }
+        } catch (e) {
+          if (e?.message) throw e;
+          jetbrainsProxyActive = false;
+        }
+      }
+
+      setAuthData({ ...data, redirectUri, codexServerSide, xaiServerSide, jetbrainsServerSide });
 
       // Take ownership of server-side proxies so close stops them exactly once
       // (replaces the per-provider stop branches; same behavior, one ledger).
-      if ((provider === "codex" && codexProxyActive) || (provider === "xai" && xaiProxyActive)) {
+      if ((provider === "codex" && codexProxyActive) || (provider === "xai" && xaiProxyActive) || (provider === "jetbrains" && jetbrainsProxyActive)) {
         flowRef.current.proxyStarted = true;
         flowRef.current.proxyProvider = provider;
         flowRef.current.stopSent = false;
@@ -589,6 +614,12 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
           setStep("input");
         }
       } else if (provider === "xai" && xaiProxyActive) {
+        setStep("waiting");
+        popupRef.current = window.open(data.authUrl, "oauth_popup", "width=600,height=700");
+        if (!popupRef.current) {
+          setStep("input");
+        }
+      } else if (provider === "jetbrains" && jetbrainsProxyActive) {
         setStep("waiting");
         popupRef.current = window.open(data.authUrl, "oauth_popup", "width=600,height=700");
         if (!popupRef.current) {
@@ -671,9 +702,11 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       ? "codex"
       : authData?.xaiServerSide
         ? "xai"
-        : authData?.proxyProvider
-          ? authData.proxyProvider
-          : null;
+        : authData?.jetbrainsServerSide
+          ? "jetbrains"
+          : authData?.proxyProvider
+            ? authData.proxyProvider
+            : null;
     if (!pollProvider || !authData?.state) return;
     if (callbackProcessedRef.current) return;
     let cancelled = false;
@@ -735,13 +768,21 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     // Handler for callback data - only process once
     const handleCallback = async (data) => {
       if (callbackProcessedRef.current) return; // Already processed
+      if (!data) return;
 
-      const { code, token, state, error: callbackError, errorDescription } = data;
+      const { code, token, state, error: callbackError, errorDescription, status } = data;
 
-      if (callbackError) {
+      if (callbackError || status === "error") {
         callbackProcessedRef.current = true;
-        setError(errorDescription || callbackError);
+        setError(errorDescription || callbackError || data.error || "Authentication failed");
         setStep("error");
+        return;
+      }
+
+      if (status === "done") {
+        callbackProcessedRef.current = true;
+        setStep("success");
+        onSuccessRef.current?.();
         return;
       }
 
@@ -839,6 +880,20 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         return;
       }
 
+      if (provider === "jetbrains" && input) {
+        let codeToUse = input;
+        let stateToUse = authData?.state || null;
+        if (input.includes("://") || input.includes("code=") || input.startsWith("/")) {
+          try {
+            const parsed = new URL(input.startsWith("http") ? input : `http://localhost:62345${input.startsWith("/") ? "" : "/"}${input}`);
+            codeToUse = parsed.searchParams.get("code") || codeToUse;
+            stateToUse = parsed.searchParams.get("state") || stateToUse;
+          } catch {}
+        }
+        await exchangeTokens(codeToUse, stateToUse);
+        return;
+      }
+
       // Trae/Windsurf/Zed proxy flow fallback (popup blocked): paste the full callback URL
       if (PROXY_OAUTH_PROVIDERS.has(provider) && input) {
         const res = await fetch(`/api/oauth/${provider}/exchange`, {
@@ -921,7 +976,9 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     ? "http://127.0.0.1:56121/callback?code=... or copied code"
     : isKimchiProvider
       ? `${placeholderUrl.replace("code=...", "token=...")} or copied token`
-      : placeholderUrl;
+      : provider === "jetbrains"
+        ? "http://localhost:62345/?code=... or authorization code"
+        : placeholderUrl;
 
   return (
     <Modal isOpen={isOpen} title={modalTitle} onClose={handleClose} size="lg">
@@ -1138,6 +1195,8 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
                     ? "If xAI shows a code instead of redirecting, paste that code here."
                     : isKimchiProvider
                       ? "After authorization, copy the full callback URL or token from your browser."
+                    : provider === "jetbrains"
+                      ? "After authorization, copy the full URL from your browser (e.g. http://localhost:62345/?code=...) or paste the authorization code."
                     : "After authorization, copy the full URL from your browser."}
                 </p>
                 <Input

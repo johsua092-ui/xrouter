@@ -208,7 +208,8 @@ export function startCodexProxy(appPort) {
       return;
     }
 
-    const server = http.createServer(async (req, res) => {
+    const createServer = globalThis.__origHttpCreateServer || http.createServer.bind(http);
+    const server = createServer(async (req, res) => {
       const url = new URL(req.url, "http://localhost");
 
       if (url.pathname !== "/callback" && url.pathname !== "/auth/callback") {
@@ -352,7 +353,8 @@ export function startXaiProxy(appPort) {
       return;
     }
 
-    const server = http.createServer(async (req, res) => {
+    const createServer = globalThis.__origHttpCreateServer || http.createServer.bind(http);
+    const server = createServer(async (req, res) => {
       const url = new URL(req.url, "http://localhost");
       if (url.pathname !== "/callback" && url.pathname !== "/auth/callback") {
         res.writeHead(404);
@@ -445,6 +447,251 @@ export function stopXaiProxy() {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// JetBrains AI (Grazie) fixed-port proxy on 127.0.0.1:62345
+// Handles PKCE loopback redirect from https://junie.jetbrains.com/cli-auth
+// Server + sessions live on globalThis so Next hot-reload neither duplicates
+// the listener nor drops pending login sessions.
+// ───────────────────────────────────────────────────────────────────────────
+
+const jetbrainsRuntime = (globalThis.__jetbrainsOAuthRuntime ??= {
+  server: null,
+  timeout: null,
+  sessions: new Map(), // state → session
+});
+const JETBRAINS_PROXY_TIMEOUT_MS = 300000; // 5 minutes
+const JETBRAINS_PROXY_PORT = 62345;
+
+function renderJetbrainsManualReceiptPage({ code, state, error, fullUrl }) {
+  if (error) {
+    return renderCodexResultPage(false, `JetBrains authorization failed: ${escapeHtml(error)}`);
+  }
+  const safeFullUrl = escapeHtml(fullUrl || "");
+  const safeCode = escapeHtml(code || "");
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>JetBrains AI Authorization</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #0f172a; color: #f8fafc; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 2rem; max-width: 520px; width: 90%; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    .icon { font-size: 2.5rem; margin-bottom: 0.75rem; color: #10b981; }
+    h1 { font-size: 1.35rem; margin: 0 0 0.5rem 0; font-weight: 600; }
+    p { color: #94a3b8; font-size: 0.875rem; margin: 0 0 1.25rem 0; line-height: 1.5; }
+    .input-box { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    input { flex: 1; padding: 0.65rem 0.75rem; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #fff; font-family: monospace; font-size: 0.8rem; }
+    button { padding: 0.65rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; font-size: 0.85rem; }
+    button:hover { background: #2563eb; }
+    .note { font-size: 0.75rem; color: #64748b; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✓</div>
+    <h1>JetBrains AI Authorized</h1>
+    <p>Copy the callback URL below and paste it into the XRouter modal:</p>
+    <div class="input-box">
+      <input type="text" id="cbUrl" value="${safeFullUrl}" readonly />
+      <button id="copyBtn" onclick="navigator.clipboard.writeText(document.getElementById('cbUrl').value); this.textContent='Copied!'">Copy URL</button>
+    </div>
+    ${safeCode ? `<div class="note">Authorization Code: <code style="color:#38bdf8;">${safeCode.slice(0, 16)}...</code></div>` : ""}
+  </div>
+  <script>
+    const payload = { code: "${escapeHtml(code || "")}", state: "${escapeHtml(state || "")}", fullUrl: window.location.href };
+    try {
+      const channel = new BroadcastChannel("oauth_callback");
+      channel.postMessage(payload);
+      channel.close();
+    } catch(e) {}
+    try {
+      if (window.opener) {
+        window.opener.postMessage({ type: "oauth_callback", data: payload }, "*");
+      }
+    } catch(e) {}
+    try {
+      localStorage.setItem("oauth_callback", JSON.stringify({ ...payload, timestamp: Date.now() }));
+    } catch(e) {}
+  </script>
+</body>
+</html>`;
+}
+
+function pruneExpiredJetbrainsSessions(now = Date.now()) {
+  const maxAgeMs = 10 * 60 * 1000; // 10 minutes TTL
+  for (const [state, session] of jetbrainsRuntime.sessions.entries()) {
+    if (!session.createdAt || now - session.createdAt > maxAgeMs) {
+      jetbrainsRuntime.sessions.delete(state);
+    }
+  }
+}
+
+function renderJetbrainsSuccessPage(email) {
+  const safeEmail = escapeHtml(email || "");
+  const msg = safeEmail ? `Signed in as ${safeEmail}. You can close this window.` : "JetBrains AI connected successfully! You can close this window.";
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>JetBrains AI Connected</title>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0f172a;color:#f8fafc}
+  .c{text-align:center;padding:2.5rem 2rem;background:#1e293b;border:1px solid #334155;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,.5);max-width:440px;width:90%}
+  .i{color:#10b981;font-size:3rem;line-height:1}
+  h1{margin:1rem 0 .5rem;font-size:1.35rem;font-weight:600}
+  p{color:#94a3b8;font-size:.875rem;margin:0 0 1rem;line-height:1.5}
+  .cd{font-size:.75rem;color:#64748b}
+</style>
+</head><body><div class="c">
+  <div class="i">&#10003;</div>
+  <h1>Authentication Successful</h1>
+  <p>${msg}</p>
+  <div class="cd">Closing in <span id="cd">3</span>s...</div>
+</div>
+<script>
+  const payload = { status: "done", provider: "jetbrains", email: "${safeEmail}" };
+  try {
+    const channel = new BroadcastChannel("oauth_callback");
+    channel.postMessage({ type: "oauth_callback", data: payload });
+    channel.postMessage(payload);
+    channel.close();
+  } catch(e) {}
+  try {
+    if (window.opener) {
+      window.opener.postMessage({ type: "oauth_callback", data: payload }, "*");
+    }
+  } catch(e) {}
+  try {
+    localStorage.setItem("oauth_callback", JSON.stringify({ ...payload, timestamp: Date.now() }));
+  } catch(e) {}
+  let n=3;const cd=document.getElementById("cd");
+  const t=setInterval(()=>{n--;if(cd)cd.textContent=n;if(n<=0){clearInterval(t);window.close();}},1000);
+</script>
+</body></html>`;
+}
+
+export function registerJetbrainsSession({ state, codeVerifier, redirectUri }) {
+  if (!state || !codeVerifier || !redirectUri) return false;
+  pruneExpiredJetbrainsSessions();
+  jetbrainsRuntime.sessions.set(state, {
+    codeVerifier,
+    redirectUri,
+    status: "pending",
+    createdAt: Date.now(),
+  });
+  return true;
+}
+
+export function getJetbrainsSessionStatus(state) {
+  return jetbrainsRuntime.sessions.get(state) || null;
+}
+
+export function clearJetbrainsSession(state) {
+  jetbrainsRuntime.sessions.delete(state);
+}
+
+export function startJetbrainsProxy(appPort) {
+  return new Promise((resolve) => {
+    if (jetbrainsRuntime.server) {
+      resolve({ success: true, port: JETBRAINS_PROXY_PORT });
+      return;
+    }
+
+    const createServer = globalThis.__origHttpCreateServer || http.createServer.bind(http);
+    const server = createServer(async (req, res) => {
+      const url = new URL(req.url, "http://localhost:62345");
+
+      if (url.pathname === "/favicon.ico") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      const errorParam = url.searchParams.get("error");
+      const session = state ? jetbrainsRuntime.sessions.get(state) : null;
+
+      if (session) {
+        try {
+          if (errorParam) {
+            throw new Error(url.searchParams.get("error_description") || errorParam);
+          }
+          if (!code) throw new Error("No authorization code received");
+
+          const { exchangeTokens } = await import("../providers/index.js");
+          const { createProviderConnection } = await import("@/models");
+
+          const tokenData = await exchangeTokens(
+            "jetbrains",
+            code,
+            session.redirectUri || `http://localhost:${JETBRAINS_PROXY_PORT}`,
+            session.codeVerifier,
+            state
+          );
+          const connection = await createProviderConnection({
+            provider: "jetbrains",
+            authType: "oauth",
+            ...tokenData,
+            expiresAt: tokenData.expiresIn
+              ? new Date(Date.now() + tokenData.expiresIn * 1000).toISOString()
+              : null,
+            testStatus: "active",
+          });
+
+          session.status = "done";
+          session.connectionId = connection.id;
+          session.email = connection.email;
+
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderJetbrainsSuccessPage(connection.email));
+        } catch (err) {
+          session.status = "error";
+          session.error = err.message;
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderCodexResultPage(false, err.message));
+        } finally {
+          stopJetbrainsProxy();
+        }
+        return;
+      }
+
+      // No session registered or manual paste flow:
+      // DO NOT 302 redirect to localhost:20128/callback!
+      // Render receipt page with full callback URL, code, copy button, and broadcast dispatch.
+      const fullCallbackUrl = `http://localhost:62345${req.url}`;
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(renderJetbrainsManualReceiptPage({ code, state, error: errorParam, fullUrl: fullCallbackUrl }));
+      stopJetbrainsProxy();
+    });
+
+    server.listen(JETBRAINS_PROXY_PORT, "127.0.0.1", () => {
+      jetbrainsRuntime.server = server;
+      jetbrainsRuntime.timeout = setTimeout(() => stopJetbrainsProxy(), JETBRAINS_PROXY_TIMEOUT_MS);
+      resolve({ success: true, port: JETBRAINS_PROXY_PORT });
+    });
+
+    server.on("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        resolve({ success: false, reason: "port_busy" });
+      } else {
+        resolve({ success: false, reason: err.message });
+      }
+    });
+  });
+}
+
+export function stopJetbrainsProxy() {
+  if (jetbrainsRuntime.timeout) {
+    clearTimeout(jetbrainsRuntime.timeout);
+    jetbrainsRuntime.timeout = null;
+  }
+  if (jetbrainsRuntime.server) {
+    try {
+      jetbrainsRuntime.server.close();
+    } catch {}
+    jetbrainsRuntime.server = null;
+  }
+  pruneExpiredJetbrainsSessions();
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Trae dynamic-port proxy. Singleton session (one connect at a time per provider).
 // Callback path = /callback with params refreshToken + loginHost.
 // ───────────────────────────────────────────────────────────────────────────
@@ -474,7 +721,8 @@ export function startTraeProxy() {
       resolve({ success: true, port: traeProxyPort, callbackUrl: `http://127.0.0.1:${traeProxyPort}${TRAE_CONFIG.callbackPath}` });
       return;
     }
-    const server = http.createServer(async (req, res) => {
+    const createServer = globalThis.__origHttpCreateServer || http.createServer.bind(http);
+    const server = createServer(async (req, res) => {
       const url = new URL(req.url, "http://localhost");
       if (url.pathname !== TRAE_CONFIG.callbackPath && url.pathname !== "/auth/callback") {
         res.writeHead(404);
@@ -578,7 +826,8 @@ export function startWindsurfProxy() {
       resolve({ success: true, port: windsurfProxyPort, callbackUrl: `http://127.0.0.1:${windsurfProxyPort}${WINDSURF_CONFIG.callbackPath}` });
       return;
     }
-    const server = http.createServer(async (req, res) => {
+    const createServer = globalThis.__origHttpCreateServer || http.createServer.bind(http);
+    const server = createServer(async (req, res) => {
       const url = new URL(req.url, "http://localhost");
       if (url.pathname !== WINDSURF_CONFIG.callbackPath) {
         res.writeHead(404);
@@ -688,7 +937,8 @@ export function startZedProxy(preferredPort = 0) {
       resolve({ success: true, port: zedProxyPort, callbackUrl: `http://127.0.0.1:${zedProxyPort}/` });
       return;
     }
-    const server = http.createServer(async (req, res) => {
+    const createServer = globalThis.__origHttpCreateServer || http.createServer.bind(http);
+    const server = createServer(async (req, res) => {
       const url = new URL(req.url, "http://localhost");
       // Log path + redacted params (access_token is the RSA-encrypted credential).
       const redacted = Object.fromEntries(url.searchParams);
@@ -872,7 +1122,8 @@ export function startXiaomiMimoProxy() {
       return;
     }
 
-    const server = http.createServer(async (req, res) => {
+    const createServer = globalThis.__origHttpCreateServer || http.createServer.bind(http);
+    const server = createServer(async (req, res) => {
       // Origin guard
       if (!isLoopbackOrigin(req.headers.origin)) {
         res.writeHead(403);
@@ -1310,7 +1561,8 @@ export function startAwsQuickProxy() {
       return;
     }
 
-    const server = http.createServer(async (req, res) => {
+    const createServer = globalThis.__origHttpCreateServer || http.createServer.bind(http);
+    const server = createServer(async (req, res) => {
       const url = new URL(req.url, "http://127.0.0.1");
       if (url.pathname === "/favicon.ico") {
         res.writeHead(204);

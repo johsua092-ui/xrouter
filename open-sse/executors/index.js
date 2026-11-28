@@ -34,6 +34,7 @@ import { AdcodeExecutor } from "./adcode.js";
 import { FreePiExecutor } from "./freepi.js";
 import { VeniceExecutor } from "./venice.js";
 import { AwsQuickExecutor } from "./aws-quick.js";
+import { JetBrainsExecutor } from "./jetbrains.js";
 
 const executors = {
   antigravity: new AntigravityExecutor(),
@@ -93,6 +94,10 @@ const executors = {
   veniceai: new VeniceExecutor(),
   "aws-quick": new AwsQuickExecutor(),
   aq: new AwsQuickExecutor(),
+  jetbrains: new JetBrainsExecutor(),
+  jb: new JetBrainsExecutor(),
+  grazie: new JetBrainsExecutor(),
+  junie: new JetBrainsExecutor(),
 };
 
 const defaultCache = new Map();
@@ -140,3 +145,4 @@ export { AdcodeExecutor } from "./adcode.js";
 export { FreePiExecutor } from "./freepi.js";
 export { VeniceExecutor } from "./venice.js";
 export { AwsQuickExecutor } from "./aws-quick.js";
+export { JetBrainsExecutor } from "./jetbrains.js";

@@ -1,3 +1,15 @@
+# v0.1.1 (2026-11-28)
+
+### Feature — JetBrains AI (Grazie) provider & `gpt-6-luna` (1.05M Context)
+
+- Feature: JetBrains AI (Grazie / Junie) registered as provider `jetbrains` (`jb`, `grazie`, `junie`) featuring model `gpt-6-luna` with 1.05M token total context window and 922K tokens input ceiling.
+- OAuth & Proxy: Implemented PKCE authorization flow on port `62345` with automated post-exchange Grazie-Lite license provisioning (`https://api.jetbrains.ai/auth/jetbrains-jwt/license/obtain/grazie-lite`). Added loopback proxy management in `server.js` with instant dual-channel callback dispatch (`BroadcastChannel`, `postMessage`, `localStorage`) and wired into `OAuthModal.js`.
+- Hardening & Lifecycle: Added 10-minute session TTL pruning to prevent abandoned auth leaks, wired `stopJetbrainsProxy` to `stop-proxy` route, and preserved `done` sessions for reliable poller consumption.
+- Executor: `JetBrainsExecutor` handles `max_tokens` → `max_completion_tokens` parameter transformation, injects `stream_options.include_usage: true`, applies headers (`Grazie-Agent`, `X-Forced-License-Free: "2"`, `Grazie-Authenticate-JWT`), enforces a 922K input token pre-flight guard returning HTTP 400, and injects `reasoning_effort: "none"` on tool-calling requests to prevent empty streams.
+- Token Refresh & Timeouts: Added `refreshJetBrainsToken` supporting ID token refresh and Grazie JWT renewal in `open-sse/services/tokenRefresh/providers.js` armed with `signal: AbortSignal.timeout(15000)`.
+- Quota & UI: Implemented `getJetBrainsUsage` reading local daily token metrics in `open-sse/services/usage/jetbrains.js` and added official Junie SVG/PNG icons to `ProviderLimitCard.js` and `providerIcon.js`. Added `jetbrains` to `OAUTH_TEST_CONFIG` in `testUtils.js`.
+- Verified by: `cmd.exe /c npx next build` (Turbopack), `node scripts/copy-standalone-assets.mjs`, live chat completions on `jb/gpt-6-luna` (HTTP 200 non-streaming and SSE streaming with tools).
+
 # v0.1.1 (2026-11-27)
 
 ### Fixed — Providers UI: drop stale `FREE` badges when upstream removes a model

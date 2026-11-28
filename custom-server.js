@@ -14,6 +14,7 @@ if (typeof globalThis !== "undefined") {
 }
 
 const origCreate = http.createServer.bind(http);
+globalThis.__origHttpCreateServer = origCreate;
 
 // Per-process secret proving x-9r-real-ip was stamped below rather than sent by the client.
 // A bare `next start` / `next dev` never loads this file, so it cannot produce a matching
@@ -358,6 +359,13 @@ http.createServer = (...args) => {
   const rest = args.filter((a) => typeof a !== "function");
   if (!handler) return origCreate(...args);
   const wrapped = (req, res) => {
+    // Dedicated loopback proxy listeners (e.g. JetBrains on 62345, Codex on 1455, xAI on 56121)
+    // are not the dashboard gateway — they must answer directly without running the dashboard auth guard.
+    const localPort = req.socket && req.socket.localPort;
+    const appPort = Number(process.env.PORT || 20128);
+    if (localPort && localPort !== appPort) {
+      return handler(req, res);
+    }
     const socketIp = req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : "";
     const cfIp = req.headers["cf-connecting-ip"];
     const xff = req.headers["x-forwarded-for"];

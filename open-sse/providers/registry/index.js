@@ -146,6 +146,7 @@ import p155 from "./ovh.js";
 import p156 from "./freepi.js";
 import p157 from "./venice.js";
 import p158 from "./aws-quick.js";
+import p159 from "./jetbrains.js";
 
 export default [
   p0,
@@ -296,4 +297,5 @@ export default [
   p156,
   p157,
   p158,
+  p159,
 ];
