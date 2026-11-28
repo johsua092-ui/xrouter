@@ -824,3 +824,39 @@ test("FreePI pin sentence arriving as a normal 200 is turned into a retryable 40
     assert.equal(decision.cooldownMs, 0, "and must not cool the account down");
   });
 });
+
+test("FreePI pin peek does not sit on a real turn, and never hangs a silent upstream", async (t) => {
+  const { peekStreamForPinMismatch } = await import("../../open-sse/executors/freepi.js");
+  const enc = new TextEncoder();
+
+  function sse(chunks, delayMs = 0) {
+    return new Response(new ReadableStream({
+      async start(c) {
+        if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+        for (const chunk of chunks) { c.enqueue(enc.encode(chunk)); }
+        c.close();
+      },
+    }), { status: 200, headers: { "content-type": "text/event-stream" } });
+  }
+
+  await t.test("reasoning deltas release the stream immediately", async () => {
+    const payload = [
+      'data: {"choices":[{"delta":{"reasoning_content":"Thinking about the request for a while before answering"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"Here is the answer, long enough to matter."}}]}\n\n',
+      "data: [DONE]\n\n",
+    ];
+    const t0 = Date.now();
+    const peek = await peekStreamForPinMismatch(sse(payload));
+    const text = await peek.response.text();
+    assert.equal(peek.matched, false, "reasoning is not the policy sentence");
+    assert.equal(text, payload.join(""), "every byte is replayed");
+    assert.ok(Date.now() - t0 < 1000, "no waiting for a cap that never fills");
+  });
+
+  await t.test("a silent upstream times out instead of hanging the request", async () => {
+    const peek = await peekStreamForPinMismatch(sse([], 40), 8192, 10);
+    assert.equal(peek.matched, false);
+    assert.equal(peek.timedOut, true, "the peek must give up");
+    assert.equal(await peek.response.text(), "", "and still hand back a usable stream");
+  });
+});
