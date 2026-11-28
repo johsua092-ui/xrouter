@@ -631,6 +631,8 @@ export function wrapStreamWithQueueLock(response, releaseLock, signal = null) {
 // sentence as the assistant message, instead of the 403 the API uses. A client then
 // renders it as the model's reply and repeats every turn. Match either shape.
 const PIN_MISMATCH_TEXT = "belongs to another free-pi account";
+// How long the peek may wait for the first byte before giving up and streaming normally.
+const PEEK_TIMEOUT_MS = 15000;
 
 export function syntheticPinMismatch() {
   return new Response(
@@ -651,7 +653,7 @@ export function syntheticPinMismatch() {
  * opened with the pin-mismatch sentence, hand back nothing so the caller can retry on
  * another account; otherwise return a stream that replays exactly what was read.
  */
-export async function peekStreamForPinMismatch(response, limit = 8192) {
+export async function peekStreamForPinMismatch(response, limit = 8192, timeoutMs = PEEK_TIMEOUT_MS) {
   if (!response.body) return { response, matched: false };
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -659,22 +661,50 @@ export async function peekStreamForPinMismatch(response, limit = 8192) {
   let text = "";
   let total = 0;
   let matched = false;
+  let pending = null;
+  let timedOut = false;
+
+  const withTimeout = () => {
+    let timer;
+    const guard = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("peek-timeout")), timeoutMs);
+      if (typeof timer.unref === "function") timer.unref();
+    });
+    return { guard, clear: () => clearTimeout(timer) };
+  };
+
   try {
     while (total < limit) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      total += value.byteLength;
-      text += decoder.decode(value, { stream: true });
+      const { guard, clear } = withTimeout();
+      let read;
+      try {
+        pending = reader.read();
+        read = await Promise.race([pending, guard]);
+      } catch {
+        // No first byte in time: stop peeking and let the normal streaming path report
+        // whatever comes next. The read stays in flight (never call read() twice on one
+        // reader) and the replay pump awaits it before continuing.
+        timedOut = true;
+        break;
+      } finally {
+        clear();
+      }
+      pending = null;
+      if (read.done) break;
+      chunks.push(read.value);
+      total += read.value.byteLength;
+      text += decoder.decode(read.value, { stream: true });
       if (text.includes(PIN_MISMATCH_TEXT)) {
         matched = true;
         break;
       }
-      // Real output started: stop peeking so a normal turn is not delayed.
-      if (/"content"\s*:\s*"[^"]{40,}/.test(text) || /"delta"\s*:\s*"[^"]{40,}/.test(text)) break;
+      // Anything the model actually wrote — reasoning or content — means this is a real
+      // turn, so stop sitting on the stream. Only a policy-only body stays quiet.
+      if (/"delta"\s*:\s*\{[^}]*"(content|reasoning_content|text)"\s*:\s*"[^"]{20,}/.test(text)) break;
+      if (/"content"\s*:\s*"[^"]{20,}/.test(text)) break;
     }
   } catch {
-    // A read error here only ends the peek; the replay stream reports it normally.
+    // A read error only ends the peek; the replay stream reports it normally.
   }
 
   if (matched) {
@@ -687,14 +717,16 @@ export async function peekStreamForPinMismatch(response, limit = 8192) {
       for (const chunk of chunks) controller.enqueue(chunk);
       (async () => {
         try {
+          // Finish the read that was still in flight when the peek stopped.
+          let next = pending ? await pending : null;
           for (;;) {
-            const { done, value } = await reader.read();
-            if (done) {
-              controller.close();
-              return;
+            if (next) {
+              if (next.done) break;
+              controller.enqueue(next.value);
             }
-            controller.enqueue(value);
+            next = await reader.read();
           }
+          controller.close();
         } catch (err) {
           try { controller.error(err); } catch {}
         }
@@ -704,6 +736,7 @@ export async function peekStreamForPinMismatch(response, limit = 8192) {
       try { reader.cancel(reason); } catch {}
     },
   });
+
   return {
     response: new Response(replay, {
       status: response.status,
@@ -711,6 +744,7 @@ export async function peekStreamForPinMismatch(response, limit = 8192) {
       headers: response.headers,
     }),
     matched: false,
+    timedOut,
   };
 }
 
