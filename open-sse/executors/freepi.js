@@ -626,6 +626,94 @@ export function wrapStreamWithQueueLock(response, releaseLock, signal = null) {
   }
 }
 
+
+// FreePI sometimes answers a request from the wrong account with 200 + this policy
+// sentence as the assistant message, instead of the 403 the API uses. A client then
+// renders it as the model's reply and repeats every turn. Match either shape.
+const PIN_MISMATCH_TEXT = "belongs to another free-pi account";
+
+export function syntheticPinMismatch() {
+  return new Response(
+    JSON.stringify({
+      error: {
+        message:
+          "This conversation belongs to another free-pi account. The router is switching to the account that owns it.",
+        type: "conversation_pin",
+        code: "conversation_pin",
+      },
+    }),
+    { status: 403, headers: { "content-type": "application/json" } },
+  );
+}
+
+/**
+ * Look at the first chunk(s) of a stream before the client sees them. If the upstream
+ * opened with the pin-mismatch sentence, hand back nothing so the caller can retry on
+ * another account; otherwise return a stream that replays exactly what was read.
+ */
+export async function peekStreamForPinMismatch(response, limit = 8192) {
+  if (!response.body) return { response, matched: false };
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks = [];
+  let text = "";
+  let total = 0;
+  let matched = false;
+  try {
+    while (total < limit) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.byteLength;
+      text += decoder.decode(value, { stream: true });
+      if (text.includes(PIN_MISMATCH_TEXT)) {
+        matched = true;
+        break;
+      }
+      // Real output started: stop peeking so a normal turn is not delayed.
+      if (/"content"\s*:\s*"[^"]{40,}/.test(text) || /"delta"\s*:\s*"[^"]{40,}/.test(text)) break;
+    }
+  } catch {
+    // A read error here only ends the peek; the replay stream reports it normally.
+  }
+
+  if (matched) {
+    try { await reader.cancel(); } catch {}
+    return { response: null, matched: true };
+  }
+
+  const replay = new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      (async () => {
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) {
+              controller.close();
+              return;
+            }
+            controller.enqueue(value);
+          }
+        } catch (err) {
+          try { controller.error(err); } catch {}
+        }
+      })();
+    },
+    cancel(reason) {
+      try { reader.cancel(reason); } catch {}
+    },
+  });
+  return {
+    response: new Response(replay, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }),
+    matched: false,
+  };
+}
+
 export class FreePiExecutor extends DefaultExecutor {
   constructor() {
     super("freepi");
@@ -784,9 +872,17 @@ export class FreePiExecutor extends DefaultExecutor {
 
       if (result?.response?.status === 401) counters.authFailures += 1;
 
-      // 4. If streaming response is successful, wrap stream so lock is held until stream completion
+      // 4. A pin-mismatch sentence can arrive as a normal 200. Turn it into the 403 the
+      //    fallback path already understands, before anything reaches the client.
       if (result?.response?.ok && result.response.body) {
-        result.response = wrapStreamWithQueueLock(result.response, releaseLock, signal);
+        const peek = await peekStreamForPinMismatch(result.response);
+        if (peek.matched) {
+          log?.warn?.("FREEPI", "Upstream opened with the conversation-pin sentence → retrying on the owning account");
+          counters.pinTextMatches = (counters.pinTextMatches || 0) + 1;
+          releaseLock();
+          return { response: syntheticPinMismatch() };
+        }
+        result.response = wrapStreamWithQueueLock(peek.response, releaseLock, signal);
         return result;
       }
 
