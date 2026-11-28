@@ -776,3 +776,51 @@ test("FreePI affinity eviction keeps live conversations (behaviour, not source t
 
   delete process.env.XR_AFFINITY_MAX;
 });
+
+test("FreePI pin sentence arriving as a normal 200 is turned into a retryable 403", async (t) => {
+  const { peekStreamForPinMismatch, syntheticPinMismatch } = await import(
+    "../../open-sse/executors/freepi.js"
+  );
+
+  function sse(chunks) {
+    const enc = new TextEncoder();
+    return new Response(new ReadableStream({
+      start(c) {
+        for (const chunk of chunks) c.enqueue(enc.encode(chunk));
+        c.close();
+      },
+    }), { status: 200, headers: { "content-type": "text/event-stream" } });
+  }
+
+  await t.test("the policy sentence is detected in the first chunk", async () => {
+    const res = sse([
+      'data: {"choices":[{"delta":{"content":"This conversation belongs to another free-pi account. Sharing or rotating accounts isn' + "'" + 't allowed."}}]}\n\n',
+    ]);
+    const peek = await peekStreamForPinMismatch(res);
+    assert.equal(peek.matched, true, "must be recognised before the client renders it");
+    assert.equal(peek.response, null);
+  });
+
+  await t.test("real output is replayed byte for byte", async () => {
+    const payload = [
+      'data: {"choices":[{"delta":{"content":"Here is a long enough answer to stop the peek immediately, as designed."}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":" second part"}}]}\n\n',
+      "data: [DONE]\n\n",
+    ];
+    const peek = await peekStreamForPinMismatch(sse(payload));
+    assert.equal(peek.matched, false);
+    const text = await peek.response.text();
+    assert.equal(text, payload.join(""), "nothing may be dropped or reordered");
+  });
+
+  await t.test("the synthetic error is a 403 the fallback path already understands", async () => {
+    const res = syntheticPinMismatch();
+    assert.equal(res.status, 403);
+    const body = await res.json();
+    assert.ok(body.error.message.includes("belongs to another free-pi account"));
+    const { checkFallbackError } = await import("../../open-sse/services/accountFallback.js");
+    const decision = checkFallbackError(403, body.error.message, 0, "freepi");
+    assert.equal(decision.retryOther, true, "chat.js must rotate accounts on it");
+    assert.equal(decision.cooldownMs, 0, "and must not cool the account down");
+  });
+});
